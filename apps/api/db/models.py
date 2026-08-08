@@ -2,9 +2,8 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, String, Text, Integer, Float, Boolean, DateTime, ForeignKey, JSON, UniqueConstraint
+    Column, String, Text, Integer, Float, Boolean, DateTime, ForeignKey, JSON, UniqueConstraint, Uuid
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from db.session import Base
@@ -18,7 +17,7 @@ class Profile(Base):
     __tablename__ = "profiles"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
     full_name = Column(Text)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -30,9 +29,9 @@ class Project(Base):
     __tablename__ = "projects"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
-    owner_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id"))
+    owner_id = Column(Uuid(), ForeignKey("profiles.id"))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     owner = relationship("Profile", back_populates="projects")
@@ -49,8 +48,8 @@ class ProjectMember(Base):
     __tablename__ = "project_members"
     __table_args__ = {"extend_existing": True}
 
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), primary_key=True)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id"), primary_key=True)
+    project_id = Column(Uuid(), ForeignKey("projects.id"), primary_key=True)
+    user_id = Column(Uuid(), ForeignKey("profiles.id"), primary_key=True)
     role = Column(String(20), default="viewer")
 
     project = relationship("Project", back_populates="members")
@@ -61,9 +60,9 @@ class Document(Base):
     __tablename__ = "documents"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"))
-    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("profiles.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id"))
+    uploaded_by = Column(Uuid(), ForeignKey("profiles.id"))
     filename = Column(Text, nullable=False)
     file_type = Column(Text, nullable=False)
     storage_path = Column(Text, nullable=False)
@@ -81,8 +80,8 @@ class DocumentChunk(Base):
     __tablename__ = "document_chunks"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    document_id = Column(Uuid(), ForeignKey("documents.id"))
     chunk_index = Column(Integer, nullable=False)
     page_number = Column(Integer)
     text = Column(Text, nullable=False)
@@ -97,12 +96,12 @@ class Entity(Base):
 
     __table_args__ = (UniqueConstraint("project_id", "name", "type"), {"extend_existing": True})
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id"))
     name = Column(Text, nullable=False)
     type = Column(String(20), nullable=False)
     description = Column(Text)
-    first_seen_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"))
+    first_seen_document_id = Column(Uuid(), ForeignKey("documents.id"))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     __table_args__ = (UniqueConstraint("project_id", "name", "type"),)
@@ -115,10 +114,10 @@ class EntityMention(Base):
     __tablename__ = "entity_mentions"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    entity_id = Column(UUID(as_uuid=True), ForeignKey("entities.id"))
-    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"))
-    chunk_id = Column(UUID(as_uuid=True), ForeignKey("document_chunks.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    entity_id = Column(Uuid(), ForeignKey("entities.id"))
+    document_id = Column(Uuid(), ForeignKey("documents.id"))
+    chunk_id = Column(Uuid(), ForeignKey("document_chunks.id"))
     mention_text = Column(Text)
     confidence = Column(Float)
 
@@ -129,14 +128,14 @@ class Relationship(Base):
     __tablename__ = "relationships"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"))
-    source_entity_id = Column(UUID(as_uuid=True), ForeignKey("entities.id"))
-    target_entity_id = Column(UUID(as_uuid=True), ForeignKey("entities.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id"))
+    source_entity_id = Column(Uuid(), ForeignKey("entities.id"))
+    target_entity_id = Column(Uuid(), ForeignKey("entities.id"))
     relation_type = Column(Text, nullable=False)
     description = Column(Text)
     confidence = Column(Float)
-    source_document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"))
+    source_document_id = Column(Uuid(), ForeignKey("documents.id"))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     project = relationship("Project", back_populates="relationships")
@@ -148,9 +147,9 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"))
-    user_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id"))
+    user_id = Column(Uuid(), ForeignKey("profiles.id"))
     title = Column(Text)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -162,8 +161,8 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    session_id = Column(UUID(as_uuid=True), ForeignKey("chat_sessions.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    session_id = Column(Uuid(), ForeignKey("chat_sessions.id"))
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     citations = Column(JSON)
@@ -176,24 +175,30 @@ class Agent(Base):
     __tablename__ = "agents"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id"))
+    owner_id = Column(Uuid(), ForeignKey("profiles.id"))
     name = Column(Text, nullable=False)
     type = Column(Text, nullable=False)
     config = Column(JSON, default=dict)
     status = Column(String(20), default="active")
+    last_checkpoint = Column(JSON)
+    last_active_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     project = relationship("Project", back_populates="agents")
+    owner = relationship("Profile")
     tasks = relationship("AgentTask", back_populates="agent")
+    memories = relationship("AgentMemory", back_populates="agent", cascade="all, delete-orphan")
+    checkpoints = relationship("AgentCheckpoint", back_populates="agent", cascade="all, delete-orphan")
 
 
 class AgentTask(Base):
     __tablename__ = "agent_tasks"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    agent_id = Column(Uuid(), ForeignKey("agents.id"))
     input = Column(JSON)
     output = Column(JSON)
     status = Column(String(20), default="queued")
@@ -205,12 +210,42 @@ class AgentTask(Base):
     agent = relationship("Agent", back_populates="tasks")
 
 
+class AgentMemory(Base):
+    __tablename__ = "agent_memory"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    agent_id = Column(Uuid(), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Uuid(), ForeignKey("projects.id"), nullable=False)
+    memory_type = Column(String(20), nullable=False)  # working, episodic, semantic
+    content = Column(JSON, nullable=False)
+    embedding = Column(Text)  # JSON array of floats for vector similarity
+    metadata_ = Column("metadata", JSON, default=dict)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    expires_at = Column(DateTime(timezone=True))
+
+    agent = relationship("Agent", back_populates="memories")
+
+
+class AgentCheckpoint(Base):
+    __tablename__ = "agent_checkpoints"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    agent_id = Column(Uuid(), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(Uuid(), ForeignKey("agent_tasks.id"))
+    state = Column(JSON, nullable=False)  # working memory snapshot
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    agent = relationship("Agent", back_populates="checkpoints")
+
+
 class MCPConnection(Base):
     __tablename__ = "mcp_connections"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id"))
     direction = Column(String(10), nullable=False)
     name = Column(Text, nullable=False)
     endpoint_url = Column(Text)
@@ -224,11 +259,11 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
     __table_args__ = {"extend_existing": True}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=gen_uuid)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"))
-    actor_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id"))
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id"))
+    actor_id = Column(Uuid(), ForeignKey("profiles.id"))
     action = Column(Text, nullable=False)
     resource_type = Column(Text)
-    resource_id = Column(UUID(as_uuid=True))
+    resource_id = Column(Uuid())
     meta = Column(JSON)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

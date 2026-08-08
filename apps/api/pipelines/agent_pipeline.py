@@ -78,8 +78,9 @@ async def execute_agent(
     type_info = get_agent_type_info(agent_type)
     system_prompt = config.get("system_prompt", type_info["system_prompt"])
 
-    # Sanitize input
-    user_input = sanitize_for_llm(json.dumps(input_data, default=str))
+    # Sanitize input (check only user-provided data, not memory context)
+    clean_input = {k: v for k, v in input_data.items() if not k.startswith("_")}
+    user_input = sanitize_for_llm(json.dumps(clean_input, default=str))
 
     if detect_injection(user_input):
         logger.warning(f"Prompt injection attempt blocked in agent {agent_type}")
@@ -103,15 +104,29 @@ async def execute_agent(
     # Step 2: Build prompt
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_input},
     ]
+
+    # Inject memory context if present (from memory hydration)
+    memory_context = input_data.get("_memory_context")
+    if memory_context:
+        messages.append({
+            "role": "system",
+            "content": (
+                "You have the following memory from past interactions. "
+                "Use it to inform your response, but do not repeat it back to the user.\n\n"
+                f"{memory_context}"
+            ),
+        })
 
     # Add context if provided
     if "context" in input_data:
-        messages.insert(1, {
+        messages.append({
             "role": "system",
             "content": f"Additional context:\n{input_data['context']}",
         })
+
+    # Add user message
+    messages.append({"role": "user", "content": user_input})
 
     yield {
         "step": "prompt_built",

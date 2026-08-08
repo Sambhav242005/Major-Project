@@ -24,6 +24,7 @@ out/
 dist/
 build/
 *.egg-info/
+graphify-out/
 
 # =============================================================================
 # Database
@@ -31,6 +32,8 @@ build/
 apps/web/prisma/*.db
 apps/web/prisma/*.db-journal
 chroma_data/
+*.db
+*.db-journal
 
 # =============================================================================
 # Testing

@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 
 
 class Settings(BaseSettings):
@@ -14,8 +15,14 @@ class Settings(BaseSettings):
     # Mock auth for development (bypasses Supabase)
     MOCK_AUTH: bool = False
 
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/akgb"
+    # Database — set in .env for production; dev always uses SQLite
+    DATABASE_URL: str = "sqlite+aiosqlite:///./akgb.db"
+
+    @model_validator(mode="after")
+    def _force_sqlite_in_dev(self):
+        if self.ENVIRONMENT == "development":
+            self.DATABASE_URL = "sqlite+aiosqlite:///./akgb.db"
+        return self
 
     # ChromaDB
     CHROMA_PATH: str = "./chroma_data"

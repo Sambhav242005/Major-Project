@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.security import User
 from db.models import Agent, AgentTask
 from pipelines.agent_pipeline import execute_agent, get_agent_type_info, AGENT_TYPES
+from services.memory import (
+    store_memory, hydrate_agent_context, format_memory_context,
+    cleanup_expired_memories, save_checkpoint,
+)
 
 
 async def list_agents(db: AsyncSession, project_id: str) -> list[dict]:
@@ -69,6 +73,7 @@ async def create_agent(
     agent = Agent(
         id=uuid.uuid4(),
         project_id=uuid.UUID(project_id),
+        owner_id=uuid.UUID(user.id),
         name=name,
         type=agent_type,
         config={**type_info, **config},
@@ -146,7 +151,7 @@ async def run_agent(
     project_id: str,
     input_data: dict = {},
 ) -> dict:
-    """Trigger agent execution. Returns task_id for polling."""
+    """Trigger agent execution with memory hydration and persistence."""
     # Verify agent exists
     agent_stmt = select(Agent).where(
         Agent.id == uuid.UUID(agent_id),
@@ -156,6 +161,18 @@ async def run_agent(
     agent = agent_result.scalar_one_or_none()
     if not agent:
         return {"error": "Agent not found"}
+
+    # Cleanup expired working memories
+    await cleanup_expired_memories(db, agent_id, project_id)
+
+    # Hydrate agent memory context
+    memory_context = await hydrate_agent_context(db, agent_id, project_id)
+    memory_str = format_memory_context(memory_context)
+
+    # Inject memory into input_data if there's anything to inject
+    enriched_input = dict(input_data)
+    if memory_str:
+        enriched_input["_memory_context"] = memory_str
 
     # Create task record
     task = AgentTask(
@@ -177,7 +194,7 @@ async def run_agent(
         async for event in execute_agent(
             agent_type=agent.type,
             config=agent.config or {},
-            input_data=input_data,
+            input_data=enriched_input,
         ):
             trace.append(event)
             if event.get("status") == "completed" and event.get("step") == "post_process":
@@ -185,10 +202,28 @@ async def run_agent(
             elif event.get("status") == "error":
                 task.status = "failed"
                 task.error = event.get("error", "Unknown error")
+                # Save checkpoint on error so agent can resume
+                await save_checkpoint(
+                    db, agent_id, str(task.id),
+                    state={"last_input": input_data, "error": task.error, "trace_step": len(trace)},
+                )
                 break
         else:
             task.status = "completed"
             task.output = final_output
+
+            # Save episodic memory: what the agent did and produced
+            if final_output:
+                await store_memory(
+                    db, agent_id, project_id,
+                    memory_type="episodic",
+                    content={
+                        "task_id": str(task.id),
+                        "input_summary": json.dumps(input_data, default=str)[:500],
+                        "output_summary": json.dumps(final_output, default=str)[:500],
+                        "agent_type": agent.type,
+                    },
+                )
 
     except Exception as e:
         task.status = "failed"
@@ -199,9 +234,18 @@ async def run_agent(
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat(),
         })
+        # Checkpoint on crash
+        await save_checkpoint(
+            db, agent_id, str(task.id),
+            state={"last_input": input_data, "error": str(e), "trace_step": len(trace)},
+        )
 
     task.trace = trace
     task.completed_at = datetime.utcnow()
+
+    # Update agent's last_active_at
+    agent.last_active_at = datetime.utcnow()
+
     await db.flush()
 
     return {
