@@ -35,8 +35,8 @@ async def create_session(
 ) -> dict:
     """Create a new chat session."""
     session = ChatSession(
-        project_id=project_id,
-        user_id=user.id,
+        project_id=uuid.UUID(project_id),
+        user_id=uuid.UUID(user.id),
         title=title or "New Chat",
         created_at=datetime.utcnow(),
     )
@@ -57,8 +57,8 @@ async def get_session(
 ) -> dict | None:
     """Get chat session with messages."""
     stmt = select(ChatSession).where(
-        ChatSession.id == session_id,
-        ChatSession.project_id == project_id,
+        ChatSession.id == uuid.UUID(session_id),
+        ChatSession.project_id == uuid.UUID(project_id),
     )
     result = await db.execute(stmt)
     session = result.scalar_one_or_none()
@@ -99,7 +99,7 @@ async def list_sessions(
     """List all chat sessions for a project."""
     stmt = (
         select(ChatSession)
-        .where(ChatSession.project_id == project_id)
+        .where(ChatSession.project_id == uuid.UUID(project_id))
         .order_by(ChatSession.created_at.desc())
     )
     result = await db.execute(stmt)
@@ -123,7 +123,7 @@ async def _get_entity_context(
     """Get entities mentioned in retrieved chunks for graph expansion."""
     # Find entities that appear in these chunks
     stmt = select(EntityMention).where(
-        EntityMention.chunk_id.in_(chunk_ids)
+        EntityMention.chunk_id.in_([uuid.UUID(cid) for cid in chunk_ids if cid])
     )
     result = await db.execute(stmt)
     mentions = result.scalars().all()
@@ -344,5 +344,22 @@ Answer based on the sources above. Cite sources using [1], [2], etc."""
     )
     db.add(assistant_msg)
     await db.commit()
+
+    # Fire chat.completed webhook
+    try:
+        from services.webhooks import fire_event
+        await fire_event(
+            db=db,
+            project_id=project_id,
+            event_type="chat.completed",
+            payload={
+                "session_id": session_id,
+                "message_id": str(assistant_msg.id),
+                "citation_count": len(citations),
+            },
+        )
+        await db.commit()
+    except Exception:
+        logger.warning("Failed to fire chat.completed webhook")
 
     yield {"type": "done"}

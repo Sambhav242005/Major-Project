@@ -4,6 +4,8 @@ Triggered as a background task after document upload.
 """
 
 import logging
+import uuid
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +16,19 @@ from pipelines.chunking import chunk_pages
 from pipelines.embeddings import upsert_chunks
 
 logger = logging.getLogger(__name__)
+
+# SSE notification callback (set by documents router)
+_notify_doc = None
+
+
+def set_doc_notifier(notifier):
+    global _notify_doc
+    _notify_doc = notifier
+
+
+def _notify(document_id: str, event: dict):
+    if _notify_doc:
+        _notify_doc(document_id, event)
 
 
 async def ingest_document(db: AsyncSession, document_id: str, file_content: bytes) -> None:
@@ -28,7 +43,7 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
     6. Mark processed
     """
     try:
-        doc = await db.get(Document, document_id)
+        doc = await db.get(Document, uuid.UUID(document_id))
         if not doc:
             logger.error(f"Document {document_id} not found")
             return
@@ -36,9 +51,11 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
         # Stage 1: Update status to processing
         await update_document_status(db, document_id, "processing")
         await db.commit()
+        _notify(document_id, {"stage": "processing", "status": "running", "timestamp": datetime.utcnow().isoformat()})
 
         # Stage 2: Parse document
         logger.info(f"Parsing {doc.filename}")
+        _notify(document_id, {"stage": "parsing", "status": "running", "timestamp": datetime.utcnow().isoformat()})
         pages = parse_document(file_content, doc.filename, doc.file_type)
 
         if not pages or all(not p.get("text", "").strip() for p in pages):
@@ -51,6 +68,7 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
 
         # Stage 3: Chunk text
         logger.info(f"Chunking {len(pages)} pages")
+        _notify(document_id, {"stage": "chunking", "status": "running", "page_count": len(pages), "timestamp": datetime.utcnow().isoformat()})
         chunks = chunk_pages(pages, max_tokens=600, overlap_tokens=80)
 
         if not chunks:
@@ -63,6 +81,7 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
 
         # Stage 4: Embed and upsert to ChromaDB
         logger.info(f"Embedding {len(chunks)} chunks")
+        _notify(document_id, {"stage": "embedding", "status": "running", "chunk_count": len(chunks), "timestamp": datetime.utcnow().isoformat()})
         chroma_ids = upsert_chunks(
             chunks=chunks,
             project_id=str(doc.project_id),
@@ -87,6 +106,7 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
 
         # Stage 6: Extract entities and relationships
         logger.info(f"Extracting entities from {len(chunks)} chunks")
+        _notify(document_id, {"stage": "extracting_entities", "status": "running", "timestamp": datetime.utcnow().isoformat()})
         try:
             from pipelines.entity_extraction import extract_entities_from_chunks
 
@@ -118,6 +138,31 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
         )
         await db.commit()
 
+        _notify(document_id, {
+            "stage": "complete", "status": "completed",
+            "chunk_count": len(chunks), "page_count": len(pages),
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+
+        # Fire document.processed webhook
+        try:
+            from services.webhooks import fire_event
+            await fire_event(
+                db=db,
+                project_id=str(doc.project_id),
+                event_type="document.processed",
+                payload={
+                    "doc_id": document_id,
+                    "filename": doc.filename,
+                    "status": "processed",
+                    "chunk_count": len(chunks),
+                    "page_count": len(pages),
+                },
+            )
+            await db.commit()
+        except Exception:
+            logger.warning("Failed to fire document.processed webhook")
+
         logger.info(f"Document {document_id} processed: {len(chunks)} chunks, {len(pages)} pages")
 
     except Exception as e:
@@ -128,5 +173,25 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
                 error_message=str(e)[:500]
             )
             await db.commit()
+
+            # Fire document.failed webhook
+            try:
+                from services.webhooks import fire_event
+                from db.models import Document
+                doc = await db.get(Document, uuid.UUID(document_id))
+                if doc:
+                    await fire_event(
+                        db=db,
+                        project_id=str(doc.project_id),
+                        event_type="document.failed",
+                        payload={
+                            "doc_id": document_id,
+                            "filename": doc.filename,
+                            "error_message": str(e)[:500],
+                        },
+                    )
+                    await db.commit()
+            except Exception:
+                logger.warning("Failed to fire document.failed webhook")
         except Exception:
             logger.exception(f"Failed to update status for {document_id}")

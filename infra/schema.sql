@@ -41,6 +41,7 @@ create table document_chunks (
   document_id uuid references documents(id) on delete cascade,
   chunk_index int not null,
   page_number int,
+  section_index int default 0,
   text text not null,
   token_count int,
   chroma_id text not null
@@ -127,6 +128,92 @@ create table mcp_connections (
   status text default 'disconnected'
 );
 
+create table agent_skills (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid references agents(id) on delete cascade,
+  skill_type text not null,
+  content text not null,
+  evidence text,
+  success_count int default 0,
+  failure_count int default 0,
+  helpful_count int default 0,
+  harmful_count int default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table agent_run_traces (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid references agents(id) on delete cascade,
+  task_id uuid references agent_tasks(id) on delete set null,
+  input_text text not null,
+  output_text text,
+  tool_calls jsonb,
+  scores jsonb,
+  skills_used uuid[],
+  created_at timestamptz default now()
+);
+
+create table refinement_eval_sets (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid references agents(id) on delete cascade,
+  split text not null check (split in ('held_in','held_out')),
+  task_name text not null,
+  input_text text not null,
+  expected_output jsonb,
+  created_at timestamptz default now()
+);
+
+create table refinement_logs (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid references agents(id) on delete cascade,
+  task_id uuid references agent_tasks(id) on delete set null,
+  action text not null,
+  target_id uuid,
+  reason text not null,
+  before jsonb,
+  after jsonb,
+  held_in_delta float,
+  held_out_delta float,
+  accepted boolean default false,
+  created_at timestamptz default now()
+);
+
+create table webhook_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete cascade,
+  event_type text not null,
+  url text not null,
+  secret text,
+  active boolean default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table webhook_deliveries (
+  id uuid primary key default gen_random_uuid(),
+  subscription_id uuid references webhook_subscriptions(id) on delete cascade,
+  event_type text not null,
+  payload jsonb not null,
+  response_status int,
+  response_body text,
+  attempts int default 0,
+  success boolean default false,
+  next_retry_at timestamptz,
+  created_at timestamptz default now()
+);
+
+create table inbound_webhooks (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete cascade,
+  name text not null,
+  slug text not null unique,
+  handler text not null,
+  config jsonb default '{}',
+  active boolean default true,
+  created_at timestamptz default now()
+);
+
 create table audit_log (
   id uuid primary key default gen_random_uuid(),
   project_id uuid references projects(id) on delete cascade,
@@ -152,6 +239,13 @@ alter table chat_messages enable row level security;
 alter table agents enable row level security;
 alter table agent_tasks enable row level security;
 alter table mcp_connections enable row level security;
+alter table agent_skills enable row level security;
+alter table agent_run_traces enable row level security;
+alter table refinement_eval_sets enable row level security;
+alter table refinement_logs enable row level security;
+alter table webhook_subscriptions enable row level security;
+alter table webhook_deliveries enable row level security;
+alter table inbound_webhooks enable row level security;
 alter table audit_log enable row level security;
 
 -- RLS policies: users can only access projects they are members of
@@ -279,6 +373,74 @@ create policy "Members can view mcp connections" on mcp_connections
     exists (
       select 1 from project_members
       where project_members.project_id = mcp_connections.project_id
+      and project_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view agent skills" on agent_skills
+  for select using (
+    exists (
+      select 1 from agents a
+      join project_members pm on pm.project_id = a.project_id
+      where a.id = agent_skills.agent_id
+      and pm.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view agent run traces" on agent_run_traces
+  for select using (
+    exists (
+      select 1 from agents a
+      join project_members pm on pm.project_id = a.project_id
+      where a.id = agent_run_traces.agent_id
+      and pm.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view refinement eval sets" on refinement_eval_sets
+  for select using (
+    exists (
+      select 1 from agents a
+      join project_members pm on pm.project_id = a.project_id
+      where a.id = refinement_eval_sets.agent_id
+      and pm.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view refinement logs" on refinement_logs
+  for select using (
+    exists (
+      select 1 from agents a
+      join project_members pm on pm.project_id = a.project_id
+      where a.id = refinement_logs.agent_id
+      and pm.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view webhook subscriptions" on webhook_subscriptions
+  for select using (
+    exists (
+      select 1 from project_members
+      where project_members.project_id = webhook_subscriptions.project_id
+      and project_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view webhook deliveries" on webhook_deliveries
+  for select using (
+    exists (
+      select 1 from webhook_subscriptions ws
+      join project_members pm on pm.project_id = ws.project_id
+      where ws.id = webhook_deliveries.subscription_id
+      and pm.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view inbound webhooks" on inbound_webhooks
+  for select using (
+    exists (
+      select 1 from project_members
+      where project_members.project_id = inbound_webhooks.project_id
       and project_members.user_id = auth.uid()
     )
   );

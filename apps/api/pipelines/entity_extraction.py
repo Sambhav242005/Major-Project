@@ -2,6 +2,7 @@
 
 import json
 import logging
+import uuid
 from collections import defaultdict
 
 import spacy
@@ -115,7 +116,7 @@ Text:
 async def _llm_extract(text: str) -> dict:
     """Call LLM to extract entities and relationships from text."""
 
-    prompt = EXTRACT_PROMPT.format(text=text[:3000])  # Truncate to avoid token limits
+    prompt = EXTRACT_PROMPT.format(text=text[:8000])  # Truncate to avoid token limits
     messages = [
         {"role": "system", "content": "You are an expert entity extractor. Output only valid JSON."},
         {"role": "user", "content": prompt},
@@ -229,7 +230,7 @@ async def extract_entities_from_chunks(
 
         # Check if entity already exists in this project
         stmt = select(Entity).where(
-            Entity.project_id == project_id,
+            Entity.project_id == uuid.UUID(project_id),
             Entity.name.ilike(name),
             Entity.type == ent_type,
         )
@@ -244,11 +245,11 @@ async def extract_entities_from_chunks(
                 await db.flush()
         else:
             new_entity = Entity(
-                project_id=project_id,
+                project_id=uuid.UUID(project_id),
                 name=name,
                 type=ent_type,
                 description=ent.get("description", ""),
-                first_seen_document_id=document_id,
+                first_seen_document_id=uuid.UUID(document_id),
             )
             db.add(new_entity)
             await db.flush()
@@ -264,9 +265,9 @@ async def extract_entities_from_chunks(
             name_lower = ent["name"].lower().strip()
             if name_lower in entity_map:
                 mention = EntityMention(
-                    entity_id=entity_map[name_lower],
-                    document_id=document_id,
-                    chunk_id=chunk_id,
+                    entity_id=uuid.UUID(entity_map[name_lower]),
+                    document_id=uuid.UUID(document_id),
+                    chunk_id=uuid.UUID(chunk_id) if chunk_id else None,
                     mention_text=ent["name"],
                     confidence=0.8,  # spaCy confidence
                 )
@@ -282,9 +283,9 @@ async def extract_entities_from_chunks(
         if source_name in entity_map and target_name in entity_map:
             # Check for duplicate relationship
             stmt = select(Relationship).where(
-                Relationship.project_id == project_id,
-                Relationship.source_entity_id == entity_map[source_name],
-                Relationship.target_entity_id == entity_map[target_name],
+                Relationship.project_id == uuid.UUID(project_id),
+                Relationship.source_entity_id == uuid.UUID(entity_map[source_name]),
+                Relationship.target_entity_id == uuid.UUID(entity_map[target_name]),
                 Relationship.relation_type == rel.get("relation_type", ""),
             )
             result = await db.execute(stmt)
@@ -292,13 +293,13 @@ async def extract_entities_from_chunks(
 
             if not existing_rel:
                 new_rel = Relationship(
-                    project_id=project_id,
-                    source_entity_id=entity_map[source_name],
-                    target_entity_id=entity_map[target_name],
+                    project_id=uuid.UUID(project_id),
+                    source_entity_id=uuid.UUID(entity_map[source_name]),
+                    target_entity_id=uuid.UUID(entity_map[target_name]),
                     relation_type=rel.get("relation_type", "related_to"),
                     description=rel.get("description", ""),
                     confidence=0.7,
-                    source_document_id=document_id,
+                    source_document_id=uuid.UUID(document_id),
                 )
                 db.add(new_rel)
 
@@ -308,4 +309,26 @@ async def extract_entities_from_chunks(
         f"Extracted {len(merged_entities)} entities, "
         f"{len(all_llm_relationships)} relationships for document {document_id}"
     )
+
+    # Fire entity.extracted webhook
+    try:
+        from services.webhooks import fire_event
+        from db.models import Document
+        doc = await db.get(Document, uuid.UUID(document_id))
+        if doc:
+            await fire_event(
+                db=db,
+                project_id=project_id,
+                event_type="entity.extracted",
+                payload={
+                    "project_id": project_id,
+                    "document_id": document_id,
+                    "entity_count": len(merged_entities),
+                    "relationship_count": len(all_llm_relationships),
+                },
+            )
+            await db.flush()
+    except Exception:
+        logger.warning("Failed to fire entity.extracted webhook")
+
     return len(merged_entities)

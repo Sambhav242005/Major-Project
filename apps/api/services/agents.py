@@ -1,4 +1,4 @@
-"""Agent service — CRUD and execution with LangGraph traces."""
+"""Agent service — CRUD and execution with LangGraph traces and skill hydration."""
 
 import uuid
 import json
@@ -8,19 +8,44 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import User
-from db.models import Agent, AgentTask
+from db.models import Agent, AgentTask, AgentSkill, AgentRunTrace
 from pipelines.agent_pipeline import execute_agent, get_agent_type_info, AGENT_TYPES
+from pipelines.agent_refinement import store_run_trace
 from services.memory import (
     store_memory, hydrate_agent_context, format_memory_context,
     cleanup_expired_memories, save_checkpoint,
 )
+
+MAX_SKILLS_PER_AGENT = 10
+
+
+async def _hydrate_skills(db: AsyncSession, agent_id: str) -> str:
+    """Load agent skills into prompt text."""
+    stmt = (
+        select(AgentSkill)
+        .where(AgentSkill.agent_id == uuid.UUID(agent_id))
+        .order_by(AgentSkill.helpful_count.desc())
+        .limit(MAX_SKILLS_PER_AGENT)
+    )
+    result = await db.execute(stmt)
+    skills = result.scalars().all()
+
+    if not skills:
+        return ""
+
+    lines = ["Learned skills:"]
+    for s in skills:
+        counter = f"+{s.helpful_count}/-{s.harmful_count}" if s.helpful_count or s.harmful_count else "+0/-0"
+        lines.append(f"- [{s.id}] \"{s.content}\" ({counter})")
+
+    return "\n".join(lines)
 
 
 async def list_agents(db: AsyncSession, project_id: str) -> list[dict]:
     """List all agents for a project."""
     stmt = (
         select(Agent)
-        .where(Agent.project_id == project_id)
+        .where(Agent.project_id == uuid.UUID(project_id))
         .order_by(Agent.created_at.desc())
     )
     result = await db.execute(stmt)
@@ -43,7 +68,7 @@ async def get_agent(db: AsyncSession, agent_id: str, project_id: str) -> dict | 
     """Get a single agent by ID."""
     stmt = select(Agent).where(
         Agent.id == uuid.UUID(agent_id),
-        Agent.project_id == project_id,
+        Agent.project_id == uuid.UUID(project_id),
     )
     result = await db.execute(stmt)
     agent = result.scalar_one_or_none()
@@ -104,7 +129,7 @@ async def update_agent(
     """Update an agent."""
     stmt = select(Agent).where(
         Agent.id == uuid.UUID(agent_id),
-        Agent.project_id == project_id,
+        Agent.project_id == uuid.UUID(project_id),
     )
     result = await db.execute(stmt)
     agent = result.scalar_one_or_none()
@@ -134,7 +159,7 @@ async def delete_agent(db: AsyncSession, agent_id: str, project_id: str) -> bool
     """Delete an agent."""
     stmt = select(Agent).where(
         Agent.id == uuid.UUID(agent_id),
-        Agent.project_id == project_id,
+        Agent.project_id == uuid.UUID(project_id),
     )
     result = await db.execute(stmt)
     agent = result.scalar_one_or_none()
@@ -155,7 +180,7 @@ async def run_agent(
     # Verify agent exists
     agent_stmt = select(Agent).where(
         Agent.id == uuid.UUID(agent_id),
-        Agent.project_id == project_id,
+        Agent.project_id == uuid.UUID(project_id),
     )
     agent_result = await db.execute(agent_stmt)
     agent = agent_result.scalar_one_or_none()
@@ -173,6 +198,11 @@ async def run_agent(
     enriched_input = dict(input_data)
     if memory_str:
         enriched_input["_memory_context"] = memory_str
+
+    # Hydrate skills into prompt
+    skills_text = await _hydrate_skills(db, agent_id)
+    if skills_text:
+        enriched_input["_skills_context"] = skills_text
 
     # Create task record
     task = AgentTask(
@@ -195,6 +225,8 @@ async def run_agent(
             agent_type=agent.type,
             config=agent.config or {},
             input_data=enriched_input,
+            db_session=db,
+            project_id=project_id,
         ):
             trace.append(event)
             if event.get("status") == "completed" and event.get("step") == "post_process":
@@ -243,6 +275,36 @@ async def run_agent(
     task.trace = trace
     task.completed_at = datetime.utcnow()
 
+    # Store run trace for refinement
+    try:
+        output_text = json.dumps(final_output, default=str) if final_output else ""
+        tool_calls = []
+        for t in trace:
+            if t.get("step") == "tool_execution":
+                tool_calls.append({
+                    "tool": t.get("tool"),
+                    "arguments": t.get("arguments"),
+                    "result_preview": t.get("result_preview"),
+                })
+
+        skills_used = []
+        skill_count_stmt = select(AgentSkill.id).where(AgentSkill.agent_id == agent.id)
+        skill_result = await db.execute(skill_count_stmt)
+        skills_used = [str(s.id) for s in skill_result.scalars().all()]
+
+        await store_run_trace(
+            db=db,
+            agent_id=agent_id,
+            task_id=str(task.id),
+            input_text=json.dumps(input_data, default=str)[:5000],
+            output_text=output_text[:5000],
+            tool_calls=tool_calls,
+            scores={"score": 1.0 if task.status == "completed" else 0.0},
+            skills_used=skills_used,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to store run trace: {e}")
+
     # Update agent's last_active_at
     agent.last_active_at = datetime.utcnow()
 
@@ -270,7 +332,7 @@ async def get_task(
         .where(
             AgentTask.id == uuid.UUID(task_id),
             AgentTask.agent_id == uuid.UUID(agent_id),
-            Agent.project_id == project_id,
+            Agent.project_id == uuid.UUID(project_id),
         )
     )
     result = await db.execute(stmt)
@@ -303,7 +365,7 @@ async def list_tasks(
         .join(Agent, Agent.id == AgentTask.agent_id)
         .where(
             AgentTask.agent_id == uuid.UUID(agent_id),
-            Agent.project_id == project_id,
+            Agent.project_id == uuid.UUID(project_id),
         )
         .order_by(AgentTask.started_at.desc())
         .limit(limit)

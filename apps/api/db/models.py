@@ -42,6 +42,8 @@ class Project(Base):
     chat_sessions = relationship("ChatSession", back_populates="project")
     agents = relationship("Agent", back_populates="project")
     mcp_connections = relationship("MCPConnection", back_populates="project")
+    webhook_subscriptions = relationship("WebhookSubscription", back_populates="project")
+    inbound_webhooks = relationship("InboundWebhook", back_populates="project")
 
 
 class ProjectMember(Base):
@@ -84,6 +86,7 @@ class DocumentChunk(Base):
     document_id = Column(Uuid(), ForeignKey("documents.id"))
     chunk_index = Column(Integer, nullable=False)
     page_number = Column(Integer)
+    section_index = Column(Integer, default=0)
     text = Column(Text, nullable=False)
     token_count = Column(Integer)
     chroma_id = Column(Text, nullable=False)
@@ -191,6 +194,8 @@ class Agent(Base):
     tasks = relationship("AgentTask", back_populates="agent")
     memories = relationship("AgentMemory", back_populates="agent", cascade="all, delete-orphan")
     checkpoints = relationship("AgentCheckpoint", back_populates="agent", cascade="all, delete-orphan")
+    skills = relationship("AgentSkill", back_populates="agent", cascade="all, delete-orphan")
+    run_traces = relationship("AgentRunTrace", back_populates="agent", cascade="all, delete-orphan")
 
 
 class AgentTask(Base):
@@ -255,6 +260,24 @@ class MCPConnection(Base):
     project = relationship("Project", back_populates="mcp_connections")
 
 
+class ProjectMemoryShare(Base):
+    """Cross-project memory sharing with permissions."""
+    __tablename__ = "project_memory_shares"
+    __table_args__ = (
+        UniqueConstraint("source_project_id", "target_project_id"),
+        {"extend_existing": True},
+    )
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    source_project_id = Column(Uuid(), ForeignKey("projects.id"), nullable=False)
+    target_project_id = Column(Uuid(), ForeignKey("projects.id"), nullable=False)
+    permission = Column(String(10), nullable=False, default="read")  # read | read_write
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    source_project = relationship("Project", foreign_keys=[source_project_id])
+    target_project = relationship("Project", foreign_keys=[target_project_id])
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
     __table_args__ = {"extend_existing": True}
@@ -267,3 +290,121 @@ class AuditLog(Base):
     resource_id = Column(Uuid())
     meta = Column(JSON)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class AgentSkill(Base):
+    __tablename__ = "agent_skills"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    agent_id = Column(Uuid(), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    skill_type = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    evidence = Column(Text)
+    success_count = Column(Integer, default=0)
+    failure_count = Column(Integer, default=0)
+    helpful_count = Column(Integer, default=0)
+    harmful_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    agent = relationship("Agent", back_populates="skills")
+
+
+class AgentRunTrace(Base):
+    __tablename__ = "agent_run_traces"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    agent_id = Column(Uuid(), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(Uuid(), ForeignKey("agent_tasks.id", ondelete="SET NULL"))
+    input_text = Column(Text, nullable=False)
+    output_text = Column(Text)
+    tool_calls = Column(JSON)
+    scores = Column(JSON)
+    skills_used = Column(JSON)  # list of skill UUIDs
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    agent = relationship("Agent", back_populates="run_traces")
+
+
+class RefinementEvalSet(Base):
+    __tablename__ = "refinement_eval_sets"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    agent_id = Column(Uuid(), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    split = Column(Text, nullable=False)  # 'held_in' or 'held_out'
+    task_name = Column(Text, nullable=False)
+    input_text = Column(Text, nullable=False)
+    expected_output = Column(JSON)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class RefinementLog(Base):
+    __tablename__ = "refinement_logs"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    agent_id = Column(Uuid(), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(Uuid(), ForeignKey("agent_tasks.id", ondelete="SET NULL"))
+    action = Column(Text, nullable=False)
+    target_id = Column(Uuid())
+    reason = Column(Text, nullable=False)
+    before = Column(JSON)
+    after = Column(JSON)
+    held_in_delta = Column(Float)
+    held_out_delta = Column(Float)
+    accepted = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class WebhookSubscription(Base):
+    __tablename__ = "webhook_subscriptions"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(Text, nullable=False)
+    url = Column(Text, nullable=False)
+    secret = Column(Text)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="webhook_subscriptions")
+    deliveries = relationship("WebhookDelivery", back_populates="subscription", cascade="all, delete-orphan")
+
+
+class WebhookDelivery(Base):
+    __tablename__ = "webhook_deliveries"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    subscription_id = Column(Uuid(), ForeignKey("webhook_subscriptions.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(Text, nullable=False)
+    payload = Column(JSON, nullable=False)
+    response_status = Column(Integer)
+    response_body = Column(Text)
+    attempts = Column(Integer, default=0)
+    success = Column(Boolean, default=False)
+    next_retry_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    subscription = relationship("WebhookSubscription", back_populates="deliveries")
+
+
+class InboundWebhook(Base):
+    __tablename__ = "inbound_webhooks"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    project_id = Column(Uuid(), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name = Column(Text, nullable=False)
+    slug = Column(Text, nullable=False, unique=True)
+    handler = Column(Text, nullable=False)
+    config = Column(JSON, default=dict)
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    project = relationship("Project", back_populates="inbound_webhooks")
