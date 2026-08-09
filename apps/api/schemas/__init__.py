@@ -205,7 +205,7 @@ class AgentRunResponse(BaseModel):
     status: str
 
 
-# --- MCP Schemas ---
+# --- MCP Schemas (2026-07-28 aligned) ---
 
 class MCPConnectionCreate(BaseModel):
     name: str
@@ -224,3 +224,20 @@ class MCPConnectionOut(BaseModel):
 
 class MCPConnectionListResponse(BaseModel):
     connections: list[MCPConnectionOut]
+
+
+class MCPOAuthAuthorizeResponse(BaseModel):
+    authorization_url: str
+    state: str
+
+
+class MCPOAuthCallbackResponse(BaseModel):
+    status: str
+    expires_at: float
+
+
+class MCPTokenStatusResponse(BaseModel):
+    has_token: bool
+    expired: bool | None = None
+    expires_at: str | None = None
+    scope: str | None = None

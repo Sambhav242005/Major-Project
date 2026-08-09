@@ -1,4 +1,4 @@
-"""Tests for MCP service."""
+"""Tests for MCP service — MCP 2026-07-28 aligned."""
 
 import uuid
 from unittest.mock import AsyncMock, MagicMock
@@ -22,6 +22,45 @@ async def test_list_connections_returns_empty():
 
     result = await list_connections(mock_db, str(uuid.uuid4()))
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_connection_returns_connection():
+    """get_connection returns a connection when found."""
+    from services.mcp import get_connection
+
+    mock_conn = MagicMock()
+    mock_conn.id = uuid.uuid4()
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_conn
+
+    async def mock_execute(stmt):
+        return mock_result
+
+    mock_db.execute = mock_execute
+
+    result = await get_connection(mock_db, str(mock_conn.id), str(uuid.uuid4()))
+    assert result == mock_conn
+
+
+@pytest.mark.asyncio
+async def test_get_connection_returns_none_for_nonexistent():
+    """get_connection returns None when not found."""
+    from services.mcp import get_connection
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+
+    async def mock_execute(stmt):
+        return mock_result
+
+    mock_db.execute = mock_execute
+
+    result = await get_connection(mock_db, str(uuid.uuid4()), str(uuid.uuid4()))
+    assert result is None
 
 
 @pytest.mark.asyncio

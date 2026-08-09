@@ -1,4 +1,4 @@
-"""Tests for core/oauth.py"""
+"""Tests for core/oauth.py — MCP 2026-07-28 aligned."""
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import time
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from core.oauth import OAuthToken, MCPOAuthClient, create_oauth_client
+from core.oauth import OAuthToken, MCPOAuthClient, PKCEChallenge, create_oauth_client
 
 
 # ── OAuthToken model ────────────────────────────────────────
@@ -43,6 +43,47 @@ class TestOAuthToken:
             scope="",
         )
         assert token.expires_at > time.time()
+
+
+# ── PKCEChallenge ───────────────────────────────────────────
+
+class TestPKCEChallenge:
+    def test_creates_verifier_and_challenge(self):
+        pkce = PKCEChallenge()
+        assert len(pkce.code_verifier) > 40
+        assert len(pkce.code_challenge) > 40
+        assert pkce.code_verifier != pkce.code_challenge
+
+    def test_challenge_is_s256(self):
+        import hashlib, base64
+        pkce = PKCEChallenge()
+        digest = hashlib.sha256(pkce.code_verifier.encode("ascii")).digest()
+        expected = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+        assert pkce.code_challenge == expected
+
+    def test_auth_url_contains_pkce_params(self):
+        pkce = PKCEChallenge()
+        url = pkce.auth_url(
+            authorize_url="https://auth.example.com/authorize",
+            client_id="client_123",
+            redirect_uri="https://app/callback",
+        )
+        assert "code_challenge=" in url
+        assert "code_challenge_method=S256" in url
+        assert "client_id=client_123" in url
+        assert "redirect_uri=https" in url
+
+    def test_auth_url_with_scope_and_state(self):
+        pkce = PKCEChallenge()
+        url = pkce.auth_url(
+            authorize_url="https://auth.example.com/authorize",
+            client_id="c",
+            redirect_uri="https://app/callback",
+            scope=["read", "write"],
+            state="my_state",
+        )
+        assert "scope=read write" in url
+        assert "state=my_state" in url
 
 
 # ── MCPOAuthClient ──────────────────────────────────────────
@@ -104,6 +145,27 @@ class TestMCPOAuthClient:
             assert token.refresh_token == "ref_new"
 
     @pytest.mark.asyncio
+    async def test_exchange_code_with_pkce(self):
+        client = self._make_client()
+        client._pkce = PKCEChallenge()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "access_token": "pkce_token",
+            "token_type": "bearer",
+            "expires_in": 3600,
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client._http_client, "post", new_callable=AsyncMock, return_value=mock_response) as mock_post:
+            token = await client.exchange_code("pkce_code", "https://app/callback")
+            assert token.access_token == "pkce_token"
+            # Verify code_verifier was sent in the POST data
+            _, kwargs = mock_post.call_args
+            assert "code_verifier" in kwargs.get("data", {})
+
+    @pytest.mark.asyncio
     async def test_refresh_token(self):
         client = self._make_client()
         client._token = OAuthToken(
@@ -128,6 +190,24 @@ class TestMCPOAuthClient:
             token = await client.refresh_token()
             assert token.access_token == "refreshed_token"
             assert token.refresh_token == "ref_new"
+
+    def test_create_authorization_url(self):
+        client = MCPOAuthClient(
+            client_id="c",
+            client_secret="s",
+            token_url="https://auth.example.com/token",
+            authorize_url="https://auth.example.com/authorize",
+            redirect_uri="https://app/callback",
+            scopes=["read"],
+        )
+        url = client.create_authorization_url(state="proj:conn")
+        assert "code_challenge=" in url
+        assert "state=proj%3Aconn" in url or "state=proj:conn" in url
+
+    def test_create_authorization_url_requires_authorize_url(self):
+        client = self._make_client()
+        with pytest.raises(ValueError, match="authorize_url required"):
+            client.create_authorization_url()
 
     @pytest.mark.asyncio
     async def test_close(self):
@@ -162,3 +242,15 @@ class TestCreateOAuthClient:
     def test_returns_none_missing_client_id(self):
         config = {"oauth_token_url": "https://x.com/t", "oauth_client_secret": "s"}
         assert create_oauth_client(config) is None
+
+    def test_includes_authorize_url_when_provided(self):
+        config = {
+            "oauth_token_url": "https://auth.example.com/token",
+            "oauth_client_id": "id",
+            "oauth_client_secret": "secret",
+            "oauth_authorize_url": "https://auth.example.com/authorize",
+            "oauth_redirect_uri": "https://app/callback",
+        }
+        result = create_oauth_client(config)
+        assert result.authorize_url == "https://auth.example.com/authorize"
+        assert result.redirect_uri == "https://app/callback"

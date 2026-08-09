@@ -258,6 +258,24 @@ class MCPConnection(Base):
     status = Column(String(20), default="disconnected")
 
     project = relationship("Project", back_populates="mcp_connections")
+    auth_tokens = relationship("MCPAuthToken", back_populates="connection", cascade="all, delete-orphan")
+
+
+class MCPAuthToken(Base):
+    """Persisted OAuth tokens for MCP connections — survives process restarts."""
+    __tablename__ = "mcp_auth_tokens"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    connection_id = Column(Uuid(), ForeignKey("mcp_connections.id", ondelete="CASCADE"), nullable=False)
+    access_token = Column(Text, nullable=False)
+    token_type = Column(String(20), default="Bearer")
+    refresh_token = Column(Text)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    scope = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    connection = relationship("MCPConnection", back_populates="auth_tokens")
 
 
 class ProjectMemoryShare(Base):

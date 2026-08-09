@@ -16,7 +16,7 @@ async def list_connections(db: AsyncSession, project_id: str) -> list[dict]:
     """List all MCP connections for a project."""
     stmt = (
         select(MCPConnection)
-        .where(MCPConnection.project_id == project_id)
+        .where(MCPConnection.project_id == uuid.UUID(project_id))
         .order_by(MCPConnection.name)
     )
     result = await db.execute(stmt)
@@ -32,6 +32,16 @@ async def list_connections(db: AsyncSession, project_id: str) -> list[dict]:
         }
         for c in conns
     ]
+
+
+async def get_connection(db: AsyncSession, connection_id: str, project_id: str) -> MCPConnection | None:
+    """Get a single MCP connection by ID, scoped to project."""
+    stmt = select(MCPConnection).where(
+        MCPConnection.id == uuid.UUID(connection_id),
+        MCPConnection.project_id == uuid.UUID(project_id),
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
 async def create_connection(
@@ -76,7 +86,7 @@ async def update_connection(
     """Update an MCP connection."""
     stmt = select(MCPConnection).where(
         MCPConnection.id == uuid.UUID(connection_id),
-        MCPConnection.project_id == project_id,
+        MCPConnection.project_id == uuid.UUID(project_id),
     )
     result = await db.execute(stmt)
     conn = result.scalar_one_or_none()
@@ -107,7 +117,7 @@ async def delete_connection(db: AsyncSession, connection_id: str, project_id: st
     """Delete an MCP connection."""
     stmt = select(MCPConnection).where(
         MCPConnection.id == uuid.UUID(connection_id),
-        MCPConnection.project_id == project_id,
+        MCPConnection.project_id == uuid.UUID(project_id),
     )
     result = await db.execute(stmt)
     conn = result.scalar_one_or_none()
@@ -122,7 +132,7 @@ async def test_connection(db: AsyncSession, connection_id: str, project_id: str)
     """Test an MCP connection with OAuth if configured."""
     stmt = select(MCPConnection).where(
         MCPConnection.id == uuid.UUID(connection_id),
-        MCPConnection.project_id == project_id,
+        MCPConnection.project_id == uuid.UUID(project_id),
     )
     result = await db.execute(stmt)
     conn = result.scalar_one_or_none()
