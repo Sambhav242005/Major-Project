@@ -2,6 +2,7 @@
 
 import uuid
 import json
+import logging
 from datetime import datetime
 
 from sqlalchemy import select
@@ -15,6 +16,8 @@ from services.memory import (
     store_memory, hydrate_agent_context, format_memory_context,
     cleanup_expired_memories, save_checkpoint,
 )
+
+logger = logging.getLogger(__name__)
 
 MAX_SKILLS_PER_AGENT = 10
 

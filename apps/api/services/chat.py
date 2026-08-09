@@ -239,7 +239,7 @@ async def send_message(
     await db.flush()
 
     # Step 1: Retrieve relevant chunks via ChromaDB
-    search_results = query_chunks(query=message, project_id=project_id, top_k=8)
+    search_results = await query_chunks(query=message, project_id=project_id, top_k=8, db_session=db)
 
     # Step 2: Enrich with entity context
     chunk_ids = [r.get("chunk_id", "") for r in search_results]

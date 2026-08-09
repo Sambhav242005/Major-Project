@@ -1,6 +1,7 @@
 """Knowledge base service — semantic search, entity lookup, graph traversal."""
 
 import logging
+import uuid as _uuid
 from collections import defaultdict
 
 import networkx as nx
@@ -11,6 +12,13 @@ from db.models import Entity, EntityMention, Relationship, DocumentChunk, Docume
 from pipelines.embeddings import query_chunks
 
 logger = logging.getLogger(__name__)
+
+
+def _uuid_val(val: str) -> _uuid.UUID:
+    """Ensure value is a UUID object for SQLAlchemy Uuid() columns."""
+    if isinstance(val, _uuid.UUID):
+        return val
+    return _uuid.UUID(val)
 
 
 async def search(
@@ -24,7 +32,7 @@ async def search(
     Returns list of dicts with chunk_id, text, score, document info.
     """
     # Step 1: ChromaDB similarity search
-    chroma_results = query_chunks(query=query, project_id=project_id, top_k=top_k)
+    chroma_results = await query_chunks(query=query, project_id=project_id, top_k=top_k, db_session=db)
 
     if not chroma_results:
         return []
@@ -69,8 +77,8 @@ async def search(
 async def get_entity(db: AsyncSession, entity_id: str, project_id: str) -> dict | None:
     """Fetch entity with its mentions and relationships."""
     stmt = select(Entity).where(
-        Entity.id == entity_id,
-        Entity.project_id == project_id,
+        Entity.id == _uuid_val(entity_id),
+        Entity.project_id == _uuid_val(project_id),
     )
     result = await db.execute(stmt)
     entity = result.scalar_one_or_none()
@@ -137,12 +145,12 @@ async def get_graph(
     Otherwise returns the full project graph.
     """
     # Load all entities in project
-    entity_stmt = select(Entity).where(Entity.project_id == project_id)
+    entity_stmt = select(Entity).where(Entity.project_id == _uuid_val(project_id))
     entity_result = await db.execute(entity_stmt)
     entities = entity_result.scalars().all()
 
     # Load all relationships in project
-    rel_stmt = select(Relationship).where(Relationship.project_id == project_id)
+    rel_stmt = select(Relationship).where(Relationship.project_id == _uuid_val(project_id))
     rel_result = await db.execute(rel_stmt)
     relationships = rel_result.scalars().all()
 
@@ -219,13 +227,13 @@ async def get_entity_chunks(
 ) -> list[dict]:
     """Get chunks that mention a specific entity."""
     # Get all mentions for this entity
-    stmt = select(EntityMention).where(EntityMention.entity_id == entity_id)
+    stmt = select(EntityMention).where(EntityMention.entity_id == _uuid_val(entity_id))
     result = await db.execute(stmt)
     mentions = result.scalars().all()
 
     chunks = []
     for mention in mentions:
-        chunk_stmt = select(DocumentChunk).where(DocumentChunk.id == mention.chunk_id)
+        chunk_stmt = select(DocumentChunk).where(DocumentChunk.id == _uuid_val(mention.chunk_id))
         chunk_result = await db.execute(chunk_stmt)
         chunk = chunk_result.scalar_one_or_none()
 

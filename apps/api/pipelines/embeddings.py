@@ -97,54 +97,58 @@ def upsert_chunks(
     return ids
 
 
-def query_chunks(
+async def query_chunks(
     query: str,
     project_id: str,
     top_k: int = 8,
+    db_session=None,
 ) -> list[dict]:
     """Query ChromaDB for similar chunks within a project.
 
     Returns list of dicts with 'chunk_id', 'text', 'metadata', 'score', 'filename'.
+
+    Args:
+        db_session: Optional async DB session for filename lookup.
+            If None, filenames will be 'unknown'.
     """
+    import asyncio
+    from functools import partial
+
     collection = get_collection()
 
-    results = collection.query(
-        query_texts=[query],
-        n_results=top_k,
-        where={"project_id": project_id},
+    # Run ChromaDB query in thread pool (it's synchronous)
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(
+        None,
+        partial(
+            collection.query,
+            query_texts=[query],
+            n_results=top_k,
+            where={"project_id": project_id},
+        ),
     )
 
     # Build a doc_id -> filename map via DB
     doc_filename_map = {}
     try:
-        import uuid as _uuid
-        from db.session import async_session_factory
-        from sqlalchemy import select
-        from db.models import Document
+        if db_session:
+            import uuid as _uuid
+            from sqlalchemy import select as sa_select
+            from db.models import Document
 
-        doc_ids = set()
-        if results and results["metadatas"] and results["metadatas"][0]:
-            for meta in results["metadatas"][0]:
-                did = meta.get("document_id")
-                if did:
-                    doc_ids.add(did)
+            doc_ids = set()
+            if results and results["metadatas"] and results["metadatas"][0]:
+                for meta in results["metadatas"][0]:
+                    did = meta.get("document_id")
+                    if did:
+                        doc_ids.add(did)
 
-        if doc_ids:
-            import asyncio
-            async def _fetch():
-                async with async_session_factory() as session:
-                    stmt = select(Document.id, Document.filename).where(
-                        Document.id.in_([_uuid.UUID(d) for d in doc_ids])
-                    )
-                    res = await session.execute(stmt)
-                    return {str(r.id): r.filename for r in res.all()}
-
-            if asyncio.get_event_loop().is_running():
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    doc_filename_map = pool.submit(asyncio.run, _fetch()).result()
-            else:
-                doc_filename_map = asyncio.run(_fetch())
+            if doc_ids:
+                stmt = sa_select(Document.id, Document.filename).where(
+                    Document.id.in_([_uuid.UUID(d) for d in doc_ids])
+                )
+                res = await db_session.execute(stmt)
+                doc_filename_map = {str(r.id): r.filename for r in res.all()}
     except Exception:
         pass
 

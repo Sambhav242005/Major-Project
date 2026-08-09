@@ -42,7 +42,7 @@ async def chat_completion(
         messages: List of {"role": "system"|"user"|"assistant", "content": "..."}
         model: Override model (defaults to config)
         temperature: Sampling temperature
-        response_format: Optional {"type": "json_object"} for structured output
+        response_format: Optional {"type": "json_object"} for structured output (OpenAI only)
         max_tokens: Max response tokens
 
     Returns:
@@ -51,6 +51,7 @@ async def chat_completion(
     provider = _get_provider()
 
     if provider == "ollama":
+        # Ollama does not support response_format — strip it
         return await _ollama_completion(messages, model, temperature)
     else:
         return await _openai_completion(messages, model, temperature, response_format, max_tokens)

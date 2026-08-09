@@ -447,8 +447,9 @@ def _build_agent_graph():
     })
 
     def after_tool(state: AgentState):
-        # If there's a new message (tool was executed), go back to LLM
-        if state.get("messages") and len(state.get("messages", [])) > len(state.get("input_data", {}).get("_original_messages", [])):
+        # If full_response was reset (tool was executed), go back to LLM
+        # Node execute_tool sets full_response="" when a tool is found
+        if not state.get("full_response") and state.get("tool_iterations", 0) > 0:
             return "execute_llm"
         return "post_process"
 
@@ -506,15 +507,11 @@ async def execute_agent(
     }
 
     # Run the graph and yield events as they're produced
-    final_state = None
+    all_traces = []
     async for event in graph.astream(initial_state):
         for node_name, state_update in event.items():
             if "trace" in state_update:
-                new_traces = state_update["trace"][len(final_state["trace"]) if final_state else 0:]
+                new_traces = state_update["trace"][len(all_traces):]
                 for trace_event in new_traces:
+                    all_traces.append(trace_event)
                     yield trace_event
-            final_state = state_update
-
-    if final_state and not final_state.get("trace"):
-        for trace_event in final_state.get("trace", []):
-            yield trace_event

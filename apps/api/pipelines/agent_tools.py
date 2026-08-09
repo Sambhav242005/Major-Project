@@ -41,9 +41,9 @@ def register_tool(name: str, description: str, parameters: dict):
         "required": ["query"],
     },
 )
-async def search_chunks_tool(query: str, top_k: int = 5, project_id: str = "", **kwargs) -> str:
+async def search_chunks_tool(query: str, top_k: int = 5, project_id: str = "", db=None, **kwargs) -> str:
     """Search ChromaDB for relevant chunks."""
-    results = query_chunks(query=query, project_id=project_id, top_k=top_k)
+    results = await query_chunks(query=query, project_id=project_id, top_k=top_k, db_session=db)
     if not results:
         return json.dumps({"results": [], "message": "No relevant chunks found."})
 
