@@ -4,7 +4,7 @@ const MOCK_AUTH = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
 
 // Mock user for development
 const MOCK_USER = {
-  id: "mock-user-001",
+  id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
   email: "mock@example.com",
 };
 

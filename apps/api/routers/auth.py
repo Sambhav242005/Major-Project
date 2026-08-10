@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
+
 from core.security import get_current_user, User
 from core.config import settings
+from core.rate_limit import limiter
 
 router = APIRouter()
 
@@ -12,7 +14,8 @@ async def get_me(user: User = Depends(get_current_user)):
 
 
 @router.post("/mock-login")
-async def mock_login():
+@limiter.limit("10/minute")
+async def mock_login(request: Request, response: Response):
     """Mock login endpoint for development testing.
 
     Returns a fake JWT token and sets cookies for the frontend.
@@ -26,7 +29,7 @@ async def mock_login():
 
     # Create a mock user object that the frontend can use
     mock_user = {
-        "id": "mock-user-001",
+        "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
         "email": "mock@example.com",
         "access_token": "mock-token-for-development",
         "refresh_token": "mock-refresh-token",
@@ -34,12 +37,15 @@ async def mock_login():
 
     response = JSONResponse(content={"user": mock_user, "session": mock_user})
 
+    # Secure cookies in non-dev environments; dev may use plaintext localhost
+    secure_cookies = settings.ENVIRONMENT != "development"
+
     # Set cookies that the Supabase client expects
     response.set_cookie(
         key="sb-access-token",
         value="mock-token-for-development",
         httponly=True,
-        secure=False,
+        secure=secure_cookies,
         samesite="lax",
         max_age=3600,
     )
@@ -47,7 +53,7 @@ async def mock_login():
         key="sb-refresh-token",
         value="mock-refresh-token",
         httponly=True,
-        secure=False,
+        secure=secure_cookies,
         samesite="lax",
         max_age=86400,
     )

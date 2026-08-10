@@ -1,50 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import Link from "next/link";
-import ReactFlow, {
-  Node,
-  Edge,
-  Background,
-  Controls,
-  MiniMap,
-  useNodesState,
-  useEdgesState,
-  MarkerType,
-} from "reactflow";
-import "reactflow/dist/style.css";
+import { GraphCanvas, GraphEdge, GraphNode, useSelection } from "reagraph";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useGraphStore } from "@/stores/graph";
+import { DashboardHeader } from "@/components/dashboard-header";
 
 const ENTITY_COLORS: Record<string, string> = {
-  PERSON: "#d97706",
-  ORG: "#16a34a",
+  PERSON: "#f59e0b",
+  ORG: "#22c55e",
   GPE: "#64748b",
-  EVENT: "#dc2626",
-  CONCEPT: "#1e293b",
+  EVENT: "#ef4444",
+  CONCEPT: "#38bdf8",
 };
 
-function EntityNode({ data }: { data: { label: string; type: string; description?: string } }) {
-  const color = ENTITY_COLORS[data.type] || "#64748b";
-  return (
-    <div
-      className="px-4 py-2 rounded-lg border-2 shadow-sm bg-white cursor-pointer hover:shadow-md transition-shadow"
-      style={{ borderColor: color }}
-    >
-      <div className="text-xs font-mono text-slate mb-0.5">{data.type}</div>
-      <div className="font-medium text-ink text-sm">{data.label}</div>
-    </div>
-  );
+export default function GraphPage() {
+  return <GraphPageInner />;
 }
 
-const nodeTypes = { entityNode: EntityNode };
-
-export default function GraphPage() {
-  const supabase = createClient();
+function GraphPageInner() {
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
   const {
     nodes: storeNodes,
     edges: storeEdges,
@@ -57,39 +39,29 @@ export default function GraphPage() {
     setDepth,
   } = useGraphStore();
 
-  const [rfNodes, setRfNodes, onNodesChange] = useNodesState([]);
-  const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState([]);
+  const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
+  const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
+  const [entityChunks, setEntityChunks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [viewerKey, setViewerKey] = useState(0);
+  const canvasRef = useRef<{ zoomIn?: () => void; zoomOut?: () => void; fit?: () => void } | null>(null);
 
-  // Convert store data to React Flow format
-  useEffect(() => {
-    const nodes: Node[] = storeNodes.map((n, i) => ({
-      id: n.id,
-      type: "entityNode",
-      position: { x: (i % 5) * 200, y: Math.floor(i / 5) * 120 },
-      data: { label: n.name, type: n.type, description: n.description },
-    }));
+  const entityTypes = Array.from(new Set(storeNodes.map((n: any) => n.type)));
 
-    const edges: Edge[] = storeEdges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      label: e.label,
-      type: "smoothstep",
-      animated: true,
-      markerEnd: { type: MarkerType.ArrowClosed },
-      style: { strokeWidth: 2, stroke: "#94a3b8" },
-    }));
+  const toggleType = useCallback((type: string) => {
+    setTypeFilter((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  }, []);
 
-    setRfNodes(nodes);
-    setRfEdges(edges);
-  }, [storeNodes, storeEdges, setRfNodes, setRfEdges]);
-
-  // Fetch graph data
   const fetchGraph = useCallback(
     async (entityId?: string) => {
       setLoading(true);
+      setError(null);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
@@ -97,40 +69,75 @@ export default function GraphPage() {
         const params = new URLSearchParams({ depth: String(depth) });
         if (entityId) params.set("entity_id", entityId);
 
-        const res = await fetch(
-          `http://localhost:8000/kb/graph?${params}`,
-          { headers: { Authorization: `Bearer ${session.access_token}` } }
+        const data = await apiFetch<{ nodes: any[]; edges: any[] }>(
+          `/kb/graph?${params}`,
+          { token: session.access_token }
         );
 
-        if (res.ok) {
-          const data = await res.json();
-          setGraphData(data.nodes || [], data.edges || []);
-        }
+        const apiNodes = data.nodes || [];
+        const apiEdges = data.edges || [];
+
+        // Entity-type filter (progressive disclosure — cut hairball, not data)
+        const active = typeFilter.length === 0 ? null : typeFilter;
+        const visibleNodes = active ? apiNodes.filter((n: any) => active.includes(n.type)) : apiNodes;
+        const visibleIds = new Set(visibleNodes.map((n: any) => n.id));
+        const visibleEdges = apiEdges.filter(
+          (e: any) => visibleIds.has(e.source) && visibleIds.has(e.target)
+        );
+
+        const nodes: GraphNode[] = visibleNodes.map((n: any) => ({
+          id: n.id,
+          label: n.name,
+          fill: ENTITY_COLORS[n.type] || "#64748b",
+          size: 8,
+        }));
+
+        const edges: GraphEdge[] = visibleEdges.map((e: any) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          label: e.relation_type || "",
+        }));
+
+        setGraphData(apiNodes, apiEdges);
+        setGraphNodes(nodes);
+        setGraphEdges(edges);
       } catch (e) {
         console.error("Failed to fetch graph:", e);
+        setError("Failed to connect to server");
       } finally {
         setLoading(false);
       }
     },
-    [depth, setGraphData, supabase]
+    [depth, typeFilter, setGraphData]
   );
 
-  // Fetch entity detail when selected
   const fetchEntity = useCallback(
     async (entityId: string) => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        const res = await fetch(
-          `http://localhost:8000/kb/entities/${entityId}`,
-          { headers: { Authorization: `Bearer ${session.access_token}` } }
-        );
-
-        if (res.ok) {
-          const data = await res.json();
-          setSelectedEntity(data.entity);
-        }
+        const [entityRes, chunksRes] = await Promise.all([
+          apiFetch<{ entity: any }>(`/kb/entities/${entityId}`, {
+            token: session.access_token,
+          }),
+          apiFetch<{ chunks: any[] }>(`/kb/entities/${entityId}/chunks`, {
+            token: session.access_token,
+          }),
+        ]);
+        setSelectedEntity(entityRes.entity);
+        // Dedupe chunks by filename+page — the same section can be stored
+        // as multiple chunk rows (e.g. after re-processing a document), so
+        // keying on chunk_id would still show duplicates.
+        const seen = new Set<string>();
+        const uniqueChunks = (chunksRes.chunks || []).filter((c: any) => {
+          const key = `${c.filename}|${c.page_number ?? 0}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setEntityChunks(uniqueChunks);
       } catch (e) {
         console.error("Failed to fetch entity:", e);
       }
@@ -138,29 +145,25 @@ export default function GraphPage() {
     [supabase]
   );
 
-  // Load graph on mount
   useEffect(() => {
     fetchGraph();
   }, [fetchGraph]);
 
-  // Handle node click
-  const onNodeClick = useCallback(
-    (_: any, node: Node) => {
-      selectEntity(node.id);
-      fetchEntity(node.id);
+  const handleNodeClick = useCallback(
+    (node: any) => {
+      const nodeId = node?.id || node;
+      selectEntity(nodeId);
+      fetchEntity(nodeId);
     },
     [selectEntity, fetchEntity]
   );
 
-  // Handle depth change
   const handleDepthChange = (newDepth: number) => {
     setDepth(newDepth);
     fetchGraph(selectedEntityId || undefined);
   };
 
-  // Handle search
   const handleSearch = () => {
-    // Search for entity by name, then center graph on it
     const match = storeNodes.find(
       (n) => n.name.toLowerCase() === searchQuery.toLowerCase()
     );
@@ -172,59 +175,66 @@ export default function GraphPage() {
   };
 
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="border-b border-slate/20 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm text-slate hover:text-ink transition-colors">
-              ← Dashboard
-            </Link>
-            <h1 className="font-display text-xl font-semibold text-ink">
-              Knowledge Graph Explorer
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/documents" className="text-sm text-slate hover:text-ink transition-colors">
-              Documents
-            </Link>
-            <Link href="/chat" className="text-sm text-slate hover:text-ink transition-colors">
-              Chat
-            </Link>
-            <Link href="/agents" className="text-sm text-slate hover:text-ink transition-colors">
-              Agents
-            </Link>
-            <Link href="/mcp" className="text-sm text-slate hover:text-ink transition-colors">
-              MCP
-            </Link>
-            <form action="/auth/signout" method="post">
-              <button type="submit" className="text-sm text-rust hover:underline">
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-app-bg text-app-text">
+      <DashboardHeader title="Knowledge Graph Explorer" showBack backHref="/dashboard" />
 
-      <div className="flex h-[calc(100vh-64px)]">
+      <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+        {/* Sidebar toggle */}
+        <button
+          onClick={() => setSidebarOpen((v) => !v)}
+          aria-expanded={sidebarOpen}
+          aria-label={sidebarOpen ? "Collapse panel" : "Expand panel"}
+          className="w-8 shrink-0 border-r border-app-border bg-app-surface-alt flex items-center justify-center text-app-muted hover:text-app-text transition-colors"
+        >
+          {sidebarOpen ? "«" : "»"}
+        </button>
+
         {/* Controls Panel */}
-        <div className="w-72 border-r border-slate/20 bg-white p-4 flex flex-col gap-4 overflow-y-auto">
-          {/* Search */}
+        {sidebarOpen && (
+        <div className="w-72 shrink-0 border-r border-app-border bg-app-surface-alt p-4 flex flex-col gap-4 overflow-y-auto scrollbar-dark transition-all">
           <div>
-            <label className="text-sm font-medium text-ink mb-1 block">Search Entity</label>
+            <label className="text-xs text-app-muted uppercase tracking-wider mb-1.5 block">Search Entity</label>
             <div className="flex gap-2">
-              <Input
+              <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Entity name..."
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="flex-1 h-9 px-3 rounded-lg bg-app-surface-alt border border-app-border-strong text-sm text-app-text placeholder:text-app-muted outline-none focus:border-brand-accent/50 transition-all"
               />
-              <Button onClick={handleSearch} size="sm">Go</Button>
+              <button onClick={handleSearch} className="h-9 px-3 rounded-lg bg-brand-accent/15 text-app-text border border-brand-accent/25 text-sm font-medium hover:bg-brand-accent/25 transition-all">
+                Go
+              </button>
             </div>
           </div>
 
-          {/* Depth Slider */}
+          {/* Entity-type filter chips */}
+          {entityTypes.length > 0 && (
+            <div>
+              <label className="text-xs text-app-muted uppercase tracking-wider mb-1.5 block">
+                Filter by type {typeFilter.length > 0 && `(${typeFilter.length})`}
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {entityTypes.map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => toggleType(type)}
+                    aria-pressed={typeFilter.includes(type)}
+                    className={`text-[11px] px-2 py-1 rounded-full border transition-colors ${
+                      typeFilter.includes(type)
+                        ? "bg-brand-accent/20 border-brand-accent/40 text-app-text"
+                        : "bg-app-surface border-app-border-strong text-app-muted hover:text-app-text"
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
-            <label className="text-sm font-medium text-ink mb-1 block">
+            <label className="text-xs text-app-muted uppercase tracking-wider mb-1.5 block">
               Depth: {depth}
             </label>
             <input
@@ -233,113 +243,152 @@ export default function GraphPage() {
               max={3}
               value={depth}
               onChange={(e) => handleDepthChange(Number(e.target.value))}
-              className="w-full"
+              className="w-full accent-brand-accent"
             />
-            <div className="flex justify-between text-xs text-slate mt-1">
+            <div className="flex justify-between text-xs text-app-muted mt-1">
               <span>1</span>
               <span>2</span>
               <span>3</span>
             </div>
           </div>
 
-          {/* Refresh */}
-          <Button
-            onClick={() => fetchGraph(selectedEntityId || undefined)}
-            variant="outline"
-            disabled={loading}
-          >
-            {loading ? "Loading..." : "Refresh Graph"}
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => fetchGraph(selectedEntityId || undefined)}
+              disabled={loading}
+              className="h-9 px-3 rounded-lg bg-app-surface text-app-text border border-app-border-strong text-sm font-medium hover:bg-app-card-hover disabled:opacity-40 transition-all"
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+            <button
+              onClick={() => setViewerKey((k) => k + 1)}
+              className="h-9 px-3 rounded-lg bg-app-surface text-app-text border border-app-border-strong text-sm font-medium hover:bg-app-card-hover transition-all"
+            >
+              Fit view
+            </button>
+          </div>
 
-          {/* Entity Detail Panel */}
-          {selectedEntity && (
-            <Card className="mt-2">
-              <CardHeader className="pb-2">
-                <CardTitle className="font-display text-base">
-                  {selectedEntity.name}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Badge className={ENTITY_COLORS[selectedEntity.type] ? "text-white" : ""}>
-                  {selectedEntity.type}
-                </Badge>
-                {selectedEntity.description && (
-                  <p className="text-sm text-slate">{selectedEntity.description}</p>
-                )}
-                <div className="text-xs text-slate">
-                  Mentions: {selectedEntity.mentions_count}
-                </div>
-                {selectedEntity.relationships?.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-ink mb-1">Relationships</p>
-                    <div className="space-y-1">
-                      {selectedEntity.relationships.map((rel: any) => (
-                        <div key={rel.id} className="text-xs text-slate">
-                          <span className="text-ink">{rel.other_entity_name}</span>
-                          {" "}
-                          <span className="text-slate">({rel.relation_type})</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              {error}
+            </div>
           )}
 
-          {/* Legend */}
+          {selectedEntity && (
+            <div className="glow-card p-4 mt-2">
+              <h3 className="text-sm font-medium text-app-text mb-2">
+                {selectedEntity.name}
+              </h3>
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded inline-block mb-2"
+                style={{
+                  background: `${ENTITY_COLORS[selectedEntity.type]}20`,
+                  color: ENTITY_COLORS[selectedEntity.type],
+                  border: `1px solid ${ENTITY_COLORS[selectedEntity.type]}40`,
+                }}
+              >
+                {selectedEntity.type}
+              </span>
+              {selectedEntity.description && (
+                <p className="text-xs text-app-muted mb-2">{selectedEntity.description}</p>
+              )}
+              <div className="text-[10px] text-app-muted">
+                Mentions: {selectedEntity.mentions_count}
+              </div>
+              {selectedEntity.relationships?.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[10px] text-app-muted uppercase tracking-wider mb-1">Relationships</p>
+                  <div className="space-y-1">
+                    {selectedEntity.relationships.map((rel: any) => (
+                      <div key={rel.id} className="text-[11px] text-app-muted">
+                        <span className="text-app-text">{rel.other_entity_name}</span>
+                        {" "}
+                        <span className="text-app-muted">({rel.relation_type})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedEntity && entityChunks.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[10px] text-app-muted uppercase tracking-wider mb-2">
+                Source sections ({entityChunks.length})
+              </p>
+              <div className="space-y-2">
+                {entityChunks.map((chunk: any, idx: number) => (
+                  <div
+                    key={chunk.chunk_id ?? idx}
+                    className="rounded-lg border border-app-border bg-app-surface p-2.5"
+                  >
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <span className="text-[10px] font-mono text-app-muted truncate">
+                        {chunk.filename}
+                      </span>
+                      <span className="text-[10px] font-mono text-app-muted shrink-0">
+                        p.{chunk.page_number ?? "?"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-app-text line-clamp-4">
+                      {chunk.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-auto">
-            <p className="text-xs font-medium text-ink mb-2">Legend</p>
-            <div className="space-y-1">
+            <p className="text-[10px] text-app-muted uppercase tracking-wider mb-2">Legend</p>
+            <div className="space-y-1.5">
               {Object.entries(ENTITY_COLORS).map(([type, color]) => (
                 <div key={type} className="flex items-center gap-2 text-xs">
-                  <div className="w-3 h-3 rounded" style={{ backgroundColor: color }} />
-                  <span className="text-slate">{type}</span>
+                  <div className="w-2.5 h-2.5 rounded" style={{ backgroundColor: color }} />
+                  <span className="text-app-muted">{type}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
+        )}
 
         {/* Graph Canvas */}
-        <div className="flex-1 relative">
+        <div className="flex-1 min-w-0 relative bg-app-bg overflow-hidden">
           {loading && storeNodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-paper/80 z-10">
-              <p className="text-slate">Loading graph...</p>
+            <div className="absolute inset-0 flex items-center justify-center bg-app-bg/80 z-10">
+              <p className="text-app-muted">Loading graph...</p>
             </div>
           )}
           {!loading && storeNodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center z-10">
               <div className="text-center">
-                <p className="text-ink font-medium mb-1">No entities yet</p>
-                <p className="text-slate text-sm">
+                <p className="text-app-text font-medium mb-1">No entities yet</p>
+                <p className="text-app-muted text-sm">
                   Upload documents to start building the knowledge graph
                 </p>
-                <Link href="/documents">
-                  <Button className="mt-4" variant="outline">Upload Documents</Button>
+                <Link href="/documents" className="inline-block mt-4">
+                  <span className="px-4 py-2 rounded-lg bg-brand-accent/15 text-app-text border border-brand-accent/25 text-sm font-medium hover:bg-brand-accent/25 transition-all">
+                    Upload Documents
+                  </span>
                 </Link>
               </div>
             </div>
           )}
-          <ReactFlow
-            nodes={rfNodes}
-            edges={rfEdges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onNodeClick={onNodeClick}
-            nodeTypes={nodeTypes}
-            fitView
-            attributionPosition="bottom-left"
-          >
-            <Background />
-            <Controls />
-            <MiniMap
-              nodeColor={(node) => {
-                const type = node.data?.type;
-                return ENTITY_COLORS[type] || "#64748b";
-              }}
+          {graphNodes.length > 0 && (
+            <GraphCanvas
+              key={viewerKey}
+              nodes={graphNodes}
+              edges={graphEdges}
+              onNodeClick={handleNodeClick}
+              layoutType="forceDirected2d"
+              edgeArrowPosition="none"
+              labelType="auto"
+              sizingType="attribute"
+              edgeLabelPosition="inline"
             />
-          </ReactFlow>
+          )}
         </div>
       </div>
     </div>

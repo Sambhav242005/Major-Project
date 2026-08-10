@@ -1,14 +1,25 @@
-"""Agents router — CRUD, run, task traces, memory, and checkpoints."""
+"""Agents router — CRUD, async run, SSE task traces, memory, and checkpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
+import json
+import uuid
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import get_current_user, User
-from core.deps import get_project_id
-from db.session import get_db
+from core.deps import get_project_id, assert_agent_in_project
+from core.rate_limit import limiter
+from core.task_queue import start_agent_task, subscribe_task, unsubscribe_task
+from db.session import get_db, async_session_factory
+from db.models import Agent, AgentTask
 from services import agents as agent_service
 from services import memory as memory_service
+from services.embeddings import embed_text
 
 router = APIRouter()
 
@@ -67,7 +78,6 @@ async def create_agent(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new agent."""
-    # Validate agent type
     available_types = [t["type"] for t in agent_service.list_agent_types()]
     if req.type not in available_types:
         raise HTTPException(
@@ -129,21 +139,58 @@ async def delete_agent(
 
 
 @router.post("/{agent_id}/run")
+@limiter.limit("30/minute")
 async def run_agent(
+    request: Request,
+    response: Response,
     agent_id: str,
     req: AgentRunRequest = AgentRunRequest(),
     project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Trigger agent execution (with memory hydration)."""
-    result = await agent_service.run_agent(
-        db=db, agent_id=agent_id, project_id=project_id,
-        input_data=req.input,
+    """Trigger agent execution (non-blocking). Returns task_id immediately."""
+    # Verify agent exists
+    agent = await agent_service.get_agent(db, agent_id, project_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Create task record
+    task_id = str(uuid.uuid4())
+    task = AgentTask(
+        id=uuid.UUID(task_id),
+        agent_id=uuid.UUID(agent_id),
+        input=req.input,
+        status="running",
+        trace=[],
+        started_at=datetime.utcnow(),
     )
-    if "error" in result:
-        raise HTTPException(status_code=404, detail=result["error"])
-    return result
+    db.add(task)
+    await db.flush()
+    await db.commit()
+
+    # Launch background execution
+    try:
+        start_agent_task(
+            session_factory=async_session_factory,
+            agent_id=agent_id,
+            task_id=task_id,
+            project_id=project_id,
+            input_data=req.input,
+        )
+    except Exception as e:
+        task.status = "failed"
+        task.error = f"Failed to start: {e}"
+        task.completed_at = datetime.utcnow()
+        await db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to start agent: {e}")
+
+    return {
+        "task_id": task_id,
+        "agent_id": agent_id,
+        "status": "running",
+        "message": "Agent execution started. Poll /agents/{id}/tasks/{task_id} or subscribe to SSE.",
+    }
 
 
 @router.get("/{agent_id}/tasks")
@@ -173,6 +220,41 @@ async def get_agent_task(
     return {"task": task}
 
 
+@router.get("/{agent_id}/tasks/{task_id}/stream")
+async def stream_agent_task(
+    agent_id: str,
+    task_id: str,
+    project_id: str = Depends(get_project_id),
+    user: User = Depends(get_current_user),
+):
+    """SSE stream for real-time agent task progress."""
+    queue = subscribe_task(task_id)
+
+    async def event_stream():
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield f"data: {json.dumps(event, default=str)}\n\n"
+                    if event.get("step") == "complete":
+                        break
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    yield f": keepalive\n\n"
+        finally:
+            unsubscribe_task(task_id, queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # --- Memory endpoints ---
 
 
@@ -200,13 +282,17 @@ async def store_memory(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Store a memory for an agent."""
+    """Store a memory for an agent. Auto-generates embedding if not provided."""
     try:
+        embedding = req.embedding
+        if not embedding:
+            text = " ".join(str(v) for v in req.content.values())
+            embedding = await embed_text(text)
         memory = await memory_service.store_memory(
             db, agent_id, project_id,
             memory_type=req.memory_type,
             content=req.content,
-            embedding=req.embedding,
+            embedding=embedding,
             metadata=req.metadata,
             ttl_hours=req.ttl_hours,
         )
@@ -240,13 +326,8 @@ async def search_memory(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Search agent memories by semantic similarity.
-
-    Note: In production, use a real embedding model.
-    Currently uses a simple hash-based pseudo-embedding for demo purposes.
-    """
-    # Simple hash-based embedding for demo (replace with real model in prod)
-    query_embedding = _simple_embedding(q)
+    """Search agent memories by semantic similarity using Ollama embeddings."""
+    query_embedding = await embed_text(q)
     results = await memory_service.search_memories(
         db, agent_id, project_id, query_embedding,
         memory_type=memory_type, limit=limit,
@@ -266,6 +347,7 @@ async def save_checkpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """Save agent checkpoint for stop/resume."""
+    await assert_agent_in_project(db, agent_id, project_id)
     checkpoint = await memory_service.save_checkpoint(
         db, agent_id, req.task_id, req.state,
     )
@@ -280,6 +362,7 @@ async def get_checkpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """Get latest checkpoint for an agent."""
+    await assert_agent_in_project(db, agent_id, project_id)
     checkpoint = await memory_service.load_latest_checkpoint(db, agent_id)
     if not checkpoint:
         return {"checkpoint": None}
@@ -294,13 +377,6 @@ async def get_agent_context(
     db: AsyncSession = Depends(get_db),
 ):
     """Get full agent memory context (for debugging/inspection)."""
+    await assert_agent_in_project(db, agent_id, project_id)
     context = await memory_service.hydrate_agent_context(db, agent_id, project_id)
     return {"context": context}
-
-
-def _simple_embedding(text: str) -> list[float]:
-    """Hash-based pseudo-embedding for demo. Replace with real model in prod."""
-    import hashlib
-    h = hashlib.sha256(text.encode()).digest()
-    # Convert bytes to float list (0.0-1.0 range)
-    return [b / 255.0 for b in h]

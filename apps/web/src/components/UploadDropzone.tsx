@@ -89,11 +89,11 @@ export function UploadDropzone({ onUpload, disabled }: UploadDropzoneProps) {
         {uploading ? (
           <div className="flex flex-col items-center gap-2">
             <div className="w-8 h-8 border-2 border-amber border-t-transparent rounded-full animate-spin" />
-            <p className="text-ink font-medium">Uploading...</p>
+            <p className="text-app-text font-medium">Uploading...</p>
           </div>
         ) : (
           <>
-            <p className="text-ink font-medium mb-1">
+            <p className="text-app-text font-medium mb-1">
               Drop your documents here
             </p>
             <p className="text-muted-foreground text-sm mb-4">

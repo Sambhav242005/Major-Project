@@ -1,9 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 from core.config import settings
 from core.errors import AppError, app_error_handler
-from core.rate_limit import RateLimitMiddleware
+from core.rate_limit import limiter
 from core.auth_middleware import GlobalAuthMiddleware
 from core.security_headers import SecurityHeadersMiddleware
 from routers import auth, documents, kb, chat, dashboard, agents, mcp, meetings, sharing, webhooks
@@ -17,10 +19,18 @@ app = FastAPI(
 
 app.add_exception_handler(AppError, app_error_handler)
 
-# Order matters: security headers -> auth -> rate limit -> CORS
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Try again later."},
+    )
+
+
+# Order matters: security headers -> auth -> CORS
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(GlobalAuthMiddleware)
-app.add_middleware(RateLimitMiddleware, max_requests=60, window_seconds=60)
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +39,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# slowapi reads the limiter from app.state — wire it here.
+app.state.limiter = limiter
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(documents.router, prefix="/documents", tags=["documents"])
@@ -50,34 +63,15 @@ async def health_check():
 @app.get("/system/status")
 async def system_status():
     """Return system configuration and service availability."""
-    import httpx
-
-    ollama_ok = False
-    ollama_model = settings.OLLAMA_MODEL
-    ollama_models = []
-
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
-            if r.status_code == 200:
-                ollama_ok = True
-                data = r.json()
-                ollama_models = [m["name"] for m in data.get("models", [])]
-    except Exception:
-        pass
-
-    openai_ok = bool(settings.OPENAI_API_KEY)
-
     return {
         "auth_mode": "local" if settings.MOCK_AUTH else "supabase",
         "environment": settings.ENVIRONMENT,
         "llm": {
-            "provider": settings.LLM_PROVIDER,
-            "ollama_available": ollama_ok,
-            "ollama_url": settings.OLLAMA_BASE_URL,
-            "ollama_model": ollama_model,
-            "ollama_models": ollama_models,
-            "openai_available": openai_ok,
-            "openai_model": settings.OPENAI_MODEL,
+            "base_url": settings.LLM_BASE_URL,
+            "model": settings.LLM_MODEL,
+        },
+        "embedding": {
+            "base_url": settings.EMBEDDING_BASE_URL,
+            "model": settings.EMBEDDING_MODEL,
         },
     }

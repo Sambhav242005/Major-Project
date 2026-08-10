@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api/client";
 import Link from "next/link";
+import { DashboardHeader } from "@/components/dashboard-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 
 interface MCPConnection {
@@ -25,7 +28,8 @@ interface MCPConnection {
 }
 
 export default function MCPPage() {
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
   const [connections, setConnections] = useState<MCPConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -41,20 +45,17 @@ export default function MCPPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch("http://localhost:8000/mcp/connections", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setConnections(data.connections || []);
-      }
+      const data = await apiFetch<{ connections: MCPConnection[] }>(
+        "/mcp/connections",
+        { token: session.access_token }
+      );
+      setConnections(data.connections || []);
     } catch (e) {
       console.error("Failed to fetch connections:", e);
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     fetchConnections();
@@ -65,25 +66,20 @@ export default function MCPPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch("http://localhost:8000/mcp/connections", {
+      await apiFetch("/mcp/connections", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+        token: session.access_token,
+        body: {
           name: newName,
           direction: newDirection,
           endpoint_url: newUrl || null,
-        }),
+        },
       });
-
-      if (res.ok) {
-        setShowCreate(false);
-        setNewName("");
-        setNewUrl("");
-        fetchConnections();
-      }
+      setShowCreate(false);
+      setNewName("");
+      setNewUrl("");
+      setNewDirection("sender");
+      fetchConnections();
     } catch (e) {
       console.error("Failed to create connection:", e);
     }
@@ -95,12 +91,10 @@ export default function MCPPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch(`http://localhost:8000/mcp/connections/${connId}/test`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-
-      const data = await res.json();
+      const data = await apiFetch<{ status: string }>(
+        `/mcp/connections/${connId}/test`,
+        { method: "POST", token: session.access_token }
+      );
       if (data.status === "connected") {
         fetchConnections();
       }
@@ -116,9 +110,9 @@ export default function MCPPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      await fetch(`http://localhost:8000/mcp/connections/${connId}`, {
+      await apiFetch(`/mcp/connections/${connId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        token: session.access_token,
       });
 
       fetchConnections();
@@ -134,16 +128,10 @@ export default function MCPPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const res = await fetch("http://localhost:8000/meetings/sync", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ source: "google_meet" }),
-      });
-
-      const data = await res.json();
+      const data = await apiFetch<{ message?: string; meetings_imported?: number }>(
+        "/meetings/sync",
+        { method: "POST", token: session.access_token, body: { source: "google_meet" } }
+      );
       setSyncResult(data.message || `Synced ${data.meetings_imported} meetings`);
     } catch (e) {
       setSyncResult("Sync failed");
@@ -156,53 +144,23 @@ export default function MCPPage() {
   const receiverConns = connections.filter((c) => c.direction === "receiver");
 
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="border-b border-slate/20 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm text-slate hover:text-ink transition-colors">
-              ← Dashboard
-            </Link>
-            <h1 className="font-display text-xl font-semibold text-ink">
-              MCP Connections
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link href="/documents" className="text-sm text-slate hover:text-ink transition-colors">
-              Documents
-            </Link>
-            <Link href="/chat" className="text-sm text-slate hover:text-ink transition-colors">
-              Chat
-            </Link>
-            <Link href="/graph" className="text-sm text-slate hover:text-ink transition-colors">
-              Graph
-            </Link>
-            <Link href="/agents" className="text-sm text-slate hover:text-ink transition-colors">
-              Agents
-            </Link>
-            <form action="/auth/signout" method="post">
-              <button type="submit" className="text-sm text-rust hover:underline">
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-app-bg">
+      <DashboardHeader title="MCP Connections" showBack backHref="/dashboard" />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
-          <p className="text-slate">
+          <p className="text-app-muted">
             Configure MCP (Model Context Protocol) connections to share knowledge with external tools
           </p>
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
             <DialogTrigger render={<Button />}>Add Connection</DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-md bg-app-card border-app-border">
               <DialogHeader>
                 <DialogTitle className="font-display">New MCP Connection</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 mt-4">
+              <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium text-ink mb-1 block">Name</label>
+                  <label className="text-sm font-medium text-app-text mb-1.5 block">Name</label>
                   <Input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
@@ -210,24 +168,26 @@ export default function MCPPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-ink mb-1 block">Direction</label>
+                  <label className="text-sm font-medium text-app-text mb-1.5 block">Direction</label>
                   <div className="flex gap-2">
                     <Button
                       variant={newDirection === "sender" ? "default" : "outline"}
                       onClick={() => setNewDirection("sender")}
+                      type="button"
                     >
                       Sender (Expose KB)
                     </Button>
                     <Button
                       variant={newDirection === "receiver" ? "default" : "outline"}
                       onClick={() => setNewDirection("receiver")}
+                      type="button"
                     >
                       Receiver (Pull data)
                     </Button>
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-ink mb-1 block">
+                  <label className="text-sm font-medium text-app-text mb-1.5 block">
                     Endpoint URL (optional)
                   </label>
                   <Input
@@ -236,42 +196,44 @@ export default function MCPPage() {
                     placeholder="https://example.com/mcp"
                   />
                 </div>
-                <Button onClick={handleCreate} disabled={!newName.trim()} className="w-full">
+              </div>
+              <DialogFooter showCloseButton>
+                <Button onClick={handleCreate} disabled={!newName.trim()}>
                   Create Connection
                 </Button>
-              </div>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
 
         {loading ? (
-          <div className="text-center py-12 text-slate">Loading connections...</div>
+          <div className="text-center py-12 text-app-muted">Loading connections...</div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Sender Tab */}
-            <Card>
+            <Card className="glow-card">
               <CardHeader>
                 <CardTitle className="font-display text-lg flex items-center gap-2">
                   Sender Connections
                   <Badge variant="outline">{senderConns.length}</Badge>
                 </CardTitle>
-                <p className="text-sm text-slate">
+                <p className="text-sm text-app-muted">
                   Expose your knowledge base to external MCP clients
                 </p>
               </CardHeader>
               <CardContent>
                 {senderConns.length === 0 ? (
-                  <p className="text-sm text-slate">No sender connections</p>
+                  <p className="text-sm text-app-muted">No sender connections</p>
                 ) : (
                   <div className="space-y-3">
                     {senderConns.map((conn) => (
                       <div
                         key={conn.id}
-                        className="flex items-center justify-between p-3 bg-paper rounded-lg border border-slate/10"
+                        className="flex items-center justify-between p-3 bg-app-card rounded-lg border border-app-border"
                       >
                         <div>
-                          <p className="text-sm font-medium text-ink">{conn.name}</p>
-                          <p className="text-xs text-slate font-mono">
+                          <p className="text-sm font-medium text-app-text">{conn.name}</p>
+                          <p className="text-xs text-app-muted font-mono">
                             {conn.endpoint_url || "No URL set"}
                           </p>
                         </div>
@@ -303,29 +265,29 @@ export default function MCPPage() {
             </Card>
 
             {/* Receiver Tab */}
-            <Card>
+            <Card className="glow-card">
               <CardHeader>
                 <CardTitle className="font-display text-lg flex items-center gap-2">
                   Receiver Connections
                   <Badge variant="outline">{receiverConns.length}</Badge>
                 </CardTitle>
-                <p className="text-sm text-slate">
+                <p className="text-sm text-app-muted">
                   Pull data from external sources into your knowledge base
                 </p>
               </CardHeader>
               <CardContent>
                 {receiverConns.length === 0 ? (
-                  <p className="text-sm text-slate">No receiver connections</p>
+                  <p className="text-sm text-app-muted">No receiver connections</p>
                 ) : (
                   <div className="space-y-3">
                     {receiverConns.map((conn) => (
                       <div
                         key={conn.id}
-                        className="flex items-center justify-between p-3 bg-paper rounded-lg border border-slate/10"
+                        className="flex items-center justify-between p-3 bg-app-card rounded-lg border border-app-border"
                       >
                         <div>
-                          <p className="text-sm font-medium text-ink">{conn.name}</p>
-                          <p className="text-xs text-slate font-mono">
+                          <p className="text-sm font-medium text-app-text">{conn.name}</p>
+                          <p className="text-xs text-app-muted font-mono">
                             {conn.endpoint_url || "No URL set"}
                           </p>
                         </div>
@@ -359,10 +321,10 @@ export default function MCPPage() {
         )}
 
         {/* Google Meet Sync */}
-        <Card className="mt-8">
+        <Card className="glow-card mt-8">
           <CardHeader>
             <CardTitle className="font-display text-lg">Google Meet Sync</CardTitle>
-            <p className="text-sm text-slate">
+            <p className="text-sm text-app-muted">
               Pull meeting transcripts into the knowledge base via MCP receiver
             </p>
           </CardHeader>
@@ -372,7 +334,7 @@ export default function MCPPage() {
                 {syncing ? "Syncing..." : "Sync Meetings"}
               </Button>
               {syncResult && (
-                <p className="text-sm text-slate">{syncResult}</p>
+                <p className="text-sm text-app-muted">{syncResult}</p>
               )}
             </div>
           </CardContent>

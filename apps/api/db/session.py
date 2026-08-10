@@ -21,6 +21,10 @@ def _get_session_factory():
     return _async_session
 
 
+# Export session factory for background tasks (async_sessionmaker instance)
+async_session_factory = _get_session_factory()
+
+
 class Base(DeclarativeBase):
     pass
 

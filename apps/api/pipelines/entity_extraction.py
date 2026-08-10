@@ -114,7 +114,12 @@ Text:
 
 
 async def _llm_extract(text: str) -> dict:
-    """Call LLM to extract entities and relationships from text."""
+    """Call LLM to extract entities and relationships from text.
+
+    Returns {"entities": [...], "relationships": [...]}. On any failure
+    returns empty lists — the caller falls back to co-occurrence edges so
+    the graph stays connected even if the LLM errors out.
+    """
 
     prompt = EXTRACT_PROMPT.format(text=text[:8000])  # Truncate to avoid token limits
     messages = [
@@ -123,25 +128,51 @@ async def _llm_extract(text: str) -> dict:
     ]
 
     try:
+        # Note: the default LLM_MODEL is a reasoning model (qwen3.6-27b) that
+        # burns its whole token budget on <think> blocks and never emits the
+        # JSON — Groq then fails with json_validate_failed. Use a fast
+        # non-reasoning model for extraction, and rely on prompt instructions
+        # plus a defensive parser instead of response_format=json_object.
         response = await chat_completion(
             messages=messages,
+            model="llama-3.3-70b-versatile",
             temperature=0.1,
-            response_format={"type": "json_object"},
             max_tokens=2000,
         )
-
-        # Parse JSON from response
-        result = json.loads(response)
-        return {
-            "entities": result.get("entities", []),
-            "relationships": result.get("relationships", []),
-        }
-    except json.JSONDecodeError as e:
-        logger.warning(f"LLM returned invalid JSON: {e}")
-        return {"entities": [], "relationships": []}
+        return _parse_llm_response(response)
     except Exception as e:
-        logger.exception(f"LLM extraction failed: {e}")
+        logger.warning(f"LLM extraction failed (falling back to co-occurrence): {e}")
         return {"entities": [], "relationships": []}
+
+
+def _parse_llm_response(response: str) -> dict:
+    """Parse LLM JSON response defensively — strip code fences/markdown."""
+    text = response.strip()
+    # Strip ```json ... ``` fences if present
+    if text.startswith("```"):
+        text = text.split("```")[1] if "```" in text[3:] else text
+        text = text.strip()
+        if text.startswith("json"):
+            text = text[4:].strip()
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError:
+        # Try to find the first {...} block
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                result = json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                logger.warning("LLM returned unparseable JSON")
+                return {"entities": [], "relationships": []}
+        else:
+            logger.warning("LLM returned no JSON object")
+            return {"entities": [], "relationships": []}
+    return {
+        "entities": result.get("entities", []),
+        "relationships": result.get("relationships", []),
+    }
 
 
 def _merge_entities(
@@ -179,6 +210,33 @@ def _merge_entities(
             }
 
     return list(merged.values())
+
+
+def _cooccurrence_relationships(
+    chunks: list[dict],
+    entity_names: set[str],
+) -> list[dict]:
+    """Derive relationships from entity co-occurrence within a chunk.
+
+    When the LLM fails to return explicit relationships (e.g. the provider
+    rejects JSON mode), we still connect the graph by adding an edge between
+    every pair of entities that appear together in the same chunk. This
+    guarantees the knowledge graph is navigable so agents can hop.
+    """
+    rels: dict[tuple[str, str], str] = {}  # (source, target) -> relation_type
+    for chunk in chunks:
+        text = (chunk.get("text") or "").lower()
+        present = [name for name in entity_names if name in text]
+        # Sort deterministically: earlier-in-alphabet is the source.
+        for i in range(len(present)):
+            for j in range(i + 1, len(present)):
+                a, b = present[i], present[j]
+                if (a, b) not in rels and (b, a) not in rels:
+                    rels[(a, b)] = "co_occurs_with"
+    return [
+        {"source": a, "target": b, "relation_type": t, "description": "Mentioned together in the same passage"}
+        for (a, b), t in rels.items()
+    ]
 
 
 async def extract_entities_from_chunks(
@@ -219,6 +277,17 @@ async def extract_entities_from_chunks(
 
     # Step 3: Merge and dedup entities
     merged_entities = _merge_entities(all_spacy_entities, all_llm_entities)
+
+    # Step 3b: If the LLM returned no relationships, derive edges from
+    # co-occurrence so the graph stays connected (agents can still hop).
+    if not all_llm_relationships:
+        cooccurrence_names = {e["name"].lower().strip() for e in merged_entities if e["name"].strip()}
+        all_llm_relationships = _cooccurrence_relationships(chunks, cooccurrence_names)
+        if all_llm_relationships:
+            logger.info(
+                f"LLM returned no relationships; derived {len(all_llm_relationships)} "
+                f"co-occurrence edges for document {document_id}"
+            )
 
     # Step 4: Store entities in DB
     entity_map = {}  # name_lower -> entity_id

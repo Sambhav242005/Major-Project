@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.deps import get_project_id
 from core.security import get_current_user, User
 from core.errors import NotFoundError
 from core.security_utils import sanitize_input
@@ -14,10 +15,10 @@ router = APIRouter()
 async def search_knowledge_base(
     q: str = Query(..., min_length=1),
     top_k: int = Query(8, ge=1, le=20),
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_id = "00000000-0000-0000-0000-000000000001"  # placeholder
     safe_q = sanitize_input(q)
     results = await kb_service.search(db, query=safe_q, project_id=project_id, top_k=top_k)
     return {"results": results, "query": safe_q}
@@ -26,10 +27,10 @@ async def search_knowledge_base(
 @router.get("/entities/{entity_id}")
 async def get_entity(
     entity_id: str,
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_id = "00000000-0000-0000-0000-000000000001"  # placeholder
     entity = await kb_service.get_entity(db, entity_id, project_id)
     if not entity:
         raise NotFoundError("Entity not found")
@@ -39,10 +40,10 @@ async def get_entity(
 @router.get("/entities/{entity_id}/chunks")
 async def get_entity_chunks(
     entity_id: str,
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_id = "00000000-0000-0000-0000-000000000001"  # placeholder
     chunks = await kb_service.get_entity_chunks(db, entity_id, project_id)
     return {"chunks": chunks}
 
@@ -51,9 +52,9 @@ async def get_entity_chunks(
 async def get_graph(
     entity_id: str = Query(None),
     depth: int = Query(1, ge=1, le=3),
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_id = "00000000-0000-0000-0000-000000000001"  # placeholder
     graph = await kb_service.get_graph(db, entity_id, project_id, depth)
     return graph

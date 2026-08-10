@@ -1,5 +1,9 @@
 # Context: AI Knowledge Graph Builder
 
+## Rules
+
+- **NEVER start or stop servers (backend, frontend, or any service).** Tell the user to do it. User manages server lifecycle personally.
+
 ## Domain Glossary
 
 | Term | Definition |

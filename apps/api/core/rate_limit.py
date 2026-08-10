@@ -1,44 +1,27 @@
-"""Rate limiting middleware — simple in-memory token bucket."""
+"""Rate limiting via slowapi (async-safe, per-user/per-IP).
 
-import time
-from collections import defaultdict
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+Replaces the homegrown in-memory token bucket. Keyed on the authenticated
+user id when available, falling back to client IP — so shared NATs or
+proxy deployments don't collapse into one bucket.
+"""
+
+from fastapi import Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple in-memory rate limiter using token bucket algorithm.
+def _rate_limit_key(request: Request) -> str:
+    """Key on authenticated user id when present, else client IP."""
+    # GlobalAuthMiddleware sets request.state.user (see core.auth_middleware)
+    user = getattr(request.state, "user", None)
+    if user and getattr(user, "id", None):
+        return f"user:{user.id}"
+    return f"ip:{get_remote_address(request)}"
 
-    Default: 60 requests per minute per IP.
-    """
 
-    def __init__(self, app, max_requests: int = 60, window_seconds: int = 60):
-        super().__init__(app)
-        self.max_requests = max_requests
-        self.window_seconds = window_seconds
-        self.requests: dict[str, list[float]] = defaultdict(list)
-
-    async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for health checks
-        if request.url.path == "/health":
-            return await call_next(request)
-
-        client_ip = request.client.host if request.client else "unknown"
-        now = time.time()
-
-        # Clean old entries
-        self.requests[client_ip] = [
-            t for t in self.requests[client_ip]
-            if now - t < self.window_seconds
-        ]
-
-        # Check limit
-        if len(self.requests[client_ip]) >= self.max_requests:
-            return Response(
-                content='{"detail":"Rate limit exceeded. Try again later."}',
-                status_code=429,
-                media_type="application/json",
-            )
-
-        self.requests[client_ip].append(now)
-        return await call_next(request)
+limiter = Limiter(
+    key_func=_rate_limit_key,
+    default_limits=["60/minute"],
+    # Headers are a nice-to-have; disable when behind proxies that strip them.
+    headers_enabled=True,
+)

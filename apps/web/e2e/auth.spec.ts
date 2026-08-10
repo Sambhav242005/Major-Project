@@ -1,12 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 
+// Fail the test on any uncaught page error or console error — this is what
+// catches swallowed runtime issues like the LazyMotion/motion strict-mode throw.
+test.beforeEach(async ({ page }) => {
+  page.on("pageerror", (err) => {
+    throw new Error(`Uncaught page error: ${err.message}`);
+  });
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      throw new Error(`Console error: ${msg.text()}`);
+    }
+  });
+});
+
 // Helper: authenticate via demo-login route (bypasses Supabase entirely)
 async function mockLogin(page: Page) {
   // Hit the demo-login API route directly — sets cookie + redirects
   await page.goto("/auth/demo-login");
   // demo-login returns a redirect; follow it to /dashboard
   await page.waitForURL(/\/dashboard$/);
-  await page.waitForLoadState("networkidle");
+  await page.getByRole("heading", { name: "Dashboard" }).waitFor();
 }
 
 test.describe("Auth flow", () => {

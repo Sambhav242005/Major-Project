@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const StatusIndicator = dynamic(
   () => import("@/components/status-indicator").then((m) => m.StatusIndicator),
@@ -13,6 +14,7 @@ const NAV_LINKS = [
   { href: "/chat", label: "Chat" },
   { href: "/graph", label: "Graph" },
   { href: "/agents", label: "Agents" },
+  { href: "/meetings", label: "Meetings" },
   { href: "/mcp", label: "MCP" },
   { href: "/webhooks", label: "Webhooks" },
 ];
@@ -25,15 +27,15 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ title, showBack = false, backHref = "/dashboard" }: DashboardHeaderProps) {
   return (
-    <header className="border-b border-slate/20 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+    <header className="border-b border-app-border bg-app-header-bg backdrop-blur-xl sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           {showBack && (
-            <Link href={backHref} className="text-sm text-slate hover:text-ink transition-colors">
+            <Link href={backHref} className="text-sm text-app-muted hover:text-app-text transition-colors">
               ← Back
             </Link>
           )}
-          <h1 className="font-display text-xl font-semibold text-ink">
+          <h1 className="font-display text-xl font-semibold text-app-text">
             {title}
           </h1>
         </div>
@@ -42,14 +44,15 @@ export function DashboardHeader({ title, showBack = false, backHref = "/dashboar
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm text-slate hover:text-ink transition-colors"
+              className="text-sm text-app-muted hover:text-app-text transition-colors"
             >
               {link.label}
             </Link>
           ))}
           <StatusIndicator />
+          <ThemeToggle />
           <form action="/auth/signout" method="post">
-            <button type="submit" className="text-sm text-rust hover:underline">
+            <button type="submit" className="text-sm text-red-500 hover:text-red-400 transition-colors">
               Sign out
             </button>
           </form>

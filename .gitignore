@@ -24,6 +24,7 @@ out/
 dist/
 build/
 *.egg-info/
+*.tsbuildinfo
 graphify-out/
 
 # =============================================================================
@@ -69,3 +70,17 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# =============================================================================
+# Local dev artifacts (never commit)
+# =============================================================================
+.commandcode/
+.playwright-mcp/
+apps/api/meet_profile/
+apps/api/meet_recordings/
+apps/api/meet_*.txt
+*.wav
+*.webm
+*.png
+body.txt
+chat_out.txt

@@ -39,6 +39,15 @@ def _app_with_overrides():
     return app, mock_db
 
 
+@pytest.fixture(autouse=True)
+def _bypass_agent_project_guard():
+    """Bypass assert_agent_in_project — these tests verify the router
+    delegates to the memory service, not project ownership (which is
+    covered separately by IDOR tests)."""
+    with patch("routers.agents.assert_agent_in_project", new_callable=AsyncMock):
+        yield
+
+
 # --- POST /agents/{id}/memory ---
 
 @pytest.mark.asyncio

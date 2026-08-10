@@ -1,6 +1,7 @@
 """Dashboard service — real DB queries for stats, activity, pipeline health."""
 
 from datetime import datetime, timedelta
+import uuid as _uuid
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,12 +12,21 @@ from db.models import (
 )
 
 
-async def get_summary(db: AsyncSession, project_id: str) -> dict:
+def _uuid_val(pid) -> _uuid.UUID:
+    """Ensure project_id is a UUID object (required by Uuid() column type)."""
+    if isinstance(pid, _uuid.UUID):
+        return pid
+    return _uuid.UUID(str(pid))
+
+
+async def get_summary(db: AsyncSession, project_id) -> dict:
     """Get dashboard summary stats for a project."""
+    pid = _uuid_val(project_id)
+
     # Document counts by status
     doc_stmt = (
         select(Document.status, func.count(Document.id))
-        .where(Document.project_id == project_id)
+        .where(Document.project_id == pid)
         .group_by(Document.status)
     )
     doc_result = await db.execute(doc_stmt)
@@ -26,29 +36,29 @@ async def get_summary(db: AsyncSession, project_id: str) -> dict:
             doc_counts[status] = count
 
     # Total documents
-    total_stmt = select(func.count(Document.id)).where(Document.project_id == project_id)
+    total_stmt = select(func.count(Document.id)).where(Document.project_id == pid)
     total_result = await db.execute(total_stmt)
     total_docs = total_result.scalar() or 0
 
     # Entity count
-    ent_stmt = select(func.count(Entity.id)).where(Entity.project_id == project_id)
+    ent_stmt = select(func.count(Entity.id)).where(Entity.project_id == pid)
     ent_result = await db.execute(ent_stmt)
     total_entities = ent_result.scalar() or 0
 
     # Relationship count
-    rel_stmt = select(func.count(Relationship.id)).where(Relationship.project_id == project_id)
+    rel_stmt = select(func.count(Relationship.id)).where(Relationship.project_id == pid)
     rel_result = await db.execute(rel_stmt)
     total_relationships = rel_result.scalar() or 0
 
     # Chat sessions count
-    chat_stmt = select(func.count(ChatSession.id)).where(ChatSession.project_id == project_id)
+    chat_stmt = select(func.count(ChatSession.id)).where(ChatSession.project_id == pid)
     chat_result = await db.execute(chat_stmt)
     total_chats = chat_result.scalar() or 0
 
     # Active agents count
     agent_stmt = (
         select(func.count(Agent.id))
-        .where(Agent.project_id == project_id, Agent.status == "active")
+        .where(Agent.project_id == pid, Agent.status == "active")
     )
     agent_result = await db.execute(agent_stmt)
     active_agents = agent_result.scalar() or 0
@@ -56,7 +66,7 @@ async def get_summary(db: AsyncSession, project_id: str) -> dict:
     # Recent activity (last 10 audit log entries)
     activity_stmt = (
         select(AuditLog)
-        .where(AuditLog.project_id == project_id)
+        .where(AuditLog.project_id == pid)
         .order_by(AuditLog.created_at.desc())
         .limit(10)
     )
@@ -75,7 +85,7 @@ async def get_summary(db: AsyncSession, project_id: str) -> dict:
     # Failed documents (for pipeline health)
     failed_stmt = (
         select(Document)
-        .where(Document.project_id == project_id, Document.status == "failed")
+        .where(Document.project_id == pid, Document.status == "failed")
         .order_by(Document.uploaded_at.desc())
         .limit(5)
     )

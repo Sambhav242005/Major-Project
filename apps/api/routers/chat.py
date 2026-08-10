@@ -1,12 +1,14 @@
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.deps import get_project_id
 from core.security import get_current_user, User
 from core.errors import NotFoundError
+from core.rate_limit import limiter
 from core.security_utils import sanitize_input
 from db.session import get_db
 from services import chat as chat_service
@@ -25,10 +27,10 @@ class SendMessageRequest(BaseModel):
 @router.post("/sessions")
 async def create_chat_session(
     body: CreateSessionRequest | None = None,
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_id = "00000000-0000-0000-0000-000000000001"  # placeholder
     title = body.title if body else None
     session = await chat_service.create_session(db, user, project_id, title)
     return session
@@ -36,10 +38,10 @@ async def create_chat_session(
 
 @router.get("/sessions")
 async def list_chat_sessions(
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_id = "00000000-0000-0000-0000-000000000001"  # placeholder
     sessions = await chat_service.list_sessions(db, project_id)
     return {"sessions": sessions}
 
@@ -47,10 +49,10 @@ async def list_chat_sessions(
 @router.get("/sessions/{session_id}")
 async def get_chat_session(
     session_id: str,
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_id = "00000000-0000-0000-0000-000000000001"  # placeholder
     session = await chat_service.get_session(db, session_id, project_id)
     if not session:
         raise NotFoundError("Chat session not found")
@@ -58,14 +60,16 @@ async def get_chat_session(
 
 
 @router.post("/sessions/{session_id}/messages")
+@limiter.limit("60/minute")
 async def send_message(
+    request: Request,
+    response: Response,
     session_id: str,
     body: SendMessageRequest,
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    project_id = "00000000-0000-0000-0000-000000000001"  # placeholder
-
     # Verify session exists
     session = await chat_service.get_session(db, session_id, project_id)
     if not session:

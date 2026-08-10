@@ -30,12 +30,13 @@ async def test_list_agent_types_returns_all():
     from services.agents import list_agent_types
 
     types = list_agent_types()
-    assert len(types) == 4
+    assert len(types) == 5
     type_names = [t["type"] for t in types]
     assert "summarizer" in type_names
     assert "extractor" in type_names
     assert "qa" in type_names
     assert "reviewer" in type_names
+    assert "researcher" in type_names
 
 
 @pytest.mark.asyncio

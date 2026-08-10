@@ -1,16 +1,32 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        paper: "#F5F3EE",
-        ink: "#16213E",
-        slate: "#6B7280",
+        // Theme-aware app colors (switch with .dark/.light on <html>)
+        "app-bg": "var(--app-bg)",
+        "app-card": "var(--app-card)",
+        "app-card-hover": "var(--app-card-hover)",
+        "app-text": "var(--app-text)",
+        "app-muted": "var(--app-muted)",
+        "app-border": "var(--app-border)",
+        "app-border-strong": "var(--app-border-strong)",
+        "app-input-bg": "var(--app-input-bg)",
+        "app-input-border": "var(--app-input-border)",
+        "app-header-bg": "var(--app-header-bg)",
+        "app-sidebar-bg": "var(--app-sidebar-bg)",
+        "app-surface": "var(--app-surface)",
+        "app-surface-alt": "var(--app-surface-alt)",
+        // Brand (static, always same)
         amber: "#C9862B",
-        verified: "#2F6E63",
         rust: "#B4432F",
+        // Brand accent — the one interactive highlight (replaces ad-hoc sky-500)
+        "brand-accent": "#38bdf8",
+        // Shadcn
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -57,7 +73,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindcssAnimate],
 };
 
 export default config;

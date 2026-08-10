@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { apiFetch, API_BASE } from "@/lib/api/client";
 import Markdown from "react-markdown";
 import {
   X,
@@ -67,8 +68,6 @@ const TYPE_COLORS: Record<string, string> = {
   researcher: "tag-cyan",
 };
 
-const API = "http://localhost:8000";
-
 export default function AgentsPage() {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
@@ -92,37 +91,28 @@ export default function AgentsPage() {
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const getAuthHeaders = useCallback(async () => {
+  const getToken = useCallback(async () => {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    return {
-      Authorization: `Bearer ${session?.access_token || "mock-token"}`,
-      "Content-Type": "application/json",
-    };
+    return session?.access_token || "mock-token";
   }, []);
 
   const fetchAgents = useCallback(async () => {
     try {
-      const headers = await getAuthHeaders();
-      const [agentsRes, typesRes] = await Promise.all([
-        fetch(`${API}/agents`, { headers }),
-        fetch(`${API}/agents/types`, { headers }),
+      const token = await getToken();
+      const [agentsData, typesData] = await Promise.all([
+        apiFetch<{ agents: Agent[] }>("/agents", { token }),
+        apiFetch<{ types: AgentType[] }>("/agents/types", { token }),
       ]);
-      if (agentsRes.ok) {
-        const data = await agentsRes.json();
-        setAgents(data.agents || []);
-      }
-      if (typesRes.ok) {
-        const data = await typesRes.json();
-        setAgentTypes(data.types || []);
-      }
+      setAgents(agentsData.agents || []);
+      setAgentTypes(typesData.types || []);
     } catch (e) {
       console.error("Failed to fetch agents:", e);
     } finally {
       setLoading(false);
     }
-  }, [getAuthHeaders]);
+  }, [getToken]);
 
   useEffect(() => {
     fetchAgents();
@@ -131,38 +121,34 @@ export default function AgentsPage() {
   const fetchTasks = useCallback(
     async (agentId: string) => {
       try {
-        const headers = await getAuthHeaders();
-        const res = await fetch(`${API}/agents/${agentId}/tasks`, {
-          headers,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setTasks(data.tasks || []);
-        }
+        const token = await getToken();
+        const data = await apiFetch<{ tasks: AgentTask[] }>(
+          `/agents/${agentId}/tasks`,
+          { token }
+        );
+        setTasks(data.tasks || []);
       } catch (e) {
         console.error("Failed to fetch tasks:", e);
       }
     },
-    [getAuthHeaders]
+    [getToken]
   );
 
   const fetchTaskDetail = useCallback(
     async (agentId: string, taskId: string) => {
       try {
-        const headers = await getAuthHeaders();
-        const res = await fetch(`${API}/agents/${agentId}/tasks/${taskId}`, {
-          headers,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          return data.task;
-        }
+        const token = await getToken();
+        const data = await apiFetch<{ task: AgentTask }>(
+          `/agents/${agentId}/tasks/${taskId}`,
+          { token }
+        );
+        return data.task;
       } catch (e) {
         console.error("Failed to fetch task detail:", e);
       }
       return null;
     },
-    [getAuthHeaders]
+    [getToken]
   );
 
   const handleCreate = async () => {
@@ -173,25 +159,18 @@ export default function AgentsPage() {
     setCreating(true);
     setCreateError("");
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${API}/agents`, {
+      const token = await getToken();
+      await apiFetch("/agents", {
         method: "POST",
-        headers,
-        body: JSON.stringify({ name: newName.trim(), type: newType }),
+        token,
+        body: { name: newName.trim(), type: newType },
       });
-      if (res.ok) {
-        setShowCreate(false);
-        setNewName("");
-        setNewType("summarizer");
-        fetchAgents();
-      } else {
-        const err = await res
-          .json()
-          .catch(() => ({ detail: "Failed to create" }));
-        setCreateError(err.detail || "Failed to create agent");
-      }
+      setShowCreate(false);
+      setNewName("");
+      setNewType("summarizer");
+      fetchAgents();
     } catch (e: any) {
-      setCreateError(e.message || "Network error");
+      setCreateError(e.detail || e.message || "Failed to create agent");
     } finally {
       setCreating(false);
     }
@@ -206,30 +185,20 @@ export default function AgentsPage() {
     setExpandedSteps(new Set());
 
     try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${API}/agents/${agentId}/run`, {
+      const token = await getToken();
+      const data = await apiFetch<{ task_id: string }>(`/agents/${agentId}/run`, {
         method: "POST",
-        headers,
-        body: JSON.stringify({
+        token,
+        body: {
           input: { query: runInput.trim(), source: "manual_trigger" },
-        }),
+        },
       });
-      if (!res.ok) {
-        const err = await res
-          .json()
-          .catch(() => ({ detail: "Failed to start" }));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
       const taskId = data.task_id;
       setRunInput("");
 
-      const {
-        data: { session: streamSession },
-      } = await supabase.auth.getSession();
-      const streamToken = streamSession?.access_token || "mock-token";
+      const streamToken = await getToken();
       const evtSource = new EventSource(
-        `${API}/agents/${agentId}/tasks/${taskId}/stream?token=${streamToken}`
+        `${API_BASE}/agents/${agentId}/tasks/${taskId}/stream?token=${streamToken}`
       );
       eventSourceRef.current = evtSource;
 
@@ -267,10 +236,10 @@ export default function AgentsPage() {
 
   const handleDelete = async (agentId: string) => {
     try {
-      const headers = await getAuthHeaders();
-      await fetch(`${API}/agents/${agentId}`, {
+      const token = await getToken();
+      await apiFetch(`/agents/${agentId}`, {
         method: "DELETE",
-        headers,
+        token,
       });
       if (selectedAgent?.id === agentId) {
         setSelectedAgent(null);
@@ -319,7 +288,7 @@ export default function AgentsPage() {
             >
               Dashboard
             </a>
-            <span className="text-slate-600">/</span>
+            <span className="text-app-muted">/</span>
             <h1 className="font-display text-lg font-semibold text-app-text">
               Agents
             </h1>
@@ -355,7 +324,7 @@ export default function AgentsPage() {
           <div className="stat-glow p-4">
             <div className="flex items-center gap-2 mb-2">
               <Bot size={14} className="text-sky-400" />
-              <span className="text-xs text-slate-500 uppercase tracking-wider">
+              <span className="text-xs text-app-muted uppercase tracking-wider">
                 Total Agents
               </span>
             </div>
@@ -364,7 +333,7 @@ export default function AgentsPage() {
           <div className="stat-glow p-4">
             <div className="flex items-center gap-2 mb-2">
               <Activity size={14} className="text-purple-400" />
-              <span className="text-xs text-slate-500 uppercase tracking-wider">
+              <span className="text-xs text-app-muted uppercase tracking-wider">
                 Total Tasks
               </span>
             </div>
@@ -373,7 +342,7 @@ export default function AgentsPage() {
           <div className="stat-glow p-4">
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle size={14} className="text-emerald-400" />
-              <span className="text-xs text-slate-500 uppercase tracking-wider">
+              <span className="text-xs text-app-muted uppercase tracking-wider">
                 Completed
               </span>
             </div>
@@ -387,7 +356,7 @@ export default function AgentsPage() {
           <div className="stat-glow p-4">
             <div className="flex items-center gap-2 mb-2">
               <Clock size={14} className="text-amber-400" />
-              <span className="text-xs text-slate-500 uppercase tracking-wider">
+              <span className="text-xs text-app-muted uppercase tracking-wider">
                 Avg Time
               </span>
             </div>
@@ -395,9 +364,9 @@ export default function AgentsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left: Agent Cards */}
-          <div className="col-span-4">
+          <div className="col-span-12 lg:col-span-4">
             <div className="mb-3">
               <h2 className="text-sm font-medium text-app-muted uppercase tracking-wider">
                 Agents
@@ -411,10 +380,10 @@ export default function AgentsPage() {
               <div className="glow-card p-8 text-center">
                 <Bot
                   size={32}
-                  className="text-slate-600 mx-auto mb-3"
+                  className="text-app-muted mx-auto mb-3"
                 />
                 <p className="text-sm text-app-muted mb-1">No agents yet</p>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-app-muted">
                   Create your first agent to get started
                 </p>
               </div>
@@ -444,7 +413,7 @@ export default function AgentsPage() {
                           <Icon
                             size={16}
                             className={
-                              isSelected ? "text-sky-400" : "text-slate-500"
+                              isSelected ? "text-sky-400" : "text-app-muted"
                             }
                           />
                         </div>
@@ -479,7 +448,7 @@ export default function AgentsPage() {
                             e.stopPropagation();
                             handleDelete(agent.id);
                           }}
-                          className="text-slate-600 hover:text-red-400 transition-colors p-1"
+                          className="text-app-muted hover:text-red-400 transition-colors p-1"
                           aria-label={`Delete ${agent.name}`}
                         >
                           <Trash2 size={14} />
@@ -493,7 +462,7 @@ export default function AgentsPage() {
           </div>
 
           {/* Center: Run Panel + Live Trace */}
-          <div className="col-span-5">
+          <div className="col-span-12 lg:col-span-5">
             {selectedAgent ? (
               <>
                 {/* Run Panel */}
@@ -513,7 +482,7 @@ export default function AgentsPage() {
                         if (e.key === "Enter" && runInput.trim())
                           handleRun(selectedAgent.id);
                       }}
-                      className="flex-1 h-9 px-3 rounded-lg bg-app-surface-alt border border-app-border-strong text-sm text-app-text placeholder:text-slate-600 outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                      className="flex-1 h-9 px-3 rounded-lg bg-app-surface-alt border border-app-border-strong text-sm text-app-text placeholder:text-app-muted outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
                     />
                     <button
                       onClick={() => handleRun(selectedAgent.id)}
@@ -561,7 +530,7 @@ export default function AgentsPage() {
                                 : ""
                             }`}
                           >
-                            <p className="text-[10px] text-slate-500 mb-0.5">
+                            <p className="text-[10px] text-app-muted mb-0.5">
                               {step.step}
                             </p>
                             <div className="flex items-center justify-center gap-1">
@@ -650,12 +619,12 @@ export default function AgentsPage() {
                                 (expanded ? (
                                   <ChevronDown
                                     size={12}
-                                    className="text-slate-500"
+                                    className="text-app-muted"
                                   />
                                 ) : (
                                   <ChevronRight
                                     size={12}
-                                    className="text-slate-500"
+                                    className="text-app-muted"
                                   />
                                 ))}
                             </div>
@@ -685,7 +654,7 @@ export default function AgentsPage() {
                   <div className="glow-card p-8 text-center">
                     <BarChart3
                       size={28}
-                      className="text-slate-600 mx-auto mb-3"
+                      className="text-app-muted mx-auto mb-3"
                     />
                     <p className="text-sm text-slate-400">
                       Run the agent to see trace output
@@ -699,7 +668,7 @@ export default function AgentsPage() {
                 <p className="text-sm text-app-muted mb-1">
                   Select an agent to run
                 </p>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-app-muted">
                   Choose from the agents on the left or create a new one
                 </p>
               </div>
@@ -707,7 +676,7 @@ export default function AgentsPage() {
           </div>
 
           {/* Right: Recent Tasks */}
-          <div className="col-span-3">
+          <div className="col-span-12 lg:col-span-3">
             <div className="mb-3">
               <h2 className="text-sm font-medium text-app-muted uppercase tracking-wider">
                 Recent Tasks
@@ -716,8 +685,8 @@ export default function AgentsPage() {
             {selectedAgent ? (
               tasks.length === 0 ? (
                 <div className="glow-card p-6 text-center">
-                  <Clock size={20} className="text-slate-600 mx-auto mb-2" />
-                  <p className="text-xs text-slate-500">No tasks yet</p>
+                  <Clock size={20} className="text-app-muted mx-auto mb-2" />
+                  <p className="text-xs text-app-muted">No tasks yet</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -744,7 +713,7 @@ export default function AgentsPage() {
                               : "bg-amber-400"
                           }`}
                         />
-                        <span className="text-[10px] text-slate-500 font-mono">
+                        <span className="text-[10px] text-app-muted font-mono">
                           {task.id.slice(0, 8)}
                         </span>
                         <span
@@ -760,12 +729,12 @@ export default function AgentsPage() {
                         </span>
                       </div>
                       {task.started_at && (
-                        <p className="text-[10px] text-slate-600">
+                        <p className="text-[10px] text-app-muted">
                           {new Date(task.started_at).toLocaleString()}
                         </p>
                       )}
                       {task.completed_at && task.started_at && (
-                        <p className="text-[10px] text-slate-600">
+                        <p className="text-[10px] text-app-muted">
                           {(
                             (new Date(task.completed_at).getTime() -
                               new Date(task.started_at).getTime()) /
@@ -780,7 +749,7 @@ export default function AgentsPage() {
               )
             ) : (
               <div className="glow-card p-6 text-center">
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-app-muted">
                   Select an agent to view tasks
                 </p>
               </div>
@@ -811,7 +780,7 @@ export default function AgentsPage() {
             </div>
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-slate-500 mb-1.5 block">
+                <label className="text-xs text-app-muted mb-1.5 block">
                   Name
                 </label>
                 <input
@@ -822,11 +791,11 @@ export default function AgentsPage() {
                   }}
                   placeholder="e.g. Research Bot"
                   autoFocus
-                  className="w-full h-9 px-3 rounded-lg bg-app-surface-alt border border-app-border-strong text-sm text-app-text placeholder:text-slate-600 outline-none focus:border-sky-500/50 transition-all"
+                  className="w-full h-9 px-3 rounded-lg bg-app-surface-alt border border-app-border-strong text-sm text-app-text placeholder:text-app-muted outline-none focus:border-sky-500/50 transition-all"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-500 mb-1.5 block">
+                <label className="text-xs text-app-muted mb-1.5 block">
                   Type
                 </label>
                 <select
@@ -840,7 +809,7 @@ export default function AgentsPage() {
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-slate-600 mt-1">
+                <p className="text-[10px] text-app-muted mt-1">
                   {agentTypes.find((t) => t.type === newType)?.description}
                 </p>
               </div>
@@ -902,7 +871,7 @@ export default function AgentsPage() {
               >
                 {showTrace.status}
               </span>
-              <span className="text-[10px] text-slate-600 font-mono">
+              <span className="text-[10px] text-app-muted font-mono">
                 {showTrace.id}
               </span>
             </div>
@@ -927,7 +896,7 @@ export default function AgentsPage() {
                           : ""
                       }`}
                     >
-                      <p className="text-[10px] text-slate-500 mb-0.5">
+                      <p className="text-[10px] text-app-muted mb-0.5">
                         {step.step}
                       </p>
                       <div className="flex items-center justify-center gap-1">
@@ -939,7 +908,7 @@ export default function AgentsPage() {
                         ) : step.status === "error" ? (
                           <AlertCircle size={10} className="text-red-400" />
                         ) : (
-                          <Clock size={10} className="text-slate-500" />
+                          <Clock size={10} className="text-app-muted" />
                         )}
                         <span className="text-[10px] text-slate-400">
                           {step.elapsed_seconds
@@ -1037,7 +1006,7 @@ export default function AgentsPage() {
                         ) : (
                           <Clock
                             size={14}
-                            className="text-slate-500 shrink-0"
+                            className="text-app-muted shrink-0"
                           />
                         )}
                         {step.tool && (
@@ -1062,12 +1031,12 @@ export default function AgentsPage() {
                           (expanded ? (
                             <ChevronDown
                               size={12}
-                              className="text-slate-500"
+                              className="text-app-muted"
                             />
                           ) : (
                             <ChevronRight
                               size={12}
-                              className="text-slate-500"
+                              className="text-app-muted"
                             />
                           ))}
                       </div>
@@ -1108,7 +1077,7 @@ export default function AgentsPage() {
                 {showTrace.output.tool_calls &&
                   showTrace.output.tool_calls.length > 0 && (
                     <div className="mt-3">
-                      <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-1.5">
+                      <p className="text-[10px] text-app-muted uppercase tracking-wider mb-1.5">
                         Tool Calls
                       </p>
                       {showTrace.output.tool_calls.map(
@@ -1121,7 +1090,7 @@ export default function AgentsPage() {
                               {tc.tool}
                             </span>
                             {tc.result_preview && (
-                              <p className="text-[10px] text-slate-500 mt-1 truncate">
+                              <p className="text-[10px] text-app-muted mt-1 truncate">
                                 {tc.result_preview}
                               </p>
                             )}

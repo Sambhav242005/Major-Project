@@ -120,11 +120,26 @@ async def _get_entity_context(
     project_id: str,
     chunk_ids: list[str],
 ) -> list[dict]:
-    """Get entities mentioned in retrieved chunks for graph expansion."""
+    """Get entities mentioned in retrieved chunks for graph expansion.
+
+    chunk_ids are Chroma IDs (e.g. "{document_id}_chunk_{n}") from
+    query_chunks — map them to real DB chunk UUIDs before querying mentions,
+    otherwise uuid.UUID() explodes on the compound id.
+    """
+    chroma_ids = [cid for cid in chunk_ids if cid]
+    if not chroma_ids:
+        return []
+
+    # Map Chroma IDs -> DB chunk UUIDs
+    chunk_stmt = select(DocumentChunk.id).where(DocumentChunk.chroma_id.in_(chroma_ids))
+    chunk_result = await db.execute(chunk_stmt)
+    db_chunk_ids = [row[0] for row in chunk_result.all()]
+
+    if not db_chunk_ids:
+        return []
+
     # Find entities that appear in these chunks
-    stmt = select(EntityMention).where(
-        EntityMention.chunk_id.in_([uuid.UUID(cid) for cid in chunk_ids if cid])
-    )
+    stmt = select(EntityMention).where(EntityMention.chunk_id.in_(db_chunk_ids))
     result = await db.execute(stmt)
     mentions = result.scalars().all()
 
@@ -161,10 +176,13 @@ async def _expand_via_graph(
     if not entity_ids:
         return []
 
-    # Get relationships involving these entities
+    entity_uuids = [uuid.UUID(eid) for eid in entity_ids if eid]
+
+    # Get relationships involving these entities (scoped to this project)
     stmt = select(Relationship).where(
-        (Relationship.source_entity_id.in_(entity_ids))
-        | (Relationship.target_entity_id.in_(entity_ids))
+        Relationship.project_id == uuid.UUID(project_id),
+        (Relationship.source_entity_id.in_(entity_uuids))
+        | (Relationship.target_entity_id.in_(entity_uuids))
     )
     result = await db.execute(stmt)
     relationships = result.scalars().all()
@@ -230,7 +248,7 @@ async def send_message(
 
     # Save user message
     user_msg = ChatMessage(
-        session_id=session_id,
+        session_id=uuid.UUID(session_id) if not isinstance(session_id, uuid.UUID) else session_id,
         role="user",
         content=message,
         created_at=datetime.utcnow(),
@@ -286,7 +304,7 @@ async def send_message(
     # Get chat history
     history_stmt = (
         select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
+        .where(ChatMessage.session_id == (uuid.UUID(session_id) if not isinstance(session_id, uuid.UUID) else session_id))
         .order_by(ChatMessage.created_at)
         .limit(20)
     )
@@ -321,7 +339,14 @@ Answer based on the sources above. Cite sources using [1], [2], etc."""
     try:
         from pipelines.llm_client import chat_completion_stream
 
-        async for chunk in chat_completion_stream(messages=messages, temperature=0.3):
+        # Use a fast non-reasoning model for chat — the default LLM_MODEL
+        # (qwen3.6-27b) is a reasoning model that spends its whole token
+        # budget on <think> blocks, so the chat appears dead/not streaming.
+        async for chunk in chat_completion_stream(
+            messages=messages,
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+        ):
             full_response += chunk
             yield {"type": "chunk", "content": chunk}
 
@@ -336,7 +361,7 @@ Answer based on the sources above. Cite sources using [1], [2], etc."""
 
     # Step 9: Save assistant message
     assistant_msg = ChatMessage(
-        session_id=session_id,
+        session_id=uuid.UUID(session_id) if not isinstance(session_id, uuid.UUID) else session_id,
         role="assistant",
         content=full_response,
         citations=citations,

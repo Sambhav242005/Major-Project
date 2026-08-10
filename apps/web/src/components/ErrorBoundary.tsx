@@ -22,9 +22,9 @@ export function ErrorBoundary({ children, fallback }: ErrorBoundaryProps) {
   if (error) {
     return (
       fallback || (
-        <div className="min-h-screen bg-paper flex items-center justify-center">
+        <div className="min-h-screen bg-app-card flex items-center justify-center">
           <div className="text-center">
-            <h2 className="font-display text-xl font-semibold text-ink mb-2">
+            <h2 className="font-display text-xl font-semibold text-app-text mb-2">
               Something went wrong
             </h2>
             <p className="text-slate text-sm mb-4">{error.message}</p>
@@ -65,7 +65,7 @@ export function EmptyState({
 }) {
   return (
     <div className="text-center py-12">
-      <p className="text-ink font-medium mb-1">{title}</p>
+      <p className="text-app-text font-medium mb-1">{title}</p>
       <p className="text-slate text-sm mb-4">{description}</p>
       {action}
     </div>

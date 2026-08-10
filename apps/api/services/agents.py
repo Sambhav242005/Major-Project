@@ -295,6 +295,17 @@ async def run_agent(
         skill_result = await db.execute(skill_count_stmt)
         skills_used = [str(s.id) for s in skill_result.scalars().all()]
 
+        # Use the REAL measured rule-based score from the pipeline's evaluate
+        # node, not a binary completion flag — otherwise failure mining never
+        # sees sub-threshold runs and the refinement loop never fires.
+        measured_score = 1.0 if task.status == "completed" else 0.0
+        measured_details = {}
+        for t in trace:
+            if t.get("step") == "evaluate":
+                measured_score = t.get("score", measured_score)
+                measured_details = t.get("details", {})
+                break
+
         await store_run_trace(
             db=db,
             agent_id=agent_id,
@@ -302,7 +313,7 @@ async def run_agent(
             input_text=json.dumps(input_data, default=str)[:5000],
             output_text=output_text[:5000],
             tool_calls=tool_calls,
-            scores={"score": 1.0 if task.status == "completed" else 0.0},
+            scores={"score": measured_score, **measured_details},
             skills_used=skills_used,
         )
     except Exception as e:

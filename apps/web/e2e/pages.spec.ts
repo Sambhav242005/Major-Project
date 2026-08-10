@@ -1,5 +1,17 @@
 import { test, expect, type Page } from "@playwright/test";
 
+// Fail the test on any uncaught page error or console error.
+test.beforeEach(async ({ page }) => {
+  page.on("pageerror", (err) => {
+    throw new Error(`Uncaught page error: ${err.message}`);
+  });
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      throw new Error(`Console error: ${msg.text()}`);
+    }
+  });
+});
+
 // Helper: set mock session cookie for the test context
 async function mockLogin(page: Page) {
   await page.context().addCookies([
@@ -49,11 +61,11 @@ test.describe("App pages", () => {
     await expect(page).toHaveURL(/\/chat$/);
   });
 
-  test("sidebar navigation works", async ({ page }) => {
+  test("header navigation works", async ({ page }) => {
     await mockLogin(page);
     await page.goto("/dashboard");
 
-    // Go to documents via sidebar link
+    // Go to documents via header link
     await page.getByRole("link", { name: /documents/i }).first().click();
     await page.waitForURL(/\/documents$/);
     await expect(page).toHaveURL(/\/documents$/);

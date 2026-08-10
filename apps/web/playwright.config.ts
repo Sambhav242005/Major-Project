@@ -12,7 +12,7 @@ export default defineConfig({
     browserName: "chromium",
     headless: true,
     trace: "retain-on-failure",
-    screenshot: "only-on-failure",
+    screenshot: "on",
   },
   projects: [
     {

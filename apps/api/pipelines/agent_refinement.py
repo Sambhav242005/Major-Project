@@ -81,28 +81,58 @@ async def evaluate_on_split(
     agent_id: str,
     agent_type: str,
     split: str,
+    limit: int = 5,
 ) -> float:
-    """Evaluate agent on a held-in or held-out eval set."""
-    stmt = select(RefinementEvalSet).where(
+    """Evaluate agent quality on a held-in or held-out split.
+
+    Deterministic, rule-based — no LLM-as-judge. Scores the agent's stored
+    run traces that belong to this split using _evaluate_output_rule_based.
+    If no eval-set rows exist, falls back to scoring all recent traces of the
+    agent (used as the held-in signal when eval sets haven't been seeded).
+
+    Returns mean score 0-1. Neutral 0.5 ONLY when there is no data at all —
+    a true "no signal" state, never a fake passing score.
+    """
+    # Resolve which trace inputs belong to this split.
+    stmt = select(RefinementEvalSet.input_text).where(
         RefinementEvalSet.agent_id == uuid.UUID(agent_id),
         RefinementEvalSet.split == split,
     )
     result = await db.execute(stmt)
-    eval_tasks = result.scalars().all()
+    eval_inputs = [row[0] for row in result.all()]
 
-    if not eval_tasks:
-        return 0.5  # neutral score if no eval tasks
+    # Score the agent's recent traces, filtering by split inputs when available.
+    traces_stmt = (
+        select(AgentRunTrace)
+        .where(AgentRunTrace.agent_id == uuid.UUID(agent_id))
+        .order_by(AgentRunTrace.created_at.desc())
+        .limit(50)
+    )
+    traces_result = await db.execute(traces_stmt)
+    traces = traces_result.scalars().all()
 
-    total_score = 0.0
+    scored = 0.0
     count = 0
-
-    for task in eval_tasks:
-        # Simulate execution and score
-        # In production, this would actually run the agent
-        total_score += 0.5  # placeholder — real impl runs agent
+    for t in traces:
+        if eval_inputs and t.input_text not in eval_inputs:
+            continue
+        if not t.output_text:
+            continue
+        # Reconstruct an output dict the evaluator understands. The stored
+        # trace stores raw text; extractor outputs are JSON in the text.
+        try:
+            output = json.loads(t.output_text) if t.output_text.startswith("{") else {"response": t.output_text}
+        except json.JSONDecodeError:
+            output = {"response": t.output_text}
+        score = _evaluate_output_rule_based(agent_type, output, {"input_text": t.input_text})
+        scored += score["score"]
         count += 1
+        if count >= limit:
+            break
 
-    return total_score / count if count > 0 else 0.5
+    if count == 0:
+        return 0.5  # no data — true neutral
+    return scored / count
 
 
 async def store_run_trace(
@@ -115,7 +145,12 @@ async def store_run_trace(
     scores: dict,
     skills_used: list[str],
 ) -> None:
-    """Store raw execution trace for failure mining."""
+    """Store raw execution trace for failure mining.
+
+    Also closes the feedback loop: bumps helpful_count / harmful_count on
+    the skills used this run based on the measured score, so skill ordering
+    and worst-skill selection reflect real outcomes (not stale +0/-0).
+    """
     trace = AgentRunTrace(
         id=uuid.uuid4(),
         agent_id=uuid.UUID(agent_id),
@@ -129,6 +164,26 @@ async def store_run_trace(
     )
     db.add(trace)
     await db.flush()
+
+    # Close the feedback loop — measured score, not self-report.
+    if skills_used and scores:
+        score = scores.get("score", 0.0)
+        helpful = score >= 0.7
+        harmful = score < 0.4
+
+        if helpful or harmful:
+            skills_stmt = select(AgentSkill).where(
+                AgentSkill.id.in_([uuid.UUID(s) for s in skills_used if s])
+            )
+            skills_result = await db.execute(skills_stmt)
+            for skill in skills_result.scalars().all():
+                if helpful:
+                    skill.helpful_count += 1
+                    skill.success_count += 1
+                elif harmful:
+                    skill.harmful_count += 1
+                    skill.failure_count += 1
+                skill.updated_at = datetime.utcnow()
 
 
 async def mine_failures(
@@ -360,9 +415,16 @@ async def run_refinement_cycle(
 
     1. Mine failures from recent traces
     2. Propose one itemized delta
-    3. Score on held-in set
-    4. Score on held-out set
+    3. Score on held-in set (measured, deterministic)
+    4. Score on held-out set (measured, deterministic)
     5. Apply or reject based on two-split gate
+
+    The gate uses REAL measured deltas, never rationale or placeholders.
+    Because the agent hasn't re-run yet after the delta, "after" is measured
+    from the same trace pool — the delta is only accepted when the agent's
+    current measured performance already clears the gate (held-in improves
+    or holds, held-out never regresses). Once the agent re-runs, the new
+    trace is scored and the gate re-evaluates on the next cycle.
     """
     # Mine failures
     failures = await mine_failures(db, agent_id, recent_n=10)
@@ -373,20 +435,32 @@ async def run_refinement_cycle(
     if not proposal:
         return {"status": "no_proposal", "reason": "No failure patterns or stagnation detected"}
 
-    # Two-split evaluation
-    held_in_score_before = await evaluate_on_split(db, agent_id, agent_type, "held_in")
-    held_out_score_before = await evaluate_on_split(db, agent_id, agent_type, "held_out")
+    # Two-split evaluation — measured, deterministic
+    held_in_score = await evaluate_on_split(db, agent_id, agent_type, "held_in")
+    held_out_score = await evaluate_on_split(db, agent_id, agent_type, "held_out")
 
-    # Apply tentatively (the actual prompt change happens on next run via skill hydration)
+    # The delta is accepted only when the current measured performance shows
+    # the agent handles held-in well (the targeted weakness) without the
+    # held-out split regressing. The delta itself is a low-risk itemized
+    # skill addition; the gate prevents junk skills from accumulating when
+    # the agent is measurably underperforming the baseline on held-out.
+    #
+    # Gate: accept only if held-in >= 0.6 AND held-out >= held_in - 0.15
+    # (held-out roughly tracks held-in — no regression).
+    held_in_delta = max(held_in_score - 0.5, 0.0)  # improvement over neutral baseline
+    held_out_delta = held_out_score - held_in_score
+
     accepted = await apply_delta(
         db, agent_id, proposal,
-        held_in_delta=0.1,  # placeholder — real impl compares before/after
-        held_out_delta=0.0,
+        held_in_delta=held_in_delta,
+        held_out_delta=held_out_delta,
     )
 
     return {
         "status": "accepted" if accepted else "rejected",
         "proposal": proposal,
-        "held_in_score": held_in_score_before,
-        "held_out_score": held_out_score_before,
+        "held_in_score": held_in_score,
+        "held_out_score": held_out_score,
+        "held_in_delta": held_in_delta,
+        "held_out_delta": held_out_delta,
     }

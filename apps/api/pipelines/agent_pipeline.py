@@ -67,10 +67,21 @@ AGENT_TYPES = {
         "name": "Research Agent",
         "description": "Cross-project research using shared memories and knowledge graph",
         "system_prompt": (
-            "You are a research agent. You have access to memories from this project "
-            "and shared memories from other projects. Use search_chunks and get_entity "
-            "tools to find information. Synthesize findings from multiple sources. "
-            "Always cite which project shared memories came from."
+            "You are a research agent with access to web search. "
+            "ALWAYS start by using the web_search tool to find current information about the topic. "
+            "Then synthesize findings from web results and the knowledge base. "
+            "To use a tool, respond with a JSON block: "
+            '{"tool": "web_search", "arguments": {"query": "your search query"}}\n'
+            "Cite your sources with URLs when possible."
+        ),
+    },
+    "google_meet": {
+        "name": "Google Meet Bot",
+        "description": "Joins a Google Meet, records the audio, transcribes it, and produces a summary, key points, action items, and sentiment analysis",
+        "system_prompt": (
+            "You are a Google Meet assistant bot. Given a meeting link and duration, "
+            "you join the meeting, record the audio, transcribe it, and analyze it. "
+            "Provide the summary, key points, action items, and sentiment."
         ),
     },
 }
@@ -505,6 +516,42 @@ async def execute_agent(
         "evaluation": {},
         "refinement": {},
     }
+
+    # Google Meet bot is a long-running side-effect pipeline (join/record/
+    # transcribe/analyze), not an LLM text task — run it directly instead of
+    # pushing it through the LangGraph tool loop.
+    if agent_type == "google_meet":
+        from services.google_meet import run_meeting_bot, GoogleMeetError
+
+        all_traces = []
+
+        async def progress(event: dict):
+            # Plain callback — run_meeting_bot awaits it; we accumulate
+            # events and replay them to the SSE subscriber afterwards.
+            all_traces.append(event)
+
+        try:
+            meet_link = str(input_data.get("meet_link") or input_data.get("link") or "")
+            duration = int(input_data.get("duration") or input_data.get("duration_seconds") or 60)
+            result = await run_meeting_bot(meet_link, duration, progress=progress)
+
+            for trace_event in all_traces:
+                yield trace_event
+            yield {
+                "step": "post_process", "status": "completed",
+                "output": result,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            yield {
+                "step": "complete", "status": "completed",
+                "output": result,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        except GoogleMeetError as e:
+            err = {"step": "execution", "status": "error", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
+            all_traces.append(err)
+            yield err
+        return
 
     # Run the graph and yield events as they're produced
     all_traces = []

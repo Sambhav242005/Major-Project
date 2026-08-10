@@ -1,5 +1,7 @@
+import logging
+
 import httpx
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from jose.backends.cryptography_backend import CryptographyRSAKey
@@ -7,7 +9,9 @@ from pydantic import BaseModel
 
 from core.config import settings
 
-security = HTTPBearer()
+logger = logging.getLogger(__name__)
+
+security = HTTPBearer(auto_error=False)
 
 _jwks_cache: dict | None = None
 
@@ -42,13 +46,32 @@ class User(BaseModel):
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> User:
-    token = credentials.credentials
+    # EventSource can't send headers — fall back to ?token= query param
+    actual_token = None
+    if credentials:
+        actual_token = credentials.credentials
+    else:
+        actual_token = request.query_params.get("token")
+
+    if not actual_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    # Mock auth mode — accept any token, return demo user.
+    # Never usable in production: config.py rejects MOCK_AUTH in prod at startup.
+    if settings.MOCK_AUTH:
+        logger.warning("MOCK_AUTH: accepting any token as the demo user (development only)")
+        return User(id="a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", email="mock@example.com")
+
     try:
-        signing_key = await _get_signing_key(token)
+        signing_key = await _get_signing_key(actual_token)
         payload = jwt.decode(
-            token,
+            actual_token,
             signing_key,
             algorithms=["RS256"],
             audience="authenticated",

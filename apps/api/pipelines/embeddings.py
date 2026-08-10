@@ -1,4 +1,4 @@
-"""ChromaDB embedding — store and query document chunks with custom embeddings."""
+"""ChromaDB embedding — store and query document chunks with OpenAI-compatible embeddings."""
 
 import chromadb
 from core.config import settings
@@ -6,20 +6,25 @@ from core.config import settings
 _client: chromadb.ClientAPI | None = None
 
 
-class OllamaEmbeddingFunction(chromadb.EmbeddingFunction):
-    """Custom embedding function that calls Ollama for embeddings."""
+class OpenAICompatibleEmbeddingFunction(chromadb.EmbeddingFunction):
+    """Embedding function using OpenAI-compatible API (Ollama, Groq, etc.)."""
 
     def __call__(self, input: chromadb.Documents) -> chromadb.Embeddings:
         import httpx
 
-        model = settings.OLLAMA_EMBEDDING_MODEL
-        url = f"{settings.OLLAMA_BASE_URL}/api/embed"
+        url = f"{settings.EMBEDDING_BASE_URL}/embeddings"
+        headers = {}
+        if settings.EMBEDDING_API_KEY:
+            headers["Authorization"] = f"Bearer {settings.EMBEDDING_API_KEY}"
 
         with httpx.Client(timeout=60) as client:
-            resp = client.post(url, json={"model": model, "input": input})
+            resp = client.post(url, headers=headers, json={
+                "model": settings.EMBEDDING_MODEL,
+                "input": input,
+            })
             resp.raise_for_status()
             data = resp.json()
-            return data["embeddings"]
+            return [item["embedding"] for item in data["data"]]
 
 
 def get_chroma_client() -> chromadb.ClientAPI:
@@ -37,7 +42,7 @@ def get_embedding_function():
     global _embedding_fn
     if _embedding_fn is None:
         try:
-            _embedding_fn = OllamaEmbeddingFunction()
+            _embedding_fn = OpenAICompatibleEmbeddingFunction()
         except Exception:
             _embedding_fn = None
     return _embedding_fn

@@ -94,28 +94,28 @@ export default function WebhooksPage() {
   }
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-screen bg-app-bg">
       <DashboardHeader title="Webhooks" />
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="font-display text-lg font-semibold text-ink">Subscriptions</h2>
+          <h2 className="font-display text-lg font-semibold text-app-text">Subscriptions</h2>
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 bg-amber text-white rounded-lg text-sm hover:bg-amber/90 transition-colors"
+            className="px-4 py-2 bg-app-card text-app-text border border-app-border-strong rounded-lg text-sm hover:bg-app-card-hover transition-colors"
           >
             Add Subscription
           </button>
         </div>
 
         {showCreate && (
-          <div className="bg-white border border-slate/20 rounded-lg p-4 mb-6">
+          <div className="bg-app-card border border-app-border rounded-lg p-4 mb-6">
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-ink mb-1">Event Type</label>
+                <label className="block text-sm font-medium text-app-text mb-1">Event Type</label>
                 <select
                   value={newEvent}
                   onChange={(e) => setNewEvent(e.target.value)}
-                  className="w-full border border-slate/30 rounded-lg px-3 py-2 text-sm"
+                  className="w-full border border-app-border-strong rounded-lg px-3 py-2 text-sm bg-app-surface-alt text-app-text placeholder:text-slate-600"
                 >
                   {EVENT_TYPES.map((et) => (
                     <option key={et} value={et}>{et}</option>
@@ -123,36 +123,36 @@ export default function WebhooksPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink mb-1">URL</label>
+                <label className="block text-sm font-medium text-app-text mb-1">URL</label>
                 <input
                   type="url"
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
                   placeholder="https://example.com/webhook"
-                  className="w-full border border-slate/30 rounded-lg px-3 py-2 text-sm"
+                  className="w-full border border-app-border-strong rounded-lg px-3 py-2 text-sm bg-app-surface-alt text-app-text placeholder:text-slate-600"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink mb-1">Secret (optional)</label>
+                <label className="block text-sm font-medium text-app-text mb-1">Secret (optional)</label>
                 <input
                   type="text"
                   value={newSecret}
                   onChange={(e) => setNewSecret(e.target.value)}
                   placeholder="HMAC signing secret"
-                  className="w-full border border-slate/30 rounded-lg px-3 py-2 text-sm"
+                  className="w-full border border-app-border-strong rounded-lg px-3 py-2 text-sm bg-app-surface-alt text-app-text placeholder:text-slate-600"
                 />
               </div>
             </div>
             <div className="flex gap-2 mt-4">
               <button
                 onClick={createSubscription}
-                className="px-4 py-2 bg-ink text-white rounded-lg text-sm hover:bg-ink/90"
+                className="px-4 py-2 bg-app-text text-app-bg rounded-lg text-sm hover:bg-app-card-hover"
               >
                 Create
               </button>
               <button
                 onClick={() => setShowCreate(false)}
-                className="px-4 py-2 border border-slate/30 rounded-lg text-sm text-slate hover:bg-slate/5"
+                className="px-4 py-2 border border-app-border-strong rounded-lg text-sm text-app-muted hover:bg-app-card-hover"
               >
                 Cancel
               </button>
@@ -161,46 +161,46 @@ export default function WebhooksPage() {
         )}
 
         {loading ? (
-          <p className="text-slate text-sm">Loading...</p>
+          <p className="text-app-muted text-sm">Loading...</p>
         ) : subscriptions.length === 0 ? (
-          <p className="text-slate text-sm">No webhook subscriptions configured.</p>
+          <p className="text-app-muted text-sm">No webhook subscriptions configured.</p>
         ) : (
-          <div className="bg-white border border-slate/20 rounded-lg overflow-hidden mb-8">
+          <div className="bg-app-card border border-app-border rounded-lg overflow-hidden mb-8">
             <table className="w-full">
-              <thead className="bg-slate/5 border-b border-slate/20">
+              <thead className="bg-app-surface border-b border-app-border">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">Event</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">URL</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">Created</th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-slate uppercase">Actions</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">Event</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">URL</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">Created</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-app-muted uppercase">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate/10">
+              <tbody className="divide-y divide-app-border">
                 {subscriptions.map((sub) => (
-                  <tr key={sub.id} className="hover:bg-slate/5">
-                    <td className="px-4 py-3 text-sm font-mono text-ink">{sub.event_type}</td>
-                    <td className="px-4 py-3 text-sm text-slate truncate max-w-xs">{sub.url}</td>
+                  <tr key={sub.id} className="hover:bg-app-card-hover">
+                    <td className="px-4 py-3 text-sm font-mono text-app-text">{sub.event_type}</td>
+                    <td className="px-4 py-3 text-sm text-app-muted truncate max-w-xs">{sub.url}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        sub.active ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                        sub.active ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-600 dark:text-red-400"
                       }`}>
                         {sub.active ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate">
+                    <td className="px-4 py-3 text-sm text-app-muted">
                       {sub.created_at ? new Date(sub.created_at).toLocaleDateString() : "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => testWebhook(sub.id)}
-                        className="text-xs text-amber hover:underline mr-3"
+                        className="text-xs text-amber dark:text-amber hover:underline mr-3"
                       >
                         Test
                       </button>
                       <button
                         onClick={() => deleteSubscription(sub.id)}
-                        className="text-xs text-rust hover:underline"
+                        className="text-xs text-red-600 dark:text-red-400 hover:underline"
                       >
                         Delete
                       </button>
@@ -212,35 +212,35 @@ export default function WebhooksPage() {
           </div>
         )}
 
-        <h2 className="font-display text-lg font-semibold text-ink mb-4">Recent Deliveries</h2>
+        <h2 className="font-display text-lg font-semibold text-app-text mb-4">Recent Deliveries</h2>
         {deliveries.length === 0 ? (
-          <p className="text-slate text-sm">No deliveries yet.</p>
+          <p className="text-app-muted text-sm">No deliveries yet.</p>
         ) : (
-          <div className="bg-white border border-slate/20 rounded-lg overflow-hidden">
+          <div className="bg-app-card border border-app-border rounded-lg overflow-hidden">
             <table className="w-full">
-              <thead className="bg-slate/5 border-b border-slate/20">
+              <thead className="bg-app-surface border-b border-app-border">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">Event</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">Attempts</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">HTTP Code</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate uppercase">Time</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">Event</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">Attempts</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">HTTP Code</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-app-muted uppercase">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate/10">
+              <tbody className="divide-y divide-app-border">
                 {deliveries.map((d) => (
-                  <tr key={d.id} className="hover:bg-slate/5">
-                    <td className="px-4 py-3 text-sm font-mono text-ink">{d.event_type}</td>
+                  <tr key={d.id} className="hover:bg-app-card-hover">
+                    <td className="px-4 py-3 text-sm font-mono text-app-text">{d.event_type}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        d.success ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                        d.success ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/10 text-red-600 dark:text-red-400"
                       }`}>
                         {d.success ? "Success" : "Failed"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate">{d.attempts}</td>
-                    <td className="px-4 py-3 text-sm text-slate">{d.response_status ?? "—"}</td>
-                    <td className="px-4 py-3 text-sm text-slate">
+                    <td className="px-4 py-3 text-sm text-app-muted">{d.attempts}</td>
+                    <td className="px-4 py-3 text-sm text-app-muted">{d.response_status ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm text-app-muted">
                       {d.created_at ? new Date(d.created_at).toLocaleString() : "—"}
                     </td>
                   </tr>

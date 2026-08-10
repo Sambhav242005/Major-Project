@@ -3,9 +3,11 @@
 Triggered as a background task after document upload.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime
+from functools import partial
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,8 +33,18 @@ def _notify(document_id: str, event: dict):
         _notify_doc(document_id, event)
 
 
-async def ingest_document(db: AsyncSession, document_id: str, file_content: bytes) -> None:
-    """Run the full ingestion pipeline for a document.
+async def _offload(fn, *args):
+    """Run a blocking sync call off the event loop (thread pool).
+
+    parse_document, chunk_pages, and upsert_chunks are CPU/IO-bound sync
+    calls that would stall the whole loop if awaited inline.
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, partial(fn, *args))
+
+
+async def _ingest_document_body(db: AsyncSession, document_id: str, file_content: bytes) -> None:
+    """Run the full ingestion pipeline for a document (body — caller owns the session).
 
     Stages:
     1. Parse → extract text pages
@@ -53,10 +65,10 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
         await db.commit()
         _notify(document_id, {"stage": "processing", "status": "running", "timestamp": datetime.utcnow().isoformat()})
 
-        # Stage 2: Parse document
+        # Stage 2: Parse document (off the event loop)
         logger.info(f"Parsing {doc.filename}")
         _notify(document_id, {"stage": "parsing", "status": "running", "timestamp": datetime.utcnow().isoformat()})
-        pages = parse_document(file_content, doc.filename, doc.file_type)
+        pages = await _offload(parse_document, file_content, doc.filename, doc.file_type)
 
         if not pages or all(not p.get("text", "").strip() for p in pages):
             await update_document_status(
@@ -66,10 +78,10 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
             await db.commit()
             return
 
-        # Stage 3: Chunk text
+        # Stage 3: Chunk text (off the event loop)
         logger.info(f"Chunking {len(pages)} pages")
         _notify(document_id, {"stage": "chunking", "status": "running", "page_count": len(pages), "timestamp": datetime.utcnow().isoformat()})
-        chunks = chunk_pages(pages, max_tokens=600, overlap_tokens=80)
+        chunks = await _offload(chunk_pages, pages, 600, 80)
 
         if not chunks:
             await update_document_status(
@@ -79,13 +91,14 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
             await db.commit()
             return
 
-        # Stage 4: Embed and upsert to ChromaDB
+        # Stage 4: Embed and upsert to ChromaDB (off the event loop — sync httpx)
         logger.info(f"Embedding {len(chunks)} chunks")
         _notify(document_id, {"stage": "embedding", "status": "running", "chunk_count": len(chunks), "timestamp": datetime.utcnow().isoformat()})
-        chroma_ids = upsert_chunks(
-            chunks=chunks,
-            project_id=str(doc.project_id),
-            document_id=document_id,
+        chroma_ids = await _offload(
+            upsert_chunks,
+            chunks,
+            str(doc.project_id),
+            document_id,
         )
 
         # Stage 5: Store chunk metadata in Postgres + flush to get IDs
@@ -177,7 +190,6 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
             # Fire document.failed webhook
             try:
                 from services.webhooks import fire_event
-                from db.models import Document
                 doc = await db.get(Document, uuid.UUID(document_id))
                 if doc:
                     await fire_event(
@@ -195,3 +207,16 @@ async def ingest_document(db: AsyncSession, document_id: str, file_content: byte
                 logger.warning("Failed to fire document.failed webhook")
         except Exception:
             logger.exception(f"Failed to update status for {document_id}")
+
+
+async def ingest_document(session_factory, document_id: str, file_content: bytes) -> None:
+    """Run the full ingestion pipeline for a document.
+
+    Opens its own DB session so the work survives after the request's
+    dependency session is closed — Starlette runs background tasks after
+    dependency teardown, so passing the request's `db` (the old behaviour)
+    left `ingest_document` operating on a closed session and uploads stuck
+    at "pending". Mirrors the pattern in core/task_queue.start_agent_task.
+    """
+    async with session_factory() as db:
+        await _ingest_document_body(db, document_id, file_content)

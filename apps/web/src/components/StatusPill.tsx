@@ -1,5 +1,3 @@
-"use client";
-
 import { Badge } from "@/components/ui/badge";
 
 const statusConfig = {
@@ -19,7 +17,7 @@ export function StatusPill({ status }: { status: string }) {
       <span
         className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
           status === "processing" ? "animate-pulse bg-amber" :
-          status === "processed" ? "bg-verified" :
+          status === "processed" ? "bg-emerald-500" :
           status === "failed" ? "bg-rust" : "bg-slate"
         }`}
       />

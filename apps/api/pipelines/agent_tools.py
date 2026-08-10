@@ -30,6 +30,40 @@ def register_tool(name: str, description: str, parameters: dict):
 
 
 @register_tool(
+    name="web_search",
+    description="Search the internet for current information. Returns web results with titles, URLs, and snippets.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query"},
+            "max_results": {"type": "integer", "description": "Number of results (default 5)"},
+        },
+        "required": ["query"],
+    },
+)
+async def web_search_tool(query: str, max_results: int = 5, **kwargs) -> str:
+    """Search the web using DuckDuckGo."""
+    try:
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+        if not results:
+            return json.dumps({"results": [], "message": "No web results found."})
+        formatted = []
+        for i, r in enumerate(results, 1):
+            formatted.append({
+                "index": i,
+                "title": r.get("title", ""),
+                "url": r.get("href", ""),
+                "snippet": r.get("body", "")[:500],
+            })
+        return json.dumps({"results": formatted})
+    except Exception as e:
+        logger.error(f"Web search failed: {e}")
+        return json.dumps({"error": f"Web search failed: {e}"})
+
+
+@register_tool(
     name="search_chunks",
     description="Search the knowledge base for relevant text chunks. Returns top results with source information.",
     parameters={
@@ -286,16 +320,22 @@ async def execute_tool(
     tool = TOOL_REGISTRY[tool_name]
     func = tool["function"]
 
+    # Never let the LLM pass reserved kwargs — it could override project_id/db
+    reserved = {"project_id", "db"}
+    clean_args = {k: v for k, v in (arguments or {}).items() if k not in reserved}
+
     try:
         result = await func(
             project_id=project_id,
             db=db,
-            **arguments,
+            **clean_args,
         )
         return result
     except Exception as e:
         logger.error(f"Tool execution failed: {tool_name}: {e}")
-        return json.dumps({"error": str(e)})
+        # Generic error back to the LLM — never leak internal exception text
+        # (may contain SQL, paths, or stack details) into model context.
+        return json.dumps({"error": f"Tool {tool_name} failed to execute. Try a different query or argument."})
 
 
 def get_tool_schemas() -> list[dict]:

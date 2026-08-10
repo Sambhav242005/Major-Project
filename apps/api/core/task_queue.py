@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import uuid
+from collections import deque
 from datetime import datetime
 
 from sqlalchemy import select
@@ -25,14 +26,22 @@ from services.memory import (
 logger = logging.getLogger(__name__)
 
 # In-memory task status tracker (for SSE streams)
-_task_events: dict[str, list[dict]] = {}
+# Events per task are capped to bound memory; subscriber lists are cleaned
+# on stream close and dropped on task completion.
+_task_events: dict[str, deque] = {}
 _task_subscribers: dict[str, list[asyncio.Queue]] = {}
+
+# Strong references to running background tasks so the event loop never
+# garbage-collects a task mid-run ("Task was destroyed but it is pending").
+_running_tasks: set[asyncio.Task] = set()
+
+MAX_EVENTS_PER_TASK = 200
 
 
 def _publish_event(task_id: str, event: dict):
     """Publish a trace event to all SSE subscribers of this task."""
     if task_id not in _task_events:
-        _task_events[task_id] = []
+        _task_events[task_id] = deque(maxlen=MAX_EVENTS_PER_TASK)
     _task_events[task_id].append(event)
 
     if task_id in _task_subscribers:
@@ -44,6 +53,12 @@ def _publish_event(task_id: str, event: dict):
                 dead.append(q)
         for q in dead:
             _task_subscribers[task_id].remove(q)
+
+
+def _drop_task_events(task_id: str):
+    """Release the event buffer + subscribers for a finished task."""
+    _task_events.pop(task_id, None)
+    _task_subscribers.pop(task_id, None)
 
 
 def subscribe_task(task_id: str) -> asyncio.Queue:
@@ -229,7 +244,18 @@ async def _run_agent_background(session_factory, agent_id, task_id, project_id, 
 
 
 def start_agent_task(session_factory, agent_id, task_id, project_id, input_data):
-    """Launch agent execution in background. Non-blocking."""
-    asyncio.create_task(
+    """Launch agent execution in background. Non-blocking.
+
+    Holds a strong reference to the task so the event loop doesn't
+    garbage-collect it mid-run, and releases the event buffer on exit.
+    """
+    task = asyncio.create_task(
         _run_agent_background(session_factory, agent_id, task_id, project_id, input_data)
     )
+    _running_tasks.add(task)
+
+    def _done(t: asyncio.Task):
+        _running_tasks.discard(t)
+        _drop_task_events(task_id)
+
+    task.add_done_callback(_done)

@@ -1,53 +1,89 @@
-"""Meetings router — Google Meet sync and listing."""
+"""Meetings router — client-side meeting recording analysis.
 
-from fastapi import APIRouter, Depends
+The browser records the meeting audio locally (getDisplayMedia + MediaRecorder)
+and uploads it here. This endpoint transcribes and analyzes it, returning a
+summary, key points, action items, and sentiment — no bot account needed.
+"""
+
+import logging
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
 
+from core.deps import get_project_id
 from core.security import get_current_user, User
 from db.session import get_db
-from services import mcp as mcp_service
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
 
-class MeetingSyncRequest(BaseModel):
-    source: str = "google_meet"
-    credentials: dict = {}
+MAX_AUDIO_BYTES = 50 * 1024 * 1024  # 50MB
+
+
+@router.post("/analyze")
+async def analyze_meeting_audio(
+    file: UploadFile = File(...),
+    project_id: str = Depends(get_project_id),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Transcribe + analyze a client-recorded meeting audio file.
+
+    Accepts webm/wav/mp4 (whatever the browser MediaRecorder produced).
+    Returns summary, key points, action items, sentiment, transcript.
+    """
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty audio file")
+    if len(content) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=400, detail="Audio exceeds 50MB limit")
+
+    # Save to a temp file for the transcription pipeline
+    tmp_dir = Path(__file__).resolve().parent.parent / "meet_recordings"
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    suffix = Path(file.filename or "meeting.webm").suffix or ".webm"
+    audio_path = tmp_dir / f"client_{user.id.replace('-', '')[:8]}_{int(__import__('time').time())}{suffix}"
+    audio_path.write_bytes(content)
+
+    from services.google_meet import transcribe_audio, analyze_transcript, GoogleMeetError
+
+    try:
+        # Transcribe (SpeechRecognition handles wav/wav-compressed best)
+        transcript = transcribe_audio(str(audio_path))
+    except GoogleMeetError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception("Transcription failed")
+        raise HTTPException(status_code=422, detail=f"Transcription failed: {e}")
+
+    analysis = await analyze_transcript(transcript)
+
+    # Keep the file for re-analysis; return everything to the client
+    return {
+        "filename": file.filename,
+        "audio_path": str(audio_path),
+        "transcript": transcript[:20000],
+        "summary": analysis.get("summary", ""),
+        "key_points": analysis.get("key_points", []),
+        "action_items": analysis.get("action_items", []),
+        "sentiment": analysis.get("sentiment", "neutral"),
+        "sentiment_reason": analysis.get("sentiment_reason", ""),
+    }
 
 
 @router.post("/sync")
 async def sync_meetings(
-    req: MeetingSyncRequest = MeetingSyncRequest(),
+    project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Sync meetings from Google Meet via MCP receiver.
-
-    This is a mock implementation — in production, this would:
-    1. Use Google Meet API via MCP receiver connection
-    2. Pull meeting transcripts
-    3. Ingest them as documents
-    """
-    project_id = "00000000-0000-0000-0000-000000000001"
-
-    # Mock: check if there's a Google Meet MCP connection
-    conns = await mcp_service.list_connections(db, project_id)
-    meet_connections = [c for c in conns if c["direction"] == "receiver" and "meet" in c["name"].lower()]
-
-    if not meet_connections:
-        return {
-            "status": "no_connection",
-            "message": "No Google Meet MCP receiver configured. Add a receiver connection first.",
-            "meetings_imported": 0,
-        }
-
-    # Mock sync — in production would call Google Meet API
+    """Legacy mock sync — kept for API compatibility."""
     return {
-        "status": "synced",
-        "message": "Google Meet sync is mocked for demo. Configure a real MCP receiver to pull actual transcripts.",
+        "status": "no_connection",
+        "message": "Use the client-side recorder on the Meetings page instead.",
         "meetings_imported": 0,
-        "connection_used": meet_connections[0]["name"],
     }
 
 
@@ -56,6 +92,5 @@ async def list_meetings(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List synced meetings."""
-    # In production, this would query a meetings table
+    """List analyzed meetings (in-memory for now)."""
     return {"meetings": []}
