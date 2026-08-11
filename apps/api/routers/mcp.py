@@ -3,8 +3,7 @@
 Aligned with MCP 2026-07-28 spec: stateless core, hardened OAuth 2.0 + PKCE.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 

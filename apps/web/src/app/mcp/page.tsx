@@ -39,6 +39,7 @@ export default function MCPPage() {
   const [testing, setTesting] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchConnections = useCallback(async () => {
     try {
@@ -50,8 +51,9 @@ export default function MCPPage() {
         { token: session.access_token }
       );
       setConnections(data.connections || []);
+      setError(null);
     } catch (e) {
-      console.error("Failed to fetch connections:", e);
+      setError(e instanceof Error ? e.message : "Failed to fetch connections");
     } finally {
       setLoading(false);
     }
@@ -99,7 +101,7 @@ export default function MCPPage() {
         fetchConnections();
       }
     } catch (e) {
-      console.error("Failed to test connection:", e);
+      setError(e instanceof Error ? e.message : "Failed to test connection");
     } finally {
       setTesting(null);
     }
@@ -117,7 +119,7 @@ export default function MCPPage() {
 
       fetchConnections();
     } catch (e) {
-      console.error("Failed to delete connection:", e);
+      setError(e instanceof Error ? e.message : "Failed to delete connection");
     }
   };
 
@@ -134,7 +136,7 @@ export default function MCPPage() {
       );
       setSyncResult(data.message || `Synced ${data.meetings_imported} meetings`);
     } catch (e) {
-      setSyncResult("Sync failed");
+      setSyncResult(e instanceof Error ? e.message : "Sync failed");
     } finally {
       setSyncing(false);
     }
@@ -205,6 +207,12 @@ export default function MCPPage() {
             </DialogContent>
           </Dialog>
         </div>
+
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+            {error}
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center py-12 text-app-muted">Loading connections...</div>

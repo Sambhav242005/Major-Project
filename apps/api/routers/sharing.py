@@ -1,6 +1,6 @@
 """Project memory sharing router — grant/revoke/list cross-project memory access."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 

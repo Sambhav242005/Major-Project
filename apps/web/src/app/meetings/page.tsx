@@ -2,10 +2,11 @@
 
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { API_BASE } from "@/lib/api/client";
+import { API_BASE, withProject } from "@/lib/api/client";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useProjectStore } from "@/stores/project";
 
 interface MeetingAnalysis {
   filename?: string;
@@ -26,6 +27,7 @@ const SENTIMENT_COLORS: Record<string, string> = {
 export default function MeetingsPage() {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
+  const { activeProjectId } = useProjectStore();
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [processing, setProcessing] = useState(false);
@@ -120,15 +122,20 @@ export default function MeetingsPage() {
         new File([blob], `meeting.${ext}`, { type: mimeTypeRef.current })
       );
 
-      const res = await fetch(`${API_BASE}/meetings/analyze`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: formData,
-      });
+      let res: Response;
+      try {
+        res = await fetch(withProject("/meetings/analyze", activeProjectId), {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: formData,
+        });
+      } catch {
+        throw new Error("Cannot reach the server. Check that the backend is running and try again.");
+      }
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Analysis failed");
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || "Analysis failed");
       }
 
       setAnalysis((await res.json()) as MeetingAnalysis);

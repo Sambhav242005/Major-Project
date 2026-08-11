@@ -5,12 +5,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request, Response, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_project_id
 from core.security import get_current_user, User
-from core.errors import DocumentNotFoundError, PermissionDeniedError
+from core.errors import DocumentNotFoundError
 from core.rate_limit import limiter
 from core.security_utils import sanitize_filename
 from db.session import get_db, async_session_factory

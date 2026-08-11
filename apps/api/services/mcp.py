@@ -7,7 +7,6 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.security import User
 from core.oauth import create_oauth_client
 from db.models import MCPConnection
 

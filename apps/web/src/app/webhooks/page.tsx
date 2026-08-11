@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { useProjectStore } from "@/stores/project";
+import { createClient } from "@/lib/supabase/client";
+import { apiFetch } from "@/lib/api/client";
+import { useRef } from "react";
 
 interface WebhookSubscription {
   id: string;
@@ -37,21 +41,42 @@ export default function WebhooksPage() {
   const [newUrl, setNewUrl] = useState("");
   const [newSecret, setNewSecret] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { activeProjectId } = useProjectStore();
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+
+  async function getToken() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || null;
+  }
 
   useEffect(() => {
     fetchData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProjectId]);
 
   async function fetchData() {
     try {
+      const token = await getToken();
+      if (!token) return;
       const [subsRes, delRes] = await Promise.all([
-        fetch("/api/webhooks/subscriptions"),
-        fetch("/api/webhooks/deliveries?limit=20"),
+        apiFetch<WebhookSubscription[]>("/webhooks/subscriptions", {
+          token,
+          projectId: activeProjectId,
+        }),
+        apiFetch<WebhookDelivery[]>("/webhooks/deliveries?limit=20", {
+          token,
+          projectId: activeProjectId,
+        }),
       ]);
-      if (subsRes.ok) setSubscriptions(await subsRes.json());
-      if (delRes.ok) setDeliveries(await delRes.json());
+      setSubscriptions(subsRes || []);
+      setDeliveries(delRes || []);
+      setError(null);
     } catch (e) {
-      console.error("Failed to fetch webhooks:", e);
+      setError(
+        e instanceof Error ? e.message : "Failed to load webhooks"
+      );
     } finally {
       setLoading(false);
     }
@@ -60,36 +85,48 @@ export default function WebhooksPage() {
   async function createSubscription() {
     if (!newUrl) return;
     try {
-      const res = await fetch(
-        `/api/webhooks/subscriptions?event_type=${newEvent}&url=${encodeURIComponent(newUrl)}${newSecret ? `&secret=${encodeURIComponent(newSecret)}` : ""}`,
-        { method: "POST" }
+      const token = await getToken();
+      if (!token) return;
+      await apiFetch(
+        `/webhooks/subscriptions?event_type=${encodeURIComponent(newEvent)}&url=${encodeURIComponent(newUrl)}${newSecret ? `&secret=${encodeURIComponent(newSecret)}` : ""}`,
+        { method: "POST", token, projectId: activeProjectId }
       );
-      if (res.ok) {
-        setShowCreate(false);
-        setNewUrl("");
-        setNewSecret("");
-        fetchData();
-      }
+      setShowCreate(false);
+      setNewUrl("");
+      setNewSecret("");
+      fetchData();
     } catch (e) {
-      console.error("Failed to create subscription:", e);
+      setError(e instanceof Error ? e.message : "Failed to create subscription");
     }
   }
 
   async function deleteSubscription(id: string) {
     try {
-      const res = await fetch(`/api/webhooks/subscriptions/${id}`, { method: "DELETE" });
-      if (res.ok) fetchData();
+      const token = await getToken();
+      if (!token) return;
+      await apiFetch(`/webhooks/subscriptions/${id}`, {
+        method: "DELETE",
+        token,
+        projectId: activeProjectId,
+      });
+      fetchData();
     } catch (e) {
-      console.error("Failed to delete subscription:", e);
+      setError(e instanceof Error ? e.message : "Failed to delete subscription");
     }
   }
 
   async function testWebhook(id: string) {
     try {
-      const res = await fetch(`/api/webhooks/test/${id}`, { method: "POST" });
-      if (res.ok) fetchData();
+      const token = await getToken();
+      if (!token) return;
+      await apiFetch(`/webhooks/test/${id}`, {
+        method: "POST",
+        token,
+        projectId: activeProjectId,
+      });
+      fetchData();
     } catch (e) {
-      console.error("Failed to test webhook:", e);
+      setError(e instanceof Error ? e.message : "Failed to test webhook");
     }
   }
 
@@ -157,6 +194,12 @@ export default function WebhooksPage() {
                 Cancel
               </button>
             </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+            {error}
           </div>
         )}
 

@@ -105,17 +105,22 @@ export default function DocumentDetailPage() {
         setErrorMsg("Pick the original file to retry");
         return;
       }
-      const res = await fetch(
-        `${API_BASE}/documents/${documentId}/retry`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          body: file,
-        }
-      );
+      let res: Response;
+      try {
+        res = await fetch(
+          `${API_BASE}/documents/${documentId}/retry`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.access_token}` },
+            body: file,
+          }
+        );
+      } catch {
+        throw new Error("Cannot reach the server. Check that the backend is running and try again.");
+      }
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Retry failed");
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.detail || "Retry failed");
       }
 
       // Poll until status changes

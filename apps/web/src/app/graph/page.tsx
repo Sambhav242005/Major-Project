@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useGraphStore } from "@/stores/graph";
+import { useProjectStore } from "@/stores/project";
 import { DashboardHeader } from "@/components/dashboard-header";
 
 const ENTITY_COLORS: Record<string, string> = {
@@ -37,7 +38,10 @@ function GraphPageInner() {
     selectEntity,
     setSearchQuery,
     setDepth,
+    clearGraph,
   } = useGraphStore();
+  const { projects, activeProjectId, loadProjects } = useProjectStore();
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
@@ -71,7 +75,7 @@ function GraphPageInner() {
 
         const data = await apiFetch<{ nodes: any[]; edges: any[] }>(
           `/kb/graph?${params}`,
-          { token: session.access_token }
+          { token: session.access_token, projectId: activeProjectId }
         );
 
         const apiNodes = data.nodes || [];
@@ -103,13 +107,14 @@ function GraphPageInner() {
         setGraphNodes(nodes);
         setGraphEdges(edges);
       } catch (e) {
-        console.error("Failed to fetch graph:", e);
-        setError("Failed to connect to server");
+        setError(
+          e instanceof Error ? e.message : "Failed to connect to server"
+        );
       } finally {
         setLoading(false);
       }
     },
-    [depth, typeFilter, setGraphData]
+    [depth, typeFilter, setGraphData, activeProjectId]
   );
 
   const fetchEntity = useCallback(
@@ -121,9 +126,11 @@ function GraphPageInner() {
         const [entityRes, chunksRes] = await Promise.all([
           apiFetch<{ entity: any }>(`/kb/entities/${entityId}`, {
             token: session.access_token,
+            projectId: activeProjectId,
           }),
           apiFetch<{ chunks: any[] }>(`/kb/entities/${entityId}/chunks`, {
             token: session.access_token,
+            projectId: activeProjectId,
           }),
         ]);
         setSelectedEntity(entityRes.entity);
@@ -140,10 +147,24 @@ function GraphPageInner() {
         setEntityChunks(uniqueChunks);
       } catch (e) {
         console.error("Failed to fetch entity:", e);
+        setSelectedEntity(null);
+        setEntityChunks([]);
       }
     },
-    [supabase]
+    [supabase, activeProjectId]
   );
+
+  // Load project list once; re-fetch graph when the active project changes
+  useEffect(() => {
+    let cancelled = false;
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      if (!projects.length) await loadProjects(session.access_token);
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchGraph();
@@ -178,7 +199,20 @@ function GraphPageInner() {
     <div className="min-h-screen bg-app-bg text-app-text">
       <DashboardHeader title="Knowledge Graph Explorer" showBack backHref="/dashboard" />
 
-      <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+      <div className="border-b border-app-border bg-app-surface-alt/50 px-6 py-2 flex items-center gap-3 text-sm">
+        <span className="text-app-muted">Project:</span>
+        <span className="font-medium text-app-text">{activeProject?.name ?? "—"}</span>
+        <span className="flex-1" />
+        <button
+          onClick={clearGraph}
+          disabled={storeNodes.length === 0}
+          className="text-xs px-3 py-1.5 rounded-lg bg-app-surface border border-app-border-strong text-app-muted hover:text-app-text transition-colors disabled:opacity-40"
+        >
+          Clear graph
+        </button>
+      </div>
+
+      <div className="flex h-[calc(100vh-104px)] overflow-hidden">
         {/* Sidebar toggle */}
         <button
           onClick={() => setSidebarOpen((v) => !v)}
@@ -366,7 +400,9 @@ function GraphPageInner() {
               <div className="text-center">
                 <p className="text-app-text font-medium mb-1">No entities yet</p>
                 <p className="text-app-muted text-sm">
-                  Upload documents to start building the knowledge graph
+                  {activeProject
+                    ? `"${activeProject.name}" has no entities yet — upload documents to start building the graph.`
+                    : "Upload documents to start building the knowledge graph"}
                 </p>
                 <Link href="/documents" className="inline-block mt-4">
                   <span className="px-4 py-2 rounded-lg bg-brand-accent/15 text-app-text border border-brand-accent/25 text-sm font-medium hover:bg-brand-accent/25 transition-all">

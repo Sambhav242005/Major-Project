@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import User
-from db.models import Agent, AgentTask, AgentSkill, AgentRunTrace
+from db.models import Agent, AgentTask, AgentSkill
 from pipelines.agent_pipeline import execute_agent, get_agent_type_info, AGENT_TYPES
 from pipelines.agent_refinement import store_run_trace
 from services.memory import (

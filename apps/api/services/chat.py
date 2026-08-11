@@ -1,6 +1,5 @@
 """Chat service — session management and RAG streaming."""
 
-import json
 import logging
 import uuid
 from datetime import datetime

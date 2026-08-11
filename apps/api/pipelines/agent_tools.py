@@ -5,9 +5,8 @@ import logging
 import uuid
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Entity, EntityMention, Relationship, DocumentChunk, Document
+from db.models import Entity, Relationship, DocumentChunk
 from pipelines.embeddings import query_chunks
 
 logger = logging.getLogger(__name__)

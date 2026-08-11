@@ -8,10 +8,10 @@ Allows projects to share agent memories with controlled permissions:
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select, and_, delete
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import ProjectMemoryShare, AgentMemory
+from db.models import ProjectMemoryShare
 
 
 # --- Share management ---

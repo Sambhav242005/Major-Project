@@ -8,7 +8,7 @@ from core.errors import AppError, app_error_handler
 from core.rate_limit import limiter
 from core.auth_middleware import GlobalAuthMiddleware
 from core.security_headers import SecurityHeadersMiddleware
-from routers import auth, documents, kb, chat, dashboard, agents, mcp, meetings, sharing, webhooks
+from routers import auth, documents, kb, chat, dashboard, agents, mcp, meetings, projects, sharing, webhooks
 
 app = FastAPI(
     title="AI Knowledge Graph Builder API",
@@ -51,6 +51,7 @@ app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(agents.router, prefix="/agents", tags=["agents"])
 app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
 app.include_router(meetings.router, prefix="/meetings", tags=["meetings"])
+app.include_router(projects.router, prefix="/projects", tags=["projects"])
 app.include_router(sharing.router, prefix="/projects/{project_id}/shares", tags=["sharing"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 

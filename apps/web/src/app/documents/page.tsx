@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { apiFetch, API_BASE } from "@/lib/api/client";
+import { apiFetch, withProject } from "@/lib/api/client";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { StatusPill } from "@/components/StatusPill";
+import { useProjectStore } from "@/stores/project";
 import {
   Table,
   TableBody,
@@ -27,6 +28,8 @@ export default function DocumentsPage() {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
   const eventSourceRef = useRef<EventSource | null>(null);
+  const { projects, activeProjectId, loadProjects } = useProjectStore();
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   const fetchDocuments = useCallback(async () => {
     try {
@@ -35,6 +38,7 @@ export default function DocumentsPage() {
 
       const data = await apiFetch<{ documents: any[] }>("/documents", {
         token: session.access_token,
+        projectId: activeProjectId,
       });
 
       const docs = (data.documents || []).map((d: any) => ({
@@ -61,7 +65,7 @@ export default function DocumentsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeProjectId, supabase]);
 
   useEffect(() => {
     fetchDocuments();
@@ -122,7 +126,10 @@ export default function DocumentsPage() {
 
     const openStream = (token: string) => {
       evtSource = new EventSource(
-        `${API_BASE}/documents/${activeWatchId}/stream?token=${encodeURIComponent(token)}`
+        withProject(
+          `/documents/${activeWatchId}/stream?token=${encodeURIComponent(token)}`,
+          activeProjectId
+        )
       );
       eventSourceRef.current = evtSource;
 
@@ -164,7 +171,19 @@ export default function DocumentsPage() {
       cancelled = true;
       closeAll();
     };
-  }, [activeWatchId, supabase, fetchDocuments]);
+  }, [activeWatchId, activeProjectId, supabase, fetchDocuments]);
+
+  // Load project list once; the fetch above re-runs on switch.
+  useEffect(() => {
+    let cancelled = false;
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      if (!projects.length) await loadProjects(session.access_token);
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleUpload = async (file: File) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -173,15 +192,20 @@ export default function DocumentsPage() {
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch(`${API_BASE}/documents`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${session.access_token}` },
-      body: formData,
-    });
+    let res: Response;
+    try {
+      res = await fetch(withProject("/documents", activeProjectId), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+      });
+    } catch {
+      throw new Error("Cannot reach the server. Check that the backend is running and try again.");
+    }
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Upload failed");
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.detail || "Upload failed");
     }
 
     const { id } = (await res.json()) as { id: string };
@@ -207,6 +231,10 @@ export default function DocumentsPage() {
       <DashboardHeader title="Document Library" showBack backHref="/dashboard" />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex items-center gap-3 text-sm mb-6">
+          <span className="text-app-muted">Project:</span>
+          <span className="font-medium text-app-text">{activeProject?.name ?? "—"}</span>
+        </div>
         <Card className="mb-8 bg-app-card border border-app-border">
           <CardHeader>
             <CardTitle className="font-display text-lg text-app-text">Upload Documents</CardTitle>

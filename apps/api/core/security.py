@@ -1,7 +1,7 @@
 import logging
 
 import httpx
-from fastapi import Depends, HTTPException, Query, Request, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from jose.backends.cryptography_backend import CryptographyRSAKey

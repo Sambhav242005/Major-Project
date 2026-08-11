@@ -2,7 +2,6 @@
 
 import logging
 import uuid as _uuid
-from collections import defaultdict
 
 import networkx as nx
 from sqlalchemy import select

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ProjectSwitcher } from "@/components/project-switcher";
 
 const StatusIndicator = dynamic(
   () => import("@/components/status-indicator").then((m) => m.StatusIndicator),
@@ -49,6 +50,7 @@ export function DashboardHeader({ title, showBack = false, backHref = "/dashboar
               {link.label}
             </Link>
           ))}
+          <ProjectSwitcher />
           <StatusIndicator />
           <ThemeToggle />
           <form action="/auth/signout" method="post">

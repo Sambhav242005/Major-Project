@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 function createDemoResponse(request: NextRequest) {
-  const response = NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));
+  // 303 See Other: converts POST form submissions into GET /dashboard
+  const response = NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin), 303);
 
   // Set mock session cookie for demo user
   response.cookies.set("mock-session", "demo-user-001", {

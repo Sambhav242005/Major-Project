@@ -7,6 +7,7 @@ import Link from "next/link";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusPill } from "@/components/StatusPill";
+import { useProjectStore } from "@/stores/project";
 
 interface DashboardData {
   documents: { pending: number; processing: number; processed: number; failed: number };
@@ -39,12 +40,13 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+  const { activeProjectId } = useProjectStore();
 
   useEffect(() => {
     let cancelled = false;
-    const supabase = supabaseRef.current;
 
     async function fetchDashboard() {
       try {
@@ -53,16 +55,19 @@ export default function DashboardPage() {
 
         const json = await apiFetch<{ status: string; data: DashboardData }>(
           "/dashboard/summary",
-          { token: session.access_token }
+          { token: session.access_token, projectId: activeProjectId }
         );
         if (json.status === "ok" && !cancelled) {
           setData(json.data);
-          setLoadError(false);
+          setLoadError(null);
           setLastUpdated(new Date());
         }
       } catch (e) {
-        console.error("Failed to fetch dashboard:", e);
-        if (!cancelled) setLoadError(true);
+        if (!cancelled) {
+          setLoadError(
+            e instanceof Error ? e.message : "Failed to load dashboard"
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -71,7 +76,7 @@ export default function DashboardPage() {
     fetchDashboard();
     const interval = setInterval(fetchDashboard, 10000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  }, [activeProjectId, supabase]);
 
   const stats = data ? [
     { label: "Processed", value: data.documents.processed, color: "text-emerald-600 dark:text-emerald-400" },
@@ -113,9 +118,9 @@ export default function DashboardPage() {
           </div>
         ) : !data ? (
           <div className="text-center py-12">
-            <p className="text-red-600 dark:text-red-400 mb-4">Failed to load dashboard</p>
+            <p className="text-red-600 dark:text-red-400 mb-4">{loadError ?? "Failed to load dashboard"}</p>
             <button
-              onClick={() => { setLoading(true); setLoadError(false); window.location.reload(); }}
+              onClick={() => { setLoading(true); setLoadError(null); window.location.reload(); }}
               className="px-4 py-2 bg-brand-accent/15 text-app-text font-medium rounded-lg hover:bg-brand-accent/25 transition-colors text-sm"
             >
               Retry

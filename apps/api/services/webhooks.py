@@ -1,6 +1,5 @@
 """Webhook service — outbound dispatch, retry, and inbound handling."""
 
-import asyncio
 import hashlib
 import hmac
 import json
@@ -206,7 +205,6 @@ async def _handle_ingest_document(
     config: dict,
 ) -> dict:
     """Handle inbound document ingestion."""
-    from services.documents import create_document
     from pipelines.ingestion import ingest_document
 
     file_url = payload.get("file_url")

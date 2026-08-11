@@ -3,13 +3,12 @@
 import json
 import logging
 import uuid
-from collections import defaultdict
 
 import spacy
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import Entity, EntityMention, Relationship, DocumentChunk
+from db.models import Entity, EntityMention, Relationship
 from pipelines.llm_client import chat_completion
 
 logger = logging.getLogger(__name__)

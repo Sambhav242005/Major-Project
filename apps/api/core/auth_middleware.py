@@ -4,7 +4,7 @@ Public routes are whitelisted. All others require valid Bearer token.
 In MOCK_AUTH mode, accepts any Bearer token with a mock user.
 """
 
-from fastapi import Request, Response
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -35,6 +35,11 @@ class GlobalAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+
+        # Allow CORS preflight requests through — the CORSMiddleware handles
+        # them, and they carry no auth headers.
+        if request.method == "OPTIONS":
+            return await call_next(request)
 
         # Allow public routes
         if path in PUBLIC_ROUTES or path.startswith(PUBLIC_PREFIXES):

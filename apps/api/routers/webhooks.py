@@ -4,12 +4,12 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_db, get_project_id
 from core.security import User, get_current_user
-from db.models import WebhookSubscription, WebhookDelivery, InboundWebhook
+from db.models import WebhookSubscription, WebhookDelivery
 from services.webhooks import (
     fire_event, dispatch_delivery, verify_inbound_signature,
     handle_inbound, dispatch_pending_deliveries,

@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch, API_BASE } from "@/lib/api/client";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { useProjectStore } from "@/stores/project";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -32,6 +33,8 @@ export default function ChatPage() {
   const streamBufferRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const { projects, activeProjectId, loadProjects } = useProjectStore();
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -41,27 +44,37 @@ export default function ChatPage() {
     };
   }, []);
 
+  // Create a fresh session per project — chats are project-scoped.
   useEffect(() => {
+    let cancelled = false;
     const createSession = async () => {
+      setLoading(true);
+      setMessages([]);
+      setSessionId(null);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
+        if (!projects.length) await loadProjects(session.access_token);
 
         const data = await apiFetch<{ id: string }>("/chat/sessions", {
           method: "POST",
           token: session.access_token,
+          projectId: activeProjectId,
           body: { title: "New Chat" },
         });
-        setSessionId(data.id);
+        if (!cancelled) setSessionId(data.id);
       } catch (e) {
         console.error("Failed to create chat session:", e);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     createSession();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId, projects.length, loadProjects, supabase]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -216,6 +229,21 @@ export default function ChatPage() {
       <DashboardHeader title="Chat" showBack backHref="/dashboard" />
 
       <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3 text-sm">
+            <span className="text-app-muted">Project:</span>
+            <span className="font-medium text-app-text">{activeProject?.name ?? "—"}</span>
+          </div>
+          {sessionId && (
+            <button
+              onClick={() => { setSessionId(null); setMessages([]); }}
+              disabled={streaming}
+              className="text-xs px-3 py-1.5 rounded-lg bg-app-surface border border-app-border-strong text-app-muted hover:text-app-text transition-colors disabled:opacity-40"
+            >
+              New session
+            </button>
+          )}
+        </div>
         <div className="flex-1 overflow-y-auto mb-4 space-y-4 scrollbar-dark">
           {loading ? (
             <div className="text-center py-20 text-app-muted">

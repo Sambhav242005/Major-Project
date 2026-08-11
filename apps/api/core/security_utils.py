@@ -1,7 +1,6 @@
 """Security utilities — input sanitization, prompt injection defense."""
 
 import re
-import html
 
 
 # Patterns that indicate prompt injection attempts

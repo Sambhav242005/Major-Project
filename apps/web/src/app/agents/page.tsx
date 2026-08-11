@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { apiFetch, API_BASE } from "@/lib/api/client";
+import { apiFetch, withProject } from "@/lib/api/client";
 import Markdown from "react-markdown";
+import { useProjectStore } from "@/stores/project";
 import {
   X,
   ChevronDown,
@@ -90,6 +91,8 @@ export default function AgentsPage() {
   const [runError, setRunError] = useState<string>("");
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const eventSourceRef = useRef<EventSource | null>(null);
+  const { projects, activeProjectId, loadProjects } = useProjectStore();
+  const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   const getToken = useCallback(async () => {
     const {
@@ -98,21 +101,33 @@ export default function AgentsPage() {
     return session?.access_token || "mock-token";
   }, []);
 
+  // Load project list once; fetchAgents re-runs on switch.
+  useEffect(() => {
+    let cancelled = false;
+    const init = async () => {
+      const token = await getToken();
+      if (!projects.length) await loadProjects(token);
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchAgents = useCallback(async () => {
     try {
       const token = await getToken();
       const [agentsData, typesData] = await Promise.all([
-        apiFetch<{ agents: Agent[] }>("/agents", { token }),
-        apiFetch<{ types: AgentType[] }>("/agents/types", { token }),
+        apiFetch<{ agents: Agent[] }>("/agents", { token, projectId: activeProjectId }),
+        apiFetch<{ types: AgentType[] }>("/agents/types", { token, projectId: activeProjectId }),
       ]);
       setAgents(agentsData.agents || []);
       setAgentTypes(typesData.types || []);
+      setRunError("");
     } catch (e) {
-      console.error("Failed to fetch agents:", e);
+      setRunError(e instanceof Error ? e.message : "Failed to fetch agents");
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, [getToken, activeProjectId]);
 
   useEffect(() => {
     fetchAgents();
@@ -124,14 +139,14 @@ export default function AgentsPage() {
         const token = await getToken();
         const data = await apiFetch<{ tasks: AgentTask[] }>(
           `/agents/${agentId}/tasks`,
-          { token }
+          { token, projectId: activeProjectId }
         );
         setTasks(data.tasks || []);
       } catch (e) {
         console.error("Failed to fetch tasks:", e);
       }
     },
-    [getToken]
+    [getToken, activeProjectId]
   );
 
   const fetchTaskDetail = useCallback(
@@ -140,7 +155,7 @@ export default function AgentsPage() {
         const token = await getToken();
         const data = await apiFetch<{ task: AgentTask }>(
           `/agents/${agentId}/tasks/${taskId}`,
-          { token }
+          { token, projectId: activeProjectId }
         );
         return data.task;
       } catch (e) {
@@ -148,7 +163,7 @@ export default function AgentsPage() {
       }
       return null;
     },
-    [getToken]
+    [getToken, activeProjectId]
   );
 
   const handleCreate = async () => {
@@ -163,6 +178,7 @@ export default function AgentsPage() {
       await apiFetch("/agents", {
         method: "POST",
         token,
+        projectId: activeProjectId,
         body: { name: newName.trim(), type: newType },
       });
       setShowCreate(false);
@@ -189,6 +205,7 @@ export default function AgentsPage() {
       const data = await apiFetch<{ task_id: string }>(`/agents/${agentId}/run`, {
         method: "POST",
         token,
+        projectId: activeProjectId,
         body: {
           input: { query: runInput.trim(), source: "manual_trigger" },
         },
@@ -198,7 +215,10 @@ export default function AgentsPage() {
 
       const streamToken = await getToken();
       const evtSource = new EventSource(
-        `${API_BASE}/agents/${agentId}/tasks/${taskId}/stream?token=${streamToken}`
+        withProject(
+          `/agents/${agentId}/tasks/${taskId}/stream?token=${streamToken}`,
+          activeProjectId
+        )
       );
       eventSourceRef.current = evtSource;
 
@@ -240,6 +260,7 @@ export default function AgentsPage() {
       await apiFetch(`/agents/${agentId}`, {
         method: "DELETE",
         token,
+        projectId: activeProjectId,
       });
       if (selectedAgent?.id === agentId) {
         setSelectedAgent(null);
@@ -247,7 +268,7 @@ export default function AgentsPage() {
       }
       fetchAgents();
     } catch (e) {
-      console.error("Failed to delete agent:", e);
+      setRunError(e instanceof Error ? e.message : "Failed to delete agent");
     }
   };
 
@@ -294,6 +315,14 @@ export default function AgentsPage() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            <span className="text-xs text-app-muted">Project:</span>
+            <span className="text-sm font-medium text-app-text">{activeProject?.name ?? "—"}</span>
+            <a
+              href="/projects"
+              className="text-xs text-app-muted hover:text-app-text transition-colors"
+            >
+              Manage
+            </a>
             <a
               href="/chat"
               className="text-sm text-app-muted hover:text-app-text transition-colors"
@@ -384,8 +413,24 @@ export default function AgentsPage() {
                 />
                 <p className="text-sm text-app-muted mb-1">No agents yet</p>
                 <p className="text-xs text-app-muted">
-                  Create your first agent to get started
+                  {activeProject
+                    ? `"${activeProject.name}" has no agents — create your first one, or switch project`
+                    : "Create your first agent to get started"}
                 </p>
+                <div className="flex justify-center gap-2 mt-4">
+                  <button
+                    onClick={() => setShowCreate(true)}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-sky-500/10 text-app-text border border-sky-500/20 hover:bg-sky-500/20 transition-all"
+                  >
+                    Create agent
+                  </button>
+                  <a
+                    href="/projects"
+                    className="text-xs px-3 py-1.5 rounded-lg bg-app-surface border border-app-border-strong text-app-muted hover:text-app-text transition-all"
+                  >
+                    Manage projects
+                  </a>
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
