@@ -12,10 +12,10 @@ from slowapi.util import get_remote_address
 
 def _rate_limit_key(request: Request) -> str:
     """Key on authenticated user id when present, else client IP."""
-    # GlobalAuthMiddleware sets request.state.user (see core.auth_middleware)
-    user = getattr(request.state, "user", None)
-    if user and getattr(user, "id", None):
-        return f"user:{user.id}"
+    # GlobalAuthMiddleware sets request.state.user_id
+    user_id = getattr(request.state, "user_id", None)
+    if user_id:
+        return f"user:{user_id}"
     return f"ip:{get_remote_address(request)}"
 
 
