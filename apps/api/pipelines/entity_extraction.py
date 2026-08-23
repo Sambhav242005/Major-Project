@@ -3,6 +3,7 @@
 import json
 import logging
 import uuid
+from core.config import settings
 
 import spacy
 from sqlalchemy import select
@@ -134,7 +135,7 @@ async def _llm_extract(text: str) -> dict:
         # plus a defensive parser instead of response_format=json_object.
         response = await chat_completion(
             messages=messages,
-            model="llama-3.3-70b-versatile",
+            model=settings.LLM_EXTRACT_MODEL,
             temperature=0.1,
             max_tokens=2000,
         )

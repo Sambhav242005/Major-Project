@@ -3,6 +3,7 @@
 import logging
 import uuid
 from datetime import datetime
+from core.config import settings
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -343,7 +344,7 @@ Answer based on the sources above. Cite sources using [1], [2], etc."""
         # budget on <think> blocks, so the chat appears dead/not streaming.
         async for chunk in chat_completion_stream(
             messages=messages,
-            model="llama-3.3-70b-versatile",
+            model=settings.LLM_CHAT_MODEL,
             temperature=0.3,
         ):
             full_response += chunk
