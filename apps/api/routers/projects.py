@@ -16,6 +16,7 @@ from core.deps import _user_uuid
 from core.security import get_current_user, User
 from db.session import get_db
 from db.models import Agent, ChatSession, Document, Entity, Project, ProjectMember
+from services.audit import write_audit_log
 
 router = APIRouter()
 
@@ -132,6 +133,14 @@ async def create_project(
         role="editor",
     )
     db.add(member)
+    await write_audit_log(
+        db=db,
+        project_id=project.id,
+        actor_id=user.id,
+        action="project.created",
+        resource_type="project",
+        resource_id=project.id,
+    )
     await db.commit()
 
     return ProjectOut(

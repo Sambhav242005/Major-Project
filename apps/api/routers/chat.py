@@ -85,6 +85,7 @@ async def send_message(
             session_id=session_id,
             message=safe_message,
             project_id=project_id,
+            actor_id=user.id,
         ):
             yield f"data: {json.dumps(event)}\n\n"
 

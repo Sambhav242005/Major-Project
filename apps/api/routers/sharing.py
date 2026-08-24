@@ -48,7 +48,11 @@ async def grant_share(
     """Grant another project read or read_write access to this project's memories."""
     try:
         share = await sharing_service.grant_share(
-            db, project_id, req.target_project_id, req.permission,
+            db,
+            project_id,
+            req.target_project_id,
+            req.permission,
+            actor_id=user.id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
