@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import ProjectMemoryShare
 
+from services.audit import write_audit_log
 
 # --- Share management ---
 
@@ -22,6 +23,7 @@ async def grant_share(
     source_project_id: str,
     target_project_id: str,
     permission: str = "read",
+    actor_id=None,
 ) -> dict:
     """Grant a project access to another project's memories.
 
@@ -47,6 +49,18 @@ async def grant_share(
         share = result.scalar_one()
         share.permission = permission
         await db.flush()
+        await write_audit_log(
+        db=db,
+        project_id=uuid.UUID(source_project_id),
+        actor_id=actor_id,
+        action="share.granted",
+        resource_type="project_share",
+        resource_id=share.id,
+        meta={
+            "target_project_id": target_project_id,
+            "permission": permission,
+        },
+    )
         return _share_to_dict(share)
 
     share = ProjectMemoryShare(
@@ -58,6 +72,18 @@ async def grant_share(
     )
     db.add(share)
     await db.flush()
+    await write_audit_log(
+        db=db,
+        project_id=uuid.UUID(source_project_id),
+        actor_id=actor_id,
+        action="share.granted",
+        resource_type="project_share",
+        resource_id=share.id,
+        meta={
+            "target_project_id": target_project_id,
+            "permission": permission,
+        },
+    )
     return _share_to_dict(share)
 
 

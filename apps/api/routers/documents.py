@@ -3,6 +3,8 @@ import asyncio
 import json
 from datetime import datetime
 
+from services.audit import write_audit_log
+
 from fastapi import APIRouter, Depends, Request, Response, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,6 +110,15 @@ async def upload_document(
     )
 
     # TODO: Upload to Supabase Storage (Phase 1 step: add storage client)
+    await write_audit_log(
+        db=db,
+        project_id=project_id,
+        actor_id=user.id,
+        action="document.uploaded",
+        resource_type="document",
+        resource_id=result["id"],
+        meta={"filename": result["filename"]},
+    )
 
     # Queue background ingestion — run it as its own asyncio task. Starlette's
     # BackgroundTasks are dropped when the response flows through the
@@ -205,6 +216,18 @@ async def delete_document(
     deleted = await doc_service.delete_document(db, document_id, project_id)
     if not deleted:
         raise DocumentNotFoundError()
+
+    await write_audit_log(
+        db=db,
+        project_id=project_id,
+        actor_id=user.id,
+        action="document.deleted",
+        resource_type="document",
+        resource_id=document_id,
+    )
+
+    await db.commit()
+
     return {"deleted": True}
 
 

@@ -4,6 +4,8 @@ import logging
 import uuid
 from datetime import datetime
 
+from services.audit import write_audit_log
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -230,6 +232,7 @@ async def send_message(
     session_id: str,
     message: str,
     project_id: str,
+    actor_id,
 ):
     """Stream assistant response with RAG retrieval.
 
@@ -367,6 +370,14 @@ Answer based on the sources above. Cite sources using [1], [2], etc."""
         created_at=datetime.utcnow(),
     )
     db.add(assistant_msg)
+    await write_audit_log(
+        db=db,
+        project_id=project_id,
+        actor_id=actor_id,
+        action="chat.message_sent",
+        resource_type="chat_session",
+        resource_id=assistant_msg.session_id,
+    )
     await db.commit()
 
     # Fire chat.completed webhook
