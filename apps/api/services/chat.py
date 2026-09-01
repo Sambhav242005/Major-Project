@@ -339,9 +339,8 @@ Answer based on the sources above. Cite sources using [1], [2], etc."""
     try:
         from pipelines.llm_client import chat_completion_stream
 
-        # Use a fast non-reasoning model for chat — the default LLM_MODEL
-        # (qwen3.6-27b) is a reasoning model that spends its whole token
-        # budget on <think> blocks, so the chat appears dead/not streaming.
+        # Use LLM_CHAT_MODEL as a fast non-reasoning model for chat so
+        # responses stream promptly.
         async for chunk in chat_completion_stream(
             messages=messages,
             model=settings.LLM_CHAT_MODEL,
