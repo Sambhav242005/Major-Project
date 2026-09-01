@@ -3,6 +3,7 @@
 import logging
 import uuid
 from datetime import datetime
+from core.config import settings
 
 from services.audit import write_audit_log
 
@@ -341,12 +342,11 @@ Answer based on the sources above. Cite sources using [1], [2], etc."""
     try:
         from pipelines.llm_client import chat_completion_stream
 
-        # Use a fast non-reasoning model for chat — the default LLM_MODEL
-        # (qwen3.6-27b) is a reasoning model that spends its whole token
-        # budget on <think> blocks, so the chat appears dead/not streaming.
+        # Use LLM_CHAT_MODEL as a fast non-reasoning model for chat so
+        # responses stream promptly.
         async for chunk in chat_completion_stream(
             messages=messages,
-            model="llama-3.3-70b-versatile",
+            model=settings.LLM_CHAT_MODEL,
             temperature=0.3,
         ):
             full_response += chunk

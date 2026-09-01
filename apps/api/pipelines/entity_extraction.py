@@ -3,6 +3,7 @@
 import json
 import logging
 import uuid
+from core.config import settings
 
 import spacy
 from sqlalchemy import select
@@ -127,14 +128,12 @@ async def _llm_extract(text: str) -> dict:
     ]
 
     try:
-        # Note: the default LLM_MODEL is a reasoning model (qwen3.6-27b) that
-        # burns its whole token budget on <think> blocks and never emits the
-        # JSON — Groq then fails with json_validate_failed. Use a fast
-        # non-reasoning model for extraction, and rely on prompt instructions
-        # plus a defensive parser instead of response_format=json_object.
+        # Use LLM_EXTRACT_MODEL as a fast non-reasoning model for extraction
+        # and rely on prompt instructions plus a defensive parser instead of
+        # response_format=json_object.
         response = await chat_completion(
             messages=messages,
-            model="llama-3.3-70b-versatile",
+            model=settings.LLM_EXTRACT_MODEL,
             temperature=0.1,
             max_tokens=2000,
         )

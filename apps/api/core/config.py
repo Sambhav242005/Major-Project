@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "http://localhost:11434/v1"
     LLM_MODEL: str = "qwen3:4b-instruct"
 
+    LLM_CHAT_MODEL: str = "qwen/qwen3.8-27b"
+    LLM_EXTRACT_MODEL: str = "qwen/qwen3.8-27b"
+
     # Embeddings (OpenAI-compatible)
     EMBEDDING_API_KEY: str = ""
     EMBEDDING_BASE_URL: str = "http://localhost:11434/v1"
