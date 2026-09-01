@@ -198,7 +198,7 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 11 | Testing: Vitest + RTL frontend | Vitest/RTL in devDependencies only; **no frontend unit tests exist** | **Not implemented** |
 | 12 | Alembic migrations path | Present (`migrations/001_initial_schema.py`) but dev uses `init_db.py` `create_all` | ✅ Present / dev shortcut |
 | 13 | Frontend graph lib "React Flow" (brief) | Actually **reagraph** | **Deviation** |
-| 14 | LLM model `llama3.1` / `gpt-4o-mini` (README) | Current env: `qwen/qwen3.6-27b` (Groq); chat/extraction hardcode `llama-3.3-70b-versatile` | **Stale README** |
+| 14 | LLM model `llama3.1` / `gpt-4o-mini` (README) | Configurable via `LLM_CHAT_MODEL` / `LLM_EXTRACT_MODEL` (default `qwen/qwen3.8-27b`); PR #3 fixed hardcode `llama-3.3-70b-versatile` | ✅ Fixed (PR #3) / README still stale |
 | 15 | Rate limiting on upload/chat | Yes — slowapi: uploads 30/min, chat 60/min | ✅ Matches |
 | 16 | Backend `MOCK_AUTH` fails fast in prod | True — `config.py` model validator | ✅ Matches |
 | 17 | Frontend build fails with mock auth in prod | Partially — `next.config.ts` behavior; middleware would use mock in prod if env set | **Mostly matches** |
@@ -253,7 +253,7 @@ Plus public: `GET /health`, `GET /system/status`.
 
 Same audit done for MCP (§13), applied to every other major subsystem. **Legend:** ✅ real & wired · ⚠️ partial / broken wiring · ❌ missing · 🔸 planned-only.
 
-### 12.1 Auth & OAuth — ✅ real, one bug
+### 12.1 Auth & OAuth — ✅ real (rate-limiter bug fixed in PR #1)
 
 | Piece | Status | Evidence |
 |---|---|---|
@@ -263,7 +263,7 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 | Frontend: signin/signup pages, OAuth callback, demo-login, signout, middleware | ✅ | `src/app/auth/*`, `src/middleware.ts`, `src/lib/supabase/{client,server}.ts` |
 | Project membership / role checks | ✅ | `core/deps.py`, `routers/projects.py` (rename owner/editor-only) |
 | OAuth 2.0 client (client-credentials + PKCE + refresh + persistence) | ✅ | `core/oauth.py` — full-featured, generic |
-| **Bug — rate limiter reads wrong state key:** `core/rate_limit.py::_rate_limit_key` reads `request.state.user`, but `GlobalAuthMiddleware` sets `request.state.user_id`. The key falls back to **IP for every authenticated user** (never `user:{id}`), so per-user limits don't work as intended | ⚠️ | `rate_limit.py` vs `auth_middleware.py` |
+| **Fixed — rate limiter now reads `user_id`:** `core/rate_limit.py::_rate_limit_key` now correctly reads `request.state.user_id` (PR #1 `a030a0d`); falls back to `ip:` only for anon | ✅ Fixed PR #1 | `core/rate_limit.py:16` + `tests/test_rate_limit.py` |
 | **Nits:** `demo-login/route.ts` sets `mock-session` with `httpOnly:false`; `supabase/server.ts` mock user id is `"mock-user-001"` while backend mock id is `"a0eebc99-…"` — cosmetic mismatch, works because backend mock accepts any token | ⚠️ | `src/app/auth/demo-login/route.ts`, `src/lib/supabase/server.ts` |
 
 ### 12.2 Webhooks — ⚠️ outbound built, **scheduler missing, inbound half-broken**
@@ -289,12 +289,12 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 | Self-improvement: rule-based eval → run traces → refinement cycle → skills | ✅ | `pipelines/agent_refinement.py` |
 | Cross-project memory sharing (read/read_write) + router | ✅ | `services/sharing.py`, `routers/sharing.py` |
 
-### 12.4 Dashboard, Projects, Meetings — ✅ built (small gaps)
+### 12.4 Dashboard, Projects, Meetings — ✅ built (audit writers added in PR #2)
 
 | Piece | Status | Evidence |
 |---|---|---|
 | Dashboard summary (real DB counts, activity from `audit_log`, pipeline health) | ✅ | `services/dashboard.py` |
-| **`audit_log` is never written** — table + dashboard query exist, but no router/service/pipeline writes an entry (grep: zero `AuditLog(` writers) | ⚠️ | recent activity feed is **always empty** |
+| **`audit_log` writers added:** `services/audit.py::write_audit_log` wired to project create, doc upload/delete, share grant, chat send (PR #2 `d5ff01f`) | ✅ Fixed PR #2 | `services/audit.py` + `routers/{projects,documents,chat}` + `tests/test_audit.py` |
 | Projects CRUD + membership | ✅ | `routers/projects.py` |
 | Meetings: client-side recorder → `/meetings/analyze` (transcribe + summarize), sync stub, in-memory listing | ⚠️ | `routers/meetings.py`; results never enter the KB (§12.2) |
 
@@ -321,7 +321,7 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 |---|---|---|
 | Security headers (CSP, nosniff, frame-deny, permissions-policy) | ✅ | `core/security_headers.py` |
 | Input sanitization + prompt-injection detection | ✅ | `core/security_utils.py` |
-| Rate limits (upload 30/min, chat 60/min, mock-login 10/min) | ✅ (per-user key bug, §12.1) | `routers/*.py` |
+| Rate limits (upload 30/min, chat 60/min, mock-login 10/min) | ✅ (per-user key fixed PR #1) | `routers/*.py` + `core/rate_limit.py:16` |
 | **CSP `connect-src` hardcodes `http://localhost:8000`** — breaks any deployed backend origin until edited | ⚠️ | `security_headers.py` |
 | **`GET /documents/{id}/stream` SSE accepts token via `?token=` query param** — tokens can leak into access logs/proxies; documented EventSource limitation, but worth noting | ⚠️ | `routers/documents.py` |
 

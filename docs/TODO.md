@@ -1,6 +1,6 @@
 # TODO — What's Left in the AI Knowledge Graph Builder
 
-Actionable remaining work, ordered by demo value. Each item: **what**, **why**, **where**, **effort**. Verified against the current code (commit `8c72299`).
+Actionable remaining work, ordered by demo value. Each item: **what**, **why**, **where**, **effort**. Verified against the current code (commit `bb97cbf` — PRs #1/#2/#3 merged). Prior commit was `8c72299`.
 
 **Legend:** `[BUG]` broken/risky now · `[MISSING]` documented but absent · `[STALE]` docs/code mismatch · `[HARDEN]` polish/robustness · `[NICE]` stretch
 
@@ -56,20 +56,22 @@ Actionable remaining work, ordered by demo value. Each item: **what**, **why**, 
 - **Fix:** document the RLS story accurately; optionally verify policies on Supabase. Backend membership checks are the current real enforcement (fine for MVP, but the brief promised RLS as first-line defense).
 - **Effort:** small (doc) / medium (verify).
 
-### 2.13 Rate limiter per-user key bug `[BUG]` — easy win
-- **What:** `core/rate_limit.py::_rate_limit_key` reads `request.state.user`, but `GlobalAuthMiddleware` sets `request.state.user_id`. Result: every authenticated request is keyed by **IP**, so per-user limits (30/min upload, 60/min chat) effectively become per-IP.
-- **Fix:** read `request.state.user_id` (fall back to IP for anonymous routes). Add a test asserting two users get separate buckets.
-- **Effort:** tiny (one line + test).
+### 2.13 Rate limiter per-user key bug `[BUG]` ✅ DONE — PR #1 merged (`a030a0d`)
+- **What was:** `core/rate_limit.py::_rate_limit_key` read `request.state.user`, but `GlobalAuthMiddleware` sets `request.state.user_id`. Result: every authenticated request was keyed by **IP**.
+- **Fix applied:** now reads `request.state.user_id` (see `apps/api/core/rate_limit.py:16`) with `ip:` fallback; added `apps/api/tests/test_rate_limit.py` (per-user vs per-IP buckets).
+- **PR:** #1 `fix: use user id for rate limiting` — `task-2.13-rate-limiter` → `main`.
+- **Effort:** tiny (one line + test) — completed.
 
 ### 2.14 Webhook scheduler missing + inbound half-broken `[MISSING]`
 - **What:** outbound webhooks are real (signing, retries, delivery log), but `dispatch_pending_deliveries` is **never scheduled** — retries only run on a manual, unauthenticated `POST /webhooks/retry-pending`. Inbound `ingest_document` handler is a stub (downloads, then nothing); the public `POST /webhooks/inbound/{slug}` endpoint **never verifies the HMAC signature** (`verify_inbound_signature` is dead code) — any unauthenticated POST can trigger `mcp_receive`/`trigger_agent` and write to the KB.
 - **Fix:** schedule retry dispatch (background loop or on-startup task); implement `_handle_ingest_document`; require `X-Webhook-Signature` verification on the inbound route.
 - **Effort:** small–medium.
 
-### 2.15 `audit_log` never written `[MISSING]`
-- **What:** the dashboard's "recent activity" reads `audit_log`, but nothing writes it (grep for `AuditLog(` writers: zero). The activity feed is **always empty**.
-- **Fix:** add a small `audit` helper and call it on mutating actions (document upload/delete, chat send, agent run, project create, share grant…), or drop the feed.
-- **Effort:** small.
+### 2.15 `audit_log` never written `[MISSING]` ✅ DONE — PR #2 merged (`d5ff01f`)
+- **What was:** dashboard's "recent activity" read `audit_log`, but nothing wrote it.
+- **Fix applied:** added `apps/api/services/audit.py::write_audit_log` and wired it into project create (`routers/projects.py:136`), document upload/delete (`routers/documents.py:113,220`), share grant (`services/sharing.py:52,75`), chat `send_message` (`services/chat.py:373` + `services/audit.py`); `apps/api/tests/test_audit.py` added.
+- **PR:** #2 `feat: add audit logging` — `task-2.15-audit-log` → `main`.
+- **Effort:** small — completed.
 
 ### 2.16 Alembic migrations frozen at first commit `[HARDEN]`
 - **What:** `migrations/001_initial_schema.py` predates ~10 tables (agent_memory, checkpoints, skills, run_traces, mcp_auth_tokens, webhook_*, project_memory_shares, inbound_webhooks, refinement_*) added since. Dev works only because `init_db.py` runs `create_all`; any Postgres deploy via `alembic upgrade head` gets a **stale schema**.
@@ -91,10 +93,11 @@ Actionable remaining work, ordered by demo value. Each item: **what**, **why**, 
 - **Fix:** add Vitest config usage + a first test suite (stores, validators, api client helpers).
 - **Effort:** medium.
 
-### 2.20 LLM provider consistency `[HARDEN]`
-- **What:** chat (`services/chat.py`) and entity extraction (`entity_extraction.py`) **hardcode** `model="llama-3.3-70b-versatile"` instead of using `settings.LLM_MODEL`; reasoning-model note (qwen3.6-27b burns tokens in `<think>` blocks) is a code-comment workaround.
-- **Fix:** make the chat/extraction model configurable (`LLM_CHAT_MODEL` / `LLM_EXTRACT_MODEL`), keep the fast-model default for chat UX.
-- **Effort:** small.
+### 2.20 LLM provider consistency `[HARDEN]` ✅ DONE — PR #3 merged (`b98d6d9` + `85a3567`)
+- **What was:** chat (`services/chat.py`) and entity extraction (`pipelines/entity_extraction.py`) hardcoded `model="llama-3.3-70b-versatile"` instead of using settings; note about qwen reasoning tokens was a comment workaround.
+- **Fix applied:** made configurable via `LLM_CHAT_MODEL` / `LLM_EXTRACT_MODEL` in `apps/api/core/config.py:44-45` (default `qwen/qwen3.8-27b`), updated `services/chat.py:349` and `pipelines/entity_extraction.py:136`, added `apps/api/.env.example` entries and `apps/api/tests/test_llm_config.py`.
+- **PR:** #3 `feat: make llm models configurable` — `task-2.20-configurable-llm` → `main` (follow-up `85a3567 fix review feedback for llm config and comments`).
+- **Effort:** small — completed.
 
 ### 2.21 Error handling for SSE in UI `[HARDEN]`
 - **What:** chat page treats a non-OK `/messages` response as a generic failure; backend errors during stream are caught, but mid-stream network drops show only the generic message. Document-status SSE has keepalives but no client-side reconnection.
@@ -141,11 +144,11 @@ Actionable remaining work, ordered by demo value. Each item: **what**, **why**, 
 | P0 | **1.1 Prisma decision + cleanup** | repo coherence for the viva; do B unless you want frontend-local state |
 | P0 | **1.2 README refresh** | docs match reality when the evaluator reads them |
 | P1 | **2.2 Meet results into KB** | turns the meeting recorder from a demo gadget into an ingestion source |
-| P1 | **2.13 rate-limiter fix** | one line; viva question "does rate limiting actually work per user?" |
-| P1 | **2.15 `audit_log` writers** | dashboard activity feed is empty; dashboard is demo moment #1 |
+| P1 | ~~**2.13 rate-limiter fix**~~ ✅ PR #1 done | one line; viva question "does rate limiting actually work per user?" — **merged** |
+| P1 | ~~**2.15 `audit_log` writers**~~ ✅ PR #2 done | dashboard activity feed is empty; dashboard is demo moment #1 — **merged** |
 | P1 | **2.14 webhook scheduler + inbound auth** | unauthenticated inbound webhook can write to the KB — real risk |
 | P1 | 3.2 Retrieval eval harness | strongest technical talking point |
-| P1 | 2.20 LLM model config | removes hardcoded model + reasoning-model hazard |
+| P1 | ~~2.20 LLM model config~~ ✅ PR #3 done | removes hardcoded model + reasoning-model hazard — **merged** |
 | P1 | 4 bug list sweep (delete cleanup, chunk text, SSE reconnect) | robustness questions in viva |
 | P2 | 2.16 Alembic migrations, 2.17 structlog, 2.18 CSP, 2.19 frontend tests, 3.1 load test, 3.3 security pass | brief compliance + hardening |
 | P2 | 3.4 observability | nice-to-have |
