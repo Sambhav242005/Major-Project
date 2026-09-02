@@ -255,6 +255,85 @@ npx tsc --noEmit
 
 ---
 
+## Contributing
+
+> `main` is protected: `required_pull_request_reviews=1`, `dismiss_stale_reviews=true`, `enforce_admins=false`. Only the owner (`Sambhav242005`, admin) can push directly to `main` — everyone else (including AI agents acting as collaborators) **must** use a feature branch + PR. See `AGENTS.md` for agent-specific guardrails.
+
+### 1. Pick an issue & create a branch
+
+```bash
+git checkout main && git pull origin main
+git checkout -b feat/short-description   # feat/ | fix/ | docs/ | chore/ | refactor/ | test/
+# e.g. feat/graph-depth-slider, fix/chunk-page-number, docs/spec-sync
+```
+
+Branch naming: `type/kebab-case`. Keep branches short-lived — one concern per branch.
+
+### 2. Make changes & commit
+
+- Follow **Conventional Commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:` — subject ≤50 chars, imperative mood.
+- Keep commits atomic. Do not mix unrelated changes in one commit.
+- **Do not edit `BUILD_BRIEF.md`** — it is the locked semester spec. If you think it needs a change, open an issue first.
+- Prisma is gone (`8c72299` + `c5f225c`) — do not reintroduce `@prisma/*`, `better-sqlite3`, or `apps/web/prisma`. Frontend has no DB; backend is SQLAlchemy only.
+- Document new env vars in **both** `README.md#Environment Variables Reference` and the corresponding `.env.example`.
+
+### 3. Verify before opening a PR
+
+```bash
+# No Prisma regression
+grep -ri "prisma" apps/web/src && echo "FAIL" || echo "OK"
+
+# Backend tests (add tests alongside your feature)
+cd apps/api && python -m pytest tests/ -q
+# or targeted: python -m pytest tests/test_chunking.py -v
+
+# Frontend typecheck (when node_modules present)
+cd apps/web && npm run typecheck
+
+# If you touched retrieval/ingestion, re-check
+grep -n "chunk_index" apps/api/pipelines/embeddings.py  # should be 86,92
+grep -n "qwen/qwen3.8" apps/api/core/config.py docs/SPEC.md
+```
+
+If you changed behavior, update `docs/SPEC.md` (§8 gaps table) and `docs/TODO.md` atomically — not `BUILD_BRIEF.md`.
+
+### 4. Push & open a PR
+
+```bash
+git push origin feat/short-description
+gh pr create --base main --title "feat: concise summary" --body "Closes #<issue>"
+```
+
+- Describe **what** and **why**, not just what. Link the issue.
+- Keep the PR focused — one feature/fix per PR. Small PRs get reviewed faster.
+
+### 5. Review & merge
+
+- **If you are not the owner:** you cannot merge — the owner must approve (1 approval required, stale reviews are dismissed, conversation must be resolved). Do not use `admin` override.
+- **If you are the owner:** you may bypass (admin bypass enabled) but prefer `gh pr merge --squash` via PR anyway for history. Never `push --force` to `main` (`allow_force_pushes=false`).
+- After merge, clean up:
+
+```bash
+git checkout main && git pull origin main
+git branch -d feat/short-description
+git push origin --delete feat/short-description
+```
+
+### 6. Branch protection in one glance
+
+| Who | Can push directly to `main` | Must use PR | Can merge PR |
+|---|---|---|---|
+| Owner (`Sambhav242005`) | Yes (admin bypass) | No (but recommended) | Yes (after review if self-opened, instant if just docs) |
+| Collaborator / AI agent | No | Yes | No — needs owner approval |
+
+Check protection: `gh api repos/Sambhav242005/Major-Project/branches/main/protection --jq '{pr: .required_pull_request_reviews.required_approving_review_count, enforce: .enforce_admins.enabled}'`
+
+### 7. Questions or stuck?
+
+Open an issue → label `question` / `bug`. For major design changes, check `docs/RESEARCH_PROBLEM.md` (research framing) and `CONTEXT.md` (ubiquitous language) before proposing.
+
+---
+
 ## License
 
 This is a college semester project. Not licensed for production use.
