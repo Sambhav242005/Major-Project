@@ -13,9 +13,9 @@ A full-stack web application that transforms documents into a navigable knowledg
 | Frontend | Next.js 15 (App Router), Tailwind CSS, shadcn/ui, Zustand, TanStack Query |
 | Backend | Python 3.11+, FastAPI, SQLAlchemy (async), Pydantic v2 |
 | Auth | Supabase Auth (Google OAuth + email/password) |
-| Database | PostgreSQL (Supabase), SQLite (local dev for Prisma) |
-| Vector Store | ChromaDB |
-| LLM | OpenAI GPT-4o-mini (primary), Ollama llama3.1 (fallback) |
+| Database | PostgreSQL (Supabase) prod / SQLite (dev forced via `ENVIRONMENT=development`) — SQLAlchemy is the single ORM; no frontend DB |
+| Vector Store | ChromaDB (`PersistentClient`, single `knowledge_base` collection, `where={"project_id": ...}` isolation) |
+| LLM | OpenAI-compatible (Groq / Ollama) — `LLM_CHAT_MODEL` / `LLM_EXTRACT_MODEL` default `qwen/qwen3.8-27b`, embeddings `qwen3-embedding:4b` |
 | Agents | LangGraph |
 | MCP | Model Context Protocol (FastMCP) |
 
@@ -123,15 +123,21 @@ NEXT_PUBLIC_MOCK_AUTH="true"
 - Click **"Try Demo (Auto-Login)"** on the sign-in page to skip auth
 - No Google OAuth or Supabase project required
 
-### LLM Provider
+### LLM Provider (OpenAI-compatible)
 
 ```bash
-# Use OpenAI (requires API key)
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-...
+# Groq example (cloud, OpenAI-compatible)
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_API_KEY=gsk-...
+LLM_CHAT_MODEL=qwen/qwen3.8-27b
+LLM_EXTRACT_MODEL=qwen/qwen3.8-27b
+EMBEDDING_BASE_URL=https://api.groq.com/openai/v1
+EMBEDDING_MODEL=qwen3-embedding:4b
 
-# Use Ollama (local, no API key needed)
-LLM_PROVIDER=ollama
+# Ollama example (local, no API key)
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen3:4b-instruct
+EMBEDDING_BASE_URL=http://localhost:11434/v1
 # Ensure Ollama is running: ollama serve
 ```
 
@@ -154,11 +160,10 @@ MajorProject/
 │       ├── src/
 │       │   ├── app/            # App Router pages
 │       │   ├── components/     # UI components (shadcn/ui + custom)
-│       │   ├── lib/            # Supabase client, Prisma, validators
+│   │   ├── lib/            # Supabase client, validators, API client
 │       │   ├── stores/         # Zustand stores
 │       │   └── middleware.ts   # Auth + security middleware
-│       ├── e2e/                # Playwright E2E tests
-│       └── prisma/             # SQLite schema
+│       └── e2e/                # Playwright E2E tests
 ├── infra/
 │   ├── schema.sql              # Supabase PostgreSQL schema
 │   └── docker-compose.yml      # Local PostgreSQL
@@ -217,19 +222,22 @@ npx tsc --noEmit
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ENVIRONMENT` | No | `development` | `development` or `production` |
+| `ENVIRONMENT` | No | `development` | `development` or `production` (dev forces `sqlite+aiosqlite:///./akgb.db`) |
 | `SUPABASE_URL` | Yes* | — | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Yes* | — | Supabase anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes* | — | Supabase service role key |
 | `SUPABASE_JWKS_URL` | Yes* | — | JWKS endpoint for JWT validation |
-| `MOCK_AUTH` | No | `false` | Bypass Supabase auth (dev only) |
-| `DATABASE_URL` | Yes | `localhost:5432/akgb` | PostgreSQL connection string |
+| `MOCK_AUTH` | No | `false` | Bypass Supabase auth (dev only, fail-fast in prod) |
+| `DATABASE_URL` | Yes | `postgresql+asyncpg://…` (prod) | PostgreSQL (prod); dev forced to SQLite `akgb.db` |
 | `CHROMA_PATH` | No | `./chroma_data` | ChromaDB storage path |
-| `LLM_PROVIDER` | No | `openai` | `openai` or `ollama` |
-| `OPENAI_API_KEY` | Yes* | — | OpenAI API key |
-| `OPENAI_MODEL` | No | `gpt-4o-mini` | OpenAI model name |
-| `OLLAMA_BASE_URL` | No | `localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | No | `llama3.1` | Ollama model name |
+| `LLM_API_KEY` | No | — | LLM API key (Groq / OpenAI) |
+| `LLM_BASE_URL` | No | `http://localhost:11434/v1` | OpenAI-compatible base URL |
+| `LLM_MODEL` | No | `qwen3:4b-instruct` | Base LLM model |
+| `LLM_CHAT_MODEL` | No | `qwen/qwen3.8-27b` | Chat/RAG model |
+| `LLM_EXTRACT_MODEL` | No | `qwen/qwen3.8-27b` | Entity extraction model |
+| `EMBEDDING_API_KEY` | No | — | Embeddings API key |
+| `EMBEDDING_BASE_URL` | No | `http://localhost:11434/v1` | Embeddings base URL |
+| `EMBEDDING_MODEL` | No | `qwen3-embedding:4b` | Embeddings model |
 | `CORS_ORIGINS` | No | `localhost:3000` | Allowed CORS origins (JSON array) |
 
 \* Required unless `MOCK_AUTH=true`
@@ -238,7 +246,6 @@ npx tsc --noEmit
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | `file:./dev.db` | Prisma database URL |
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes* | — | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes* | — | Supabase anon key |
 | `NEXT_PUBLIC_MOCK_AUTH` | No | `false` | Enable demo auto-login |

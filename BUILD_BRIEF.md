@@ -22,7 +22,7 @@ If feature doesn't serve one those six moments, treat it as stretch scope, not c
 | Layer | Technology | Why |
 |---|---|---|
 | Frontend | Next.js 15+ (App Router) + TypeScript + Tailwind CSS + shadcn/ui + Zustand + TanStack Query | Matches an already-proven stack; App Router gives clean server/client component split streaming chat |
-| Graph visualization | React Flow | Lighter than Cytoscape for an MVP node/edge count, easier custom node styling |
+| Graph visualization | reagraph | Force-directed canvas (migrated from React Flow — see SPEC §8); lighter than Cytoscape for MVP node/edge count |
 | Backend | Python + FastAPI (async) + Pydantic v2 + Uvicorn | Matches existing FastAPI experience; async is needed streaming chat concurrent ingestion |
 | Vector store | **ChromaDB** (`PersistentClient`, on-disk, no separate service to run) | As requested — replaces original proposal's dedicated vector store |
 | Relational store | **PostgreSQL via Supabase** | Replaces original proposal's Neo4j. See deviation note below. |
@@ -253,7 +253,7 @@ Enable Row Level Security on every table scoped by `project_id`, policies keyed 
 
 ### ChromaDB
 
-One collection, `knowledge_base`, metadata per vector: `{project_id, document_id, chunk_id, page_number}`. Query with `where={"project_id": ...}` so projects never bleed into each other's retrieval. Use `chromadb.PersistentClient(path="./chroma_data")` for MVP — no separate service run or deploy.
+One collection, `knowledge_base`, metadata per vector: `{project_id, document_id, chunk_index, page_number}` (ID is `"{document_id}_chunk_{index}"`). Query with `where={"project_id": ...}` so projects never bleed into each other's retrieval. Use `chromadb.PersistentClient(path="./chroma_data")` for MVP — no separate service run or deploy.
 
 ## 6. Backend API — Routers
 

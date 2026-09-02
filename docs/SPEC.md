@@ -126,7 +126,7 @@ Project 1──* WebhookSubscription 1──* WebhookDelivery
 
 ## 5. Prisma — Why It's Not Being Used (The Honest Story)
 
-**Short version:** Prisma was scaffolded, then **removed** in the latest commit (`8c72299`). The dependencies remain installed and the docs still mention it, but nothing uses it. This is a docs-vs-code inconsistency.
+**Short version:** Prisma was scaffolded, then **removed** in `8c72299`, and fully cleaned up in this sync (`f97533e` + this commit). Nothing uses it now.
 
 **The full evidence (from git history):**
 
@@ -137,14 +137,14 @@ Project 1──* WebhookSubscription 1──* WebhookDelivery
   - `apps/web/src/lib/prisma.ts` — `PrismaClient` singleton with the better-sqlite3 driver adapter.
   - `apps/web/dev.db` — the SQLite database file it created.
 - `8c72299 feat: multi-project management, API error resilience, and robustness fixes` **deleted** all five of those files (115 lines removed: schema, migration, config, client, db file).
-- What remained: `@prisma/client`, `@prisma/adapter-better-sqlite3`, `prisma`, `better-sqlite3` in `package.json`, `DATABASE_URL="file:./dev.db"` in `apps/web/.env` + `.env.example`, and `/src/generated/prisma` in `apps/web/.gitignore`.
+- What remained after `8c72299` (now also removed): `@prisma/client`, `@prisma/adapter-better-sqlite3`, `prisma`, `better-sqlite3` in `package.json`, `DATABASE_URL="file:./dev.db"` in `apps/web/.env` + `.env.example`, and `/src/generated/prisma` in `apps/web/.gitignore` — all removed in this docs-sync (Prisma Option B).
 - `apps/web/.agents/skills/prisma-*` (in .claude/.continue/.windsurf too) are just skill docs — Prisma's own onboarding material, not project code.
 
 **Why it was removed (reconstructed from the commit itself):** the commit is titled "multi-project management, API error resilience, and robustness fixes" — the frontend stopped talking to its own database and now talks to the backend API (`src/lib/api/client.ts`, project store). A frontend-local Prisma DB is redundant when the backend owns all data; the schema it carried (`Document`/`Chunk` only) duplicated the backend's real schema and would have drifted.
 
-**Why it looks like it's still in use (doc confusion):** `README.md` lists "SQLite (local dev for Prisma)" and `apps/web/.env.example` documents `DATABASE_URL`. Both are stale — README even describes `apps/web/prisma/` in the structure, which no longer exists.
+**Why it looked like it was still in use (doc confusion, now fixed):** `README.md` previously listed "SQLite (local dev for Prisma)" and `apps/web/.env.example` documented `DATABASE_URL`; `README` even described `apps/web/prisma/` in the structure. Those have been corrected in this sync.
 
-**Bottom line for your friend:** if they search for "Prisma" they'll find dependencies, env vars, and skill docs — but zero `import` statements. Prisma is dead code / a documented intention, not the storage layer. SQLAlchemy on the backend is the one true ORM.
+**Bottom line:** if you search for "Prisma" you will find only historical evidence and skill docs — zero `import` statements and zero deps (`grep -r prisma apps/web/src → 0`, `grep -E prisma apps/web/package.json → 0`). SQLAlchemy on the backend is the single ORM.
 
 ---
 
@@ -188,7 +188,7 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 1 | "SQLite (local dev for Prisma)" + `apps/web/prisma/` structure | Prisma deleted in `8c72299`; no `schema.prisma` anywhere | **Stale docs** |
 | 2 | `DATABASE_URL` env var for frontend | No consumer in `apps/web/src` | **Stale env** |
 | 3 | "Supabase Storage" for files (`storage_path`) | `storage_path` is just a generated path string; `documents.py` has `# TODO: Upload to Supabase Storage` — files live only in request memory; retry requires re-uploading | **Not implemented** |
-| 4 | Backend LLM: OpenAI / Ollama | `apps/api/.env` uses **Groq** (OpenAI-compatible) with model `qwen/qwen3.6-27b`; embeddings from local Ollama | **Differs from README defaults** (code supports both; env differs) |
+| 4 | Backend LLM: OpenAI / Ollama | `apps/api/.env` uses **Groq** (OpenAI-compatible) with model `qwen/qwen3.8-27b` (`LLM_CHAT_MODEL`/`LLM_EXTRACT_MODEL`, PR #3); embeddings `qwen3-embedding:4b` | **Differs from README defaults** (code supports both; env differs) |
 | 5 | ChromaDB "on disk, no separate service" | True — `PersistentClient(path=CHROMA_PATH)` | ✅ Matches |
 | 6 | Postgres + NetworkX over Neo4j | True — ADR-0001, `services/knowledge.py` | ✅ Matches |
 | 7 | Supabase Auth w/ backend JWT validation | True — ADR-0003, `core/security.py` | ✅ Matches |
@@ -204,7 +204,7 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 17 | Frontend build fails with mock auth in prod | Partially — `next.config.ts` behavior; middleware would use mock in prod if env set | **Mostly matches** |
 | 18 | `profiles` row per user | True — `core/deps.py` upsert | ✅ Matches |
 
-**Stale-doc cleanup TODO:** `README.md` (Prisma, model names, LLM defaults), `apps/web/.env` + `.env.example` (Prisma `DATABASE_URL`), root `akgb.db` (stale dev artifact).
+**Stale-doc cleanup TODO:** `README.md` Prisma/model fixes done (this sync); `apps/web/.env.example` + `.gitignore` Prisma `DATABASE_URL` removed; `root akgb.db` verified absent (gitignored `*.db`, no committed file).
 
 ---
 

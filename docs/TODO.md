@@ -1,6 +1,6 @@
 # TODO — What's Left in the AI Knowledge Graph Builder
 
-Actionable remaining work, ordered by demo value. Each item: **what**, **why**, **where**, **effort**. Verified against the current code (commit `bb97cbf` — PRs #1/#2/#3 merged). Prior commit was `8c72299`.
+Actionable remaining work, ordered by demo value. Each item: **what**, **why**, **where**, **effort**. Verified against current code (commit `f97533e` — code at `bb97cbf` + docs sync; Prisma removal/build-brief fixes pending verification). Prior commit was `8c72299`.
 
 **Legend:** `[BUG]` broken/risky now · `[MISSING]` documented but absent · `[STALE]` docs/code mismatch · `[HARDEN]` polish/robustness · `[NICE]` stretch
 
@@ -8,22 +8,20 @@ Actionable remaining work, ordered by demo value. Each item: **what**, **why**, 
 
 ## 1. Unfinished & Stale — Fix First (confuses people reading the repo)
 
-### 1.1 Prisma — decide and clean up `[STALE]`
-- **What happened:** Prisma was fully scaffolded in `4e780e5` (schema, migration, `prisma.config.ts`, `src/lib/prisma.ts`, `dev.db`) and **deleted in `8c72299`**. Dependencies, env vars, and docs remain.
-- **Why it matters:** a reader finds `@prisma/client`, `DATABASE_URL="file:./dev.db"`, and skill docs and assumes Prisma is the DB — it isn't. See `docs/SPEC.md §5` for the full evidence.
-- **Where:** `apps/web/package.json` (deps), `apps/web/.env`, `apps/web/.env.example`, `apps/web/.gitignore` (`/src/generated/prisma`), `README.md` §Tech Stack + §Project Structure.
-- **Options:**
-  - **A — Re-enable Prisma (frontend-local):** recreate `prisma/schema.prisma`, `prisma.config.ts`, `src/lib/prisma.ts` (all were in git history — recoverable). Use it for lightweight frontend data (settings, UI prefs). Needs `npx prisma migrate dev` to recreate `dev.db`.
-  - **B — Remove Prisma entirely (recommended):** drop the 4 packages, the `DATABASE_URL` line from both env files, the `.gitignore` line; fix `README.md` (tech-stack table, structure tree, env table). The backend SQLAlchemy layer owns all data; frontend talks to the API.
-- **Effort:** A: medium · B: small.
+### 1.1 Prisma — decide and clean up `[STALE]` ✅ DONE — Option B executed (this sync)
+- **What happened:** Prisma was fully scaffolded in `4e780e5` (schema, migration, `prisma.config.ts`, `src/lib/prisma.ts`, `dev.db`) and **deleted in `8c72299`**. Dependencies, env vars, and docs remained until this sync.
+- **Why it mattered:** a reader found `@prisma/client`, `DATABASE_URL="file:./dev.db"`, and skill docs and assumed Prisma is the DB — it wasn't. See `docs/SPEC.md §5` for the full evidence.
+- **Fix applied:** **Option B — Remove Prisma entirely:** removed `@prisma/client`, `@prisma/adapter-better-sqlite3`, `prisma`, `better-sqlite3`, `@types/better-sqlite3` from `apps/web/package.json`, `DATABASE_URL` from `apps/web/.env.example`, `/src/generated/prisma` from `apps/web/.gitignore`, and `prisma/` references + LLM env tables from `README.md` and `docs/HOW_IT_WORKS.md`. `BUILD_BRIEF.md` Graph visualization and Chroma metadata also corrected (`React Flow → reagraph`, `chunk_id → chunk_index`).
+- **Where:** `apps/web/package.json`, `apps/web/.env.example`, `apps/web/.gitignore`, `README.md`, `docs/HOW_IT_WORKS.md`, `BUILD_BRIEF.md`.
+- **Verified:** `grep -r prisma apps/web/src → 0`, `grep -E prisma apps/web/package.json → 0`, `grep DATABASE_URL apps/web/.env.example → 0`.
 
-### 1.2 Stale README `[STALE]`
-- **What:** README still claims Prisma/SQLite frontend DB, `llama3.1`/`gpt-4o-mini` LLM defaults, and the `apps/web/prisma/` directory.
-- **Fix:** align with reality — SQLAlchemy/SQLite backend, Groq/Ollama OpenAI-compatible provider pattern, actual env tables (see `docs/SPEC.md §8`).
+### 1.2 Stale README `[STALE]` ✅ DONE — fixed in this sync
+- **What was:** README claimed Prisma/SQLite frontend DB, `llama3.1`/`gpt-4o-mini` LLM defaults, and the `apps/web/prisma/` directory.
+- **Fix applied:** tech-stack DB row → `PostgreSQL prod / SQLite dev forced via ENVIRONMENT`, Vector Store → `PersistentClient single knowledge_base`, LLM → `OpenAI-compatible qwen/qwen3.8-27b`; LLM Provider block → Groq/Ollama examples with `LLM_CHAT_MODEL`/`EMBEDDING_*`; `lib/` prisma reference removed; `prisma/` tree removed; backend/frontend env tables rewritten to match `core/config.py` (see `docs/SPEC.md §8`).
 
-### 1.3 Stale root `akgb.db` `[STALE]`
-- **What:** a committed SQLite file at repo root — leftover from an older backend run (the live dev DB is `apps/api/akgb.db`).
-- **Fix:** delete (it's gitignored-adjacent cruft; verify nothing references it: `grep -r "akgb.db" apps/` first).
+### 1.3 Stale root `akgb.db` `[STALE]` — verified absent
+- **What:** was a committed SQLite file at repo root in older runs (live dev DB is `apps/api/akgb.db`, now gitignored via `*.db`). `find . -name "*.db"` and `git ls-files | grep db` both return empty — no committed file exists today.
+- **Fix:** no deletion needed; verify and close. Keep `*.db` in `.gitignore`.
 
 ---
 

@@ -25,7 +25,7 @@ MajorProject/
 │   └── docker-compose.yml # Local PostgreSQL (optional)
 ├── docs/             # ADRs + this guide
 ├── research/         # Research notes
-├── akgb.db           # SQLite dev database (backend)
+├── akgb.db           # SQLite dev database (backend, gitignored, created on first run via `init_db.py`)
 ├── BUILD_BRIEF.md    # Project specification
 ├── CONTEXT.md        # Domain glossary + key relationships
 └── CHANGELOG.md      # Build log
@@ -54,7 +54,7 @@ MajorProject/
 
 - **Frontend → Backend**: every data call goes through `apps/web/src/lib/api/client.ts` (`apiFetch`), which injects the Supabase JWT as a `Bearer` token and appends `?project_id=` when a project is active.
 - **Backend → DB**: SQLAlchemy 2.0 async ORM (`db/models.py` + `db/session.py`). Query pattern is `select(...)` + `await db.execute(...)` — no raw SQL.
-- **Backend → ChromaDB**: chunk vectors live in a single `knowledge_base` collection with `{project_id, document_id, page_number}` metadata; per-project isolation via `where={"project_id": ...}`.
+- **Backend → ChromaDB**: chunk vectors live in a single `knowledge_base` collection with `{project_id, document_id, chunk_index, page_number}` metadata (ID is `"{document_id}_chunk_{index}"`); per-project isolation via `where={"project_id": ...}`.
 - **Backend → LLM**: `pipelines/llm_client.py` talks to any OpenAI-compatible endpoint (`LLM_BASE_URL`/`EMBEDDING_BASE_URL` — Ollama by default, Groq works too).
 
 ### The two pipelines (the heart of the app)
@@ -80,7 +80,7 @@ The project deliberately supports **two run modes** — this is the "two env" th
 
 ### 3.1 Development (`ENVIRONMENT=development`)
 
-- **Database: SQLite** — `core/config.py` *forces* `DATABASE_URL = "sqlite+aiosqlite:///./akgb.db"` whenever `ENVIRONMENT == "development"`. The file is `apps/api/akgb.db` (and a root `akgb.db` in older runs). Zero setup, tables created automatically by `python init_db.py` (or at first run).
+- **Database: SQLite** — `core/config.py` *forces* `DATABASE_URL = "sqlite+aiosqlite:///./akgb.db"` whenever `ENVIRONMENT == "development"`. The file is `apps/api/akgb.db` (gitignored, created on first run via `init_db.py` or auto-create). Zero setup.
 - **Auth: Mock** — `MOCK_AUTH=true` accepts *any* Bearer token and maps it to the demo user `a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11`. The frontend `src/lib/supabase/client.ts` swaps in a fake Supabase client and `middleware.ts` checks a `mock-session` cookie instead of real sessions. The UI shows **"Try Demo (Auto-Login)"**.
 - **LLM: local Ollama** by default (`LLM_BASE_URL=http://localhost:11434/v1`, model `qwen3:4b-instruct`).
 
@@ -110,7 +110,7 @@ One codebase, two `.env` files (`apps/api/.env` + `apps/web/.env.local`), one `E
 
 ## 4. Database Layer: Prisma vs SQLAlchemy (Important)
 
-**Prisma (frontend, `apps/web`)**: `@prisma/client` v7 and `better-sqlite3` are installed and `DATABASE_URL="file:./dev.db"` is documented in `apps/web/.env.example`, **but there is no `schema.prisma` and no Prisma code is imported anywhere in `src/`** — it is a *declared but not yet wired up* dependency. The skill docs under `apps/web/.agents/skills/prisma-*` (prisma-postgres-setup, prisma-database-setup, prisma-upgrade-v7) show the intent: connect the frontend to Prisma (SQLite locally, Prisma Postgres in production). Today the frontend talks to the backend API only — Prisma is the planned next step, not the current storage layer.
+**Prisma (frontend, `apps/web`) — removed**: Prisma was fully scaffolded in `4e780e5` (schema, migration, `prisma.config.ts`, `src/lib/prisma.ts`, `dev.db`) and deleted in `8c72299` (115 lines removed). `@prisma/client`, `@prisma/adapter-better-sqlite3`, `prisma`, `better-sqlite3` and `DATABASE_URL="file:./dev.db"` were dead code and are now removed from `package.json`/`.env.example`/`.gitignore`. `grep -r "prisma" apps/web/src` → 0 hits. The frontend talks to the backend API only — SQLAlchemy is the single ORM. See `docs/SPEC.md §5` for full evidence. Skill docs under `apps/web/.agents/skills/prisma-*` remain as generic onboarding material, not project code.
 
 **SQLAlchemy (backend, `apps/api/db/`)**: this is the **real, working ORM**:
 
@@ -245,16 +245,16 @@ Backend `apps/api/.env` (from `core/config.py`):
 | `DATABASE_URL` | forced to SQLite | `postgresql+asyncpg://…` | Database connection |
 | `MOCK_AUTH` | `true` | `false` | Skip Supabase JWT validation |
 | `SUPABASE_URL/ANON_KEY/SERVICE_ROLE_KEY/JWKS_URL` | optional | required | Supabase auth |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Ollama local | OpenAI/Groq | Text generation |
-| `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` | Ollama local | OpenAI/Groq | Embeddings |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Ollama local (`qwen3:4b-instruct`) | OpenAI/Groq | Text generation (base) |
+| `LLM_CHAT_MODEL` / `LLM_EXTRACT_MODEL` | `qwen/qwen3.8-27b` | `qwen/qwen3.8-27b` | Chat / extraction models (PR #3) |
+| `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` | Ollama local (`qwen3-embedding:4b`) | OpenAI/Groq | Embeddings |
 | `CHROMA_PATH` | `./chroma_data` | `./chroma_data` | Vector store location |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | frontend URL | CORS allowlist |
 
-Frontend `apps/web/.env.local`:
+Frontend `apps/web/.env.local` (no DB — API only):
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Prisma (planned) — `file:./dev.db` dev, Postgres prod |
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase auth (not needed in mock mode) |
 | `NEXT_PUBLIC_MOCK_AUTH` | `"true"` enables demo auto-login |
 | `NEXT_PUBLIC_APP_URL` | App base URL |
@@ -308,7 +308,7 @@ Open `http://localhost:3000` → "Try Demo (Auto-Login)" → upload a PDF → wa
 ## 11. Common Questions
 
 - **Why SQLite AND Postgres?** Zero-friction dev vs. real multi-user deployment — same ORM models, one env flag.
-- **Why Prisma if nothing uses it?** It's the documented plan for the frontend's own DB access (SQLite now → Prisma Postgres later). Dependencies + env are ready; `schema.prisma` and client wiring don't exist yet.
+- **Why was Prisma removed?** It was fully scaffolded then deleted in `8c72299` — frontend-local DB duplicated the backend's SQLAlchemy schema. Backend is now the single source of truth; see `docs/SPEC.md §5`.
 - **Why NetworkX instead of Neo4j?** MVP graph sizes don't justify a graph server; rows in Postgres are simpler to back up/query, and the schema is Neo4j-migration-ready.
 - **Why one ChromaDB collection?** Single `knowledge_base` collection with `where={"project_id": ...}` metadata filtering — simpler to operate, projects can't bleed into each other.
 - **Why is ingestion async?** So upload returns instantly, the dashboard shows real status (pending→processing→processed/failed) via SSE, and the server stays free for chat streaming.
