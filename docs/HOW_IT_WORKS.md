@@ -216,6 +216,30 @@ Why this design: for the MVP's few-thousand-entity graphs, a full graph database
 
 Live progress is streamed to the UI via **SSE** (`GET /documents/{id}/stream`) — stage events `processing → parsing → chunking → embedding → extracting_entities → complete`.
 
+### Where embeddings are called — and do they create the graph?
+
+**No — embeddings do NOT create the graph.** They serve vector search only. Graph vertices/edges are created by a separate step (`pipelines/entity_extraction.py`).
+
+| Concern | Code | What it does |
+|---|---|---|
+| **Write (ingestion)** | `pipelines/embeddings.py:64` `upsert_chunks()` called from `pipelines/ingestion.py:97` | Embeds each `~600-token` chunk via `EMBEDDING_MODEL` (`qwen3-embedding:4b`) and `upsert`s into Chroma `knowledge_base` collection with `where={"project_id":...}` isolation. Returns `chroma_id = "{document_id}_chunk_{index}"` stored in `document_chunks.chroma_id`. |
+| **Read (semantic search)** | `pipelines/embeddings.py:105` `query_chunks()` called from `services/knowledge.py:34` `search()` and `services/chat.py:263` `send_message()` | Embeds the user query, runs `collection.query(..., where={"project_id": project_id}, n_results=8)` in a threadpool, enriches with `documents.filename` from Postgres. |
+| **Embedding lifecycle** | `pipelines/embeddings.py:30` `get_chroma_client()`, `pipelines/embeddings.py:9` `OpenAICompatibleEmbeddingFunction` | `PersistentClient(path=CHROMA_PATH)` single collection, cosine distance; impl is OpenAI-compatible HTTP (`POST /embeddings`) so Ollama/Groq/OpenAI are interchangeable. |
+| **Graph creation** | `pipelines/entity_extraction.py:240` `extract_entities_from_chunks()` called from `pipelines/ingestion.py:136` | `spaCy NER` + LLM (`LLM_EXTRACT_MODEL`) → merge/dedup `(project_id, name, type)` → `entities` rows + `entity_mentions` per chunk occurrence + `relationships` (or `co_occurs_with` fallback `pipelines/entity_extraction.py:213`). |
+| **Graph deletion** | `pipelines/embeddings.py:177` `delete_document_chunks()` + cascade in `services/documents.py` | Deleting a doc removes its Chroma vectors *and* its `entities`/`relationships`/`mentions` (if not shared). |
+
+> **Mental model:** `pipelines/ingestion.py:46` is `parse → chunk → EMBED (Chroma) → STORE CHUNKS (Postgres) → EXTRACT GRAPH (Postgres) → mark processed`. Embed and graph are **parallel branches after chunking**, not sequential dependencies — if LLM extraction fails, the doc is still `processed` (`pipelines/ingestion.py:144` non-fatal) and searchable via embeddings, just with no new graph edges.
+
+### Do documents create the graph?
+
+**Yes — documents are the *only* source of the graph.** No docs → empty graph (`services/knowledge.py:135` `get_graph` loads all `entities`/`relationships` for the project; zero rows = empty `nx.DiGraph`). Each processed document *adds* nodes/edges via dedup/upsert:
+
+- New `name+type` → new `entities` row.
+- Existing `name+type` in same project → reused (no duplicate) — `pipelines/entity_extraction.py:298` `select(Entity).where(project_id, name.ilike, type)`.
+- Edges deduped on `(project_id, source, target, relation_type)` — `pipelines/entity_extraction.py:352`.
+
+Chat *reads* the graph (1-hop expansion `services/chat.py:169` `_expand_via_graph`) but never writes it.
+
 ### How the graph is *read*
 
 - `GET /kb/graph?entity_id=X&depth=2` → NetworkX subgraph → JSON `{nodes, edges}` → **reagraph** (`GraphCanvas`, force-directed layout) in `apps/web/src/app/graph/page.tsx`, colored by entity type, with search, type filters, depth slider, and a details panel (entity info + source sections).
@@ -313,4 +337,7 @@ Open `http://localhost:3000` → "Try Demo (Auto-Login)" → upload a PDF → wa
 - **Why one ChromaDB collection?** Single `knowledge_base` collection with `where={"project_id": ...}` metadata filtering — simpler to operate, projects can't bleed into each other.
 - **Why is ingestion async?** So upload returns instantly, the dashboard shows real status (pending→processing→processed/failed) via SSE, and the server stays free for chat streaming.
 - **What makes chat "graph-aware"?** Beyond vector search, it pulls entities from retrieved chunks, expands to their one-hop neighbors through `relationships`, and feeds that context to the LLM — answers surface connected concepts, not just matched text.
+- **Does embedding create the graph?** **No.** Embeddings (`pipelines/embeddings.py:64` `upsert_chunks`) only build the vector index in Chroma for semantic search (`pipelines/embeddings.py:105` `query_chunks`). The graph (`entities` + `relationships` in Postgres) is built by a separate step `pipelines/entity_extraction.py:240` (spaCy + LLM) called from `pipelines/ingestion.py:136`. If extraction fails, the document is still searchable via embeddings, just with no new graph nodes. See §6.3.
+- **Do documents create the graph?** **Yes — exclusively.** Every processed document contributes nodes/edges; no docs = empty graph (`services/knowledge.py:135`). Duplicates are deduped per `(project_id, name, type)` (`pipelines/entity_extraction.py:298`). Chat and search only *read* the graph (1-hop expansion in `services/chat.py:169`), they never write it. See §6.4.
+- **Where is embedding called?** Write: `pipelines/ingestion.py:97` → `pipelines/embeddings.py:64` `upsert_chunks`. Read: `services/knowledge.py:34` `search()` and `services/chat.py:263` via `pipelines/embeddings.py:105` `query_chunks`. Client: `pipelines/embeddings.py:30` `PersistentClient(path=CHROMA_PATH)` + `pipelines/embeddings.py:9` `OpenAICompatibleEmbeddingFunction` (`POST /embeddings`).
 - **Where's the MCP server?** Nowhere yet. `core/oauth.py` (OAuth 2.0 client + PKCE) and the `/mcp/connections` CRUD are real, but the FastMCP server and MCP client were never written — `apps/api/mcp/` is an empty package. Details + build plan: `docs/SPEC.md §12` and `docs/TODO.md §2.1`.
