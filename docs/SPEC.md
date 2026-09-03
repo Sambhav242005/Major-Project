@@ -298,20 +298,21 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 | Projects CRUD + membership | ✅ | `routers/projects.py` |
 | Meetings: client-side recorder → `/meetings/analyze` (transcribe + summarize), sync stub, in-memory listing | ⚠️ | `routers/meetings.py`; results never enter the KB (§12.2) |
 
-### 12.5 Search / RAG / Graph — ✅ fully built
+### 12.5 Search / RAG / Graph — ✅ built, ⚠️ no health / no sentence evidence
 
 | Piece | Status | Evidence |
 |---|---|---|
 | Semantic search (Chroma + Postgres enrichment) | ✅ | `services/knowledge.py` |
 | Graph traversal (NetworkX k-hop subgraphs) | ✅ | `services/knowledge.py::get_graph` |
 | RAG chat with 1-hop graph expansion + citations + SSE | ✅ | `services/chat.py` |
+| **Knowledge health (conflict / stale / invalid) + sentence provenance + pinned** | ❌ missing | nothing in `pipelines/entity_extraction.py:339,368` (constants `0.8/0.7`), `services/knowledge.py:135` `nx.DiGraph` no filter, `services/chat.py:263` no verifier; `grep conflict\|stale → 0` outside `services/dashboard.py:112` pipeline health — see `docs/TODO.md §2.22–§2.28`, `docs/RESEARCH_PROBLEM.md:62,112` — hypothesis untestable until `TODO §3.6` benchmark |
 
 ### 12.6 Migrations & Observability — ⚠️ gaps
 
 | Piece | Status | Evidence |
 |---|---|---|
 | Alembic: config + `001_initial_schema.py` exist | ✅ | `migrations/` |
-| **Alembic migration drift** — `001_initial_schema.py` is frozen at first-commit state; new tables (`agent_memory`, `agent_checkpoints`, `agent_skills`, `agent_run_traces`, `mcp_auth_tokens`, `webhook_*`, `project_memory_shares`, `inbound_webhooks`, `refinement_*`, `mcp_connections` changes) **were never added as migrations**; dev works only via `init_db.py` `create_all`, prod SQLite-vs-Postgres drift risk | ⚠️ | `migrations/versions/001_initial_schema.py` vs `db/models.py` |
+| **Alembic migration drift** — `001_initial_schema.py` is frozen at first-commit state; new tables (`agent_memory`, `agent_checkpoints`, `agent_skills`, `agent_run_traces`, `mcp_auth_tokens`, `webhook_*`, `project_memory_shares`, `inbound_webhooks`, `refinement_*`, `mcp_connections` changes) **were never added as migrations**; dev works only via `init_db.py` `create_all`, prod SQLite-vs-Postgres drift risk. **Blocks `TODO §2.22–§2.28` health schema** | ⚠️ | `migrations/versions/001_initial_schema.py` vs `db/models.py` |
 | **`structlog` in requirements but unused** — no `request_id` threading anywhere (grep: zero imports); Sentry not configured; `api.log` exists | ⚠️ | `requirements.txt`, `main.py` |
 | `core/errors.py` AppError hierarchy + handler | ✅ | used by routers |
 
@@ -324,6 +325,17 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 | Rate limits (upload 30/min, chat 60/min, mock-login 10/min) | ✅ (per-user key fixed PR #1) | `routers/*.py` + `core/rate_limit.py:16` |
 | **CSP `connect-src` hardcodes `http://localhost:8000`** — breaks any deployed backend origin until edited | ⚠️ | `security_headers.py` |
 | **`GET /documents/{id}/stream` SSE accepts token via `?token=` query param** — tokens can leak into access logs/proxies; documented EventSource limitation, but worth noting | ⚠️ | `routers/documents.py` |
+
+### 12.8 Knowledge Health / Pinned / Evidence — ❌ not implemented (research gap)
+
+| Piece | Status | Evidence |
+|---|---|---|
+| Knowledge health mechanism (`conflict`/`stale`/`invalid`/`low_evidence` + `health_status`/`verification_status` + `knowledge_health_checks`) | ❌ | `grep -rn "health.*check\|conflict\|stale" apps/api --include="*.py"` only hits `services/dashboard.py:112` pipeline health; ingestion `pipelines/ingestion.py:136` has no health nudge, `services/knowledge.py:135` `get_graph` loads all rows unfiltered — `docs/TODO.md §2.22` |
+| Pinned / protected tag (`is_pinned`, `pinned_by/at/reason`, `requires_review` on conflict, exempt from stale auto-retire) | ❌ | no `is_pinned` column anywhere; `grep -rn "is_pinned\|pinned" apps/api --include="*.py"` → 0 — `docs/TODO.md §2.23`, `docs/RESEARCH_PROBLEM.md:112` |
+| Sentence-level provenance (`entity_mentions.span_start/end`, `relationship_evidence` M2M, `source_document_id` currently doc-level only) | ❌ | `entity_mentions` has only `mention_text` + `chunk_id` chunk-level (~600 tokens `pipelines/chunking.py:56`); citations `chat_messages.citations` block-level `{chunk_id,page}` `db/models.py:171`; `section_index` column never written — `docs/TODO.md §2.24`, `docs/RESEARCH_PROBLEM.md:114` |
+| Temporal validity (`valid_from/valid_until`, `last_seen_at`, `document.effective_date/supersedes`) + source reliability | ❌ | `created_at` insertion-only, no `valid_*`/`updated_at`; `grep valid_from\|source_reliability apps/api/db/models.py` → 0 — `docs/TODO.md §2.25–§2.26` |
+| Health scanner + RAG verification gate (post-extraction nudge, periodic loop, retrieval-time `citations[].trust`) | ❌ | no `pipelines/kg_health.py`/`services/knowledge_health.py`/`pipelines/health_scanner.py`; `services/chat.py:263` `top_k=8` → `_get_entity_context` → `_expand_via_graph` with no verifier — `docs/TODO.md §2.27` |
+| Health dashboard + review inbox (`knowledge_health` extension to `services/dashboard.py:112`, `Requires Review` queue, `audit_log` `kg.*` events) | ❌ | `services/dashboard.py:112` only `pipeline_health {queue_depth,failed_count,success_rate}` — `docs/TODO.md §2.28` |
 
 ---
 
