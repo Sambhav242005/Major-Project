@@ -1,9 +1,9 @@
-"""Backward-compatible import surface for SQLAlchemy models.
-
-Actual model definitions are split under db/model_defs by domain.
-"""
-
-from db.model_defs import *
+from db.model_defs.agents import *
+from db.model_defs.chat import *
+from db.model_defs.documents import *
+from db.model_defs.integrations import *
+from db.model_defs.knowledge import *
+from db.model_defs.projects import *
 
 __all__ = [
     "Agent",
