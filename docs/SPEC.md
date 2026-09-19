@@ -26,19 +26,19 @@ Authoritative spec of what the system actually is, how it's built, and every del
 | Layer | Technology | Where verified |
 |---|---|---|
 | Frontend | Next.js 15 (App Router), React 19, TypeScript, Tailwind, Zustand, TanStack Query (installed) | `apps/web/package.json` |
-| Graph visualization | **reagraph** (force-directed canvas) | `apps/web/src/app/graph/page.tsx` |
+| Graph visualization | **reagraph** (force-directed canvas) | `apps/web/src/app/(app)/graph/page.tsx` |
 | Backend | Python 3.11+, FastAPI (async), SQLAlchemy 2.0 async ORM, Pydantic v2 | `apps/api/requirements.txt`, `apps/api/db/` |
 | Relational DB | **SQLite in dev (forced), PostgreSQL (Supabase) in production** | `apps/api/core/config.py` |
-| Vector store | ChromaDB (`PersistentClient`, single `knowledge_base` collection) | `apps/api/pipelines/embeddings.py` |
+| Vector store | ChromaDB (`PersistentClient`, single `knowledge_base` collection) | `apps/api/pipelines/embeddings/` |
 | Auth | **Supabase Auth (JWT validation) in prod; mock auth in dev** | `apps/api/core/security.py` |
 | LLM | OpenAI-compatible endpoints — Groq (current `.env`) / Ollama (defaults) | `apps/api/core/config.py`, `apps/api/.env` |
-| Entities (NER) | spaCy `en_core_web_sm` + LLM structured extraction | `apps/api/pipelines/entity_extraction.py` |
-| Graph traversal | NetworkX (in-memory `DiGraph` subgraphs) | `apps/api/services/knowledge.py` |
-| Agents | LangGraph + in-memory asyncio task queue | `apps/api/pipelines/agent_pipeline.py`, `core/task_queue.py` |
-| MCP | Official MCP Python SDK, OAuth 2.0 + PKCE, persisted tokens | `apps/api/core/oauth.py`, `services/mcp.py` |
-| Background jobs | FastAPI `asyncio.create_task` (no Celery/RQ) | `apps/api/routers/documents.py`, `core/task_queue.py` |
+| Entities (NER) | spaCy `en_core_web_sm` + LLM structured extraction | `apps/api/pipelines/extraction/` |
+| Graph traversal | NetworkX (in-memory `DiGraph` subgraphs) | `apps/api/services/knowledge/` |
+| Agents | LangGraph + in-memory asyncio task queue | `apps/api/pipelines/agent/`, `core/task_queue/` |
+| MCP | Official MCP Python SDK, OAuth 2.0 + PKCE, persisted tokens | `apps/api/core/oauth/`, `services/mcp.py` |
+| Background jobs | FastAPI `asyncio.create_task` (no Celery/RQ) | `apps/api/routers/documents/`, `core/task_queue/` |
 | File parsing | PyMuPDF (PDF), python-docx (DOCX), Tesseract OCR (images) | `apps/api/pipelines/parser.py` |
-| Webhooks | HTTP outbound with retry table (`webhook_deliveries`) | `apps/api/services/webhooks.py` |
+| Webhooks | HTTP outbound with retry table (`webhook_deliveries`) | `apps/api/services/webhooks/` |
 
 > **Documented but NOT implemented:** Prisma (see §5), Supabase Storage (TODO in code), Redis/queue (documented upgrade path only), Vitest/React Testing Library (devDependency only, no tests).
 
@@ -61,9 +61,9 @@ Next.js UI ──(REST + SSE, Bearer JWT, ?project_id=)──► FastAPI API
 
 ### 3.2 The two pipelines
 
-**Ingestion** (`pipelines/ingestion.py`): `parse → chunk (~600 tokens, 80 overlap) → embed → upsert ChromaDB + chunk rows → extract entities/relationships (spaCy + LLM + dedup) → status=processed`. Background asyncio task; SSE progress stream; failure → `status=failed` + retry endpoint.
+**Ingestion** (`pipelines/ingestion/pipeline.py`): `parse → chunk (~600 tokens, 80 overlap) → embed → upsert ChromaDB + chunk rows → extract entities/relationships (spaCy + LLM + dedup) → status=processed`. Background asyncio task; SSE progress stream; failure → `status=failed` + retry endpoint.
 
-**RAG / chat** (`services/chat.py`): embed question → Chroma top-8 (project-filtered) → entities in chunks → **1-hop graph expansion** via relationships → prompt (sources + entity context + history) → streamed LLM answer over SSE → persist message + citations. Prompt-injection guard via `security_utils.py`.
+**RAG / chat** (`services/chat/`): embed question → Chroma top-8 (project-filtered) → entities in chunks → **1-hop graph expansion** via relationships → prompt (sources + entity context + history) → streamed LLM answer over SSE → persist message + citations. Prompt-injection guard via `security_utils.py`.
 
 ### 3.3 Request lifecycle
 
@@ -75,7 +75,7 @@ Next.js UI ──(REST + SSE, Bearer JWT, ?project_id=)──► FastAPI API
 ### 3.4 Real-time (SSE)
 
 - Document progress: `GET /documents/{id}/stream` — stages `processing → parsing → chunking → embedding → extracting_entities → complete` (in-memory subscriber queues).
-- Agent traces: `core/task_queue.py` — step events with replay for late subscribers, cleanup on close.
+- Agent traces: `core/task_queue/` — step events with replay for late subscribers, cleanup on close.
 
 ---
 
@@ -159,7 +159,7 @@ Project 1──* WebhookSubscription 1──* WebhookDelivery
 | Mock dev session | Hardcoded demo user | `a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11` / mock@example.com — in `supabase/client.ts`, `core/auth_middleware.py`, `core/security.py`, `routers/auth.py` (mock-login sets the cookies) |
 | App-side profile row | `profiles` table (app DB) | created on first request via `core/deps.py::_ensure_user_and_project` (deterministic UUID from user id, namespace `a1b2c3d4-e5f6-7890-abcd-ef1234567890`) |
 | Project membership / roles | `project_members` table (app DB) | checked on every request (`get_project_id`, 403 if not a member) |
-| MCP OAuth tokens | `mcp_auth_tokens` table (app DB) | tokens exchanged via `core/oauth.py`, persisted across restarts |
+| MCP OAuth tokens | `mcp_auth_tokens` table (app DB) | tokens exchanged via `core/oauth/`, persisted across restarts |
 | Audit trail | `audit_log` table (app DB) | every mutating action |
 
 So: **credentials → Supabase (or mock); app identity, roles, and everything else → the app's own database via SQLAlchemy.** The backend is the only place that validates tokens; the frontend's job is just to obtain and carry the session.
@@ -190,10 +190,10 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 3 | "Supabase Storage" for files (`storage_path`) | `storage_path` is just a generated path string; `documents.py` has `# TODO: Upload to Supabase Storage` — files live only in request memory; retry requires re-uploading | **Not implemented** |
 | 4 | Backend LLM: OpenAI / Ollama | `apps/api/.env` uses **Groq** (OpenAI-compatible) with model `qwen/qwen3.8-27b` (`LLM_CHAT_MODEL`/`LLM_EXTRACT_MODEL`, PR #3); embeddings `qwen3-embedding:4b` | **Differs from README defaults** (code supports both; env differs) |
 | 5 | ChromaDB "on disk, no separate service" | True — `PersistentClient(path=CHROMA_PATH)` | ✅ Matches |
-| 6 | Postgres + NetworkX over Neo4j | True — ADR-0001, `services/knowledge.py` | ✅ Matches |
+| 6 | Postgres + NetworkX over Neo4j | True — ADR-0001, `services/knowledge/` | ✅ Matches |
 | 7 | Supabase Auth w/ backend JWT validation | True — ADR-0003, `core/security.py` | ✅ Matches |
 | 8 | Single Chroma collection w/ project filter | True — ADR-0002, `embeddings.py` | ✅ Matches |
-| 9 | Chat streaming over SSE with citations | True — `services/chat.py` + `app/chat/page.tsx` | ✅ Matches |
+| 9 | Chat streaming over SSE with citations | True — `services/chat/` + `app/(app)/chat/page.tsx` | ✅ Matches |
 | 10 | Background tasks via FastAPI BackgroundTasks (brief §2) | Actually `asyncio.create_task` + strong refs (`documents.py`, `task_queue.py`) — deliberate fix for middleware dropping BackgroundTasks | **Deviation, documented in code comments** |
 | 11 | Testing: Vitest + RTL frontend | Vitest/RTL in devDependencies only; **no frontend unit tests exist** | **Not implemented** |
 | 12 | Alembic migrations path | Present (`migrations/001_initial_schema.py`) but dev uses `init_db.py` `create_all` | ✅ Present / dev shortcut |
@@ -262,7 +262,7 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 | Global middleware + public-route allowlist | ✅ | `core/auth_middleware.py` |
 | Frontend: signin/signup pages, OAuth callback, demo-login, signout, middleware | ✅ | `src/app/auth/*`, `src/middleware.ts`, `src/lib/supabase/{client,server}.ts` |
 | Project membership / role checks | ✅ | `core/deps.py`, `routers/projects.py` (rename owner/editor-only) |
-| OAuth 2.0 client (client-credentials + PKCE + refresh + persistence) | ✅ | `core/oauth.py` — full-featured, generic |
+| OAuth 2.0 client (client-credentials + PKCE + refresh + persistence) | ✅ | `core/oauth/` — full-featured, generic |
 | **Fixed — rate limiter now reads `user_id`:** `core/rate_limit.py::_rate_limit_key` now correctly reads `request.state.user_id` (PR #1 `a030a0d`); falls back to `ip:` only for anon | ✅ Fixed PR #1 | `core/rate_limit.py:16` + `tests/test_rate_limit.py` |
 | **Nits:** `demo-login/route.ts` sets `mock-session` with `httpOnly:false`; `supabase/server.ts` mock user id is `"mock-user-001"` while backend mock id is `"a0eebc99-…"` — cosmetic mismatch, works because backend mock accepts any token | ⚠️ | `src/app/auth/demo-login/route.ts`, `src/lib/supabase/server.ts` |
 
@@ -282,12 +282,12 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 
 | Piece | Status | Evidence |
 |---|---|---|
-| LangGraph pipeline (6 agent types, trace, retry, tool-calling) | ✅ | `pipelines/agent_pipeline.py` |
-| Tool registry (5 tools) + reserved-kwarg stripping + generic tool errors | ✅ | `pipelines/agent_tools.py` |
+| LangGraph pipeline (6 agent types, trace, retry, tool-calling) | ✅ | `pipelines/agent/` |
+| Tool registry (5 tools) + reserved-kwarg stripping + generic tool errors | ✅ | `pipelines/tools/` |
 | Background execution + SSE trace streaming | ✅ | `core/task_queue.py`, `routers/agents.py` |
-| Memory (working/episodic/semantic) + checkpoints + skills | ✅ | `services/memory.py`, models |
-| Self-improvement: rule-based eval → run traces → refinement cycle → skills | ✅ | `pipelines/agent_refinement.py` |
-| Cross-project memory sharing (read/read_write) + router | ✅ | `services/sharing.py`, `routers/sharing.py` |
+| Memory (working/episodic/semantic) + checkpoints + skills | ✅ | `services/memory/`, models |
+| Self-improvement: rule-based eval → run traces → refinement cycle → skills | ✅ | `pipelines/refinement/` |
+| Cross-project memory sharing (read/read_write) + router | ✅ | `services/sharing/`, `routers/sharing.py` |
 
 ### 12.4 Dashboard, Projects, Meetings — ✅ built (audit writers added in PR #2)
 
@@ -302,9 +302,9 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 
 | Piece | Status | Evidence |
 |---|---|---|
-| Semantic search (Chroma + Postgres enrichment) | ✅ | `services/knowledge.py` |
-| Graph traversal (NetworkX k-hop subgraphs) | ✅ | `services/knowledge.py::get_graph` |
-| RAG chat with 1-hop graph expansion + citations + SSE | ✅ | `services/chat.py` |
+| Semantic search (Chroma + Postgres enrichment) | ✅ | `services/knowledge/search.py` |
+| Graph traversal (NetworkX k-hop subgraphs) | ✅ | `services/knowledge/graph.py::get_graph` |
+| RAG chat with 1-hop graph expansion + citations + SSE | ✅ | `services/chat/` |
 | **Knowledge health (conflict / stale / invalid) + sentence provenance + pinned** | ❌ missing | nothing in `pipelines/entity_extraction.py:339,368` (constants `0.8/0.7`), `services/knowledge.py:135` `nx.DiGraph` no filter, `services/chat.py:263` no verifier; `grep conflict\|stale → 0` outside `services/dashboard.py:112` pipeline health — see `docs/TODO.md §2.22–§2.28`, `docs/RESEARCH_PROBLEM.md:62,112` — hypothesis untestable until `TODO §3.6` benchmark |
 
 ### 12.6 Migrations & Observability — ⚠️ gaps

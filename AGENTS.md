@@ -11,7 +11,7 @@
 ## 1. Repository Map
 
 ```
-apps/api  — FastAPI (Python 3.11, async SQLAlchemy, ChromaDB, LangGraph)
+apps/api  — FastAPI (Python 3.11, async SQLAlchemy, ChromaDB, LangGraph); feature packages under `app/`, `pipelines/`, `routers/`, and `services/`
 apps/web  — Next.js 15 (App Router, Tailwind, Zustand, reagraph)
 infra     — schema.sql (Postgres/Supabase), docker-compose
 docs      — SPEC.md (verified spec), HOW_IT_WORKS.md, TODO.md, RESEARCH_PROBLEM.md, adr/
@@ -61,7 +61,7 @@ git push origin --delete feat/short-description
 
 ## 4. Code Style & Safety
 
-- **Python:** follow existing `core/config.py`, `pipelines/`, `services/` patterns. Use `sqlalchemy` async (`select(...)`, `await db.execute`). Background tasks must keep strong `asyncio.Task` refs and open their own `async_session_factory` session.
+- **Python:** follow existing `core/config.py`, `pipelines/`, and feature-package `services/` patterns. Use `sqlalchemy` async (`select(...)`, `await db.execute`). Background tasks must keep strong `asyncio.Task` refs and open their own `async_session_factory` session.
 - **TypeScript:** Next.js App Router + Tailwind + shadcn/ui + Zustand. No new DB client in frontend.
 - **Security:** respect `project_members` membership checks (`core/deps.py#get_project_id`), sanitize inputs (`core/security_utils.py`), never expose `SUPABASE_SERVICE_ROLE_KEY` to frontend.
 - **CORS/CSP:** update `core/security_headers.py` + `core/config.py#CORS_ORIGINS` together when changing origins.
@@ -80,7 +80,7 @@ git push origin --delete feat/short-description
 grep -ri "prisma" apps/web/src && echo "FAIL" || echo "OK"
 
 # Chunk metadata correct
-grep -n "chunk_index" apps/api/pipelines/embeddings.py  # 86,92
+grep -R -n "chunk_index" apps/api/pipelines/embeddings/
 
 # LLM config
 grep -n "qwen/qwen3.8" apps/api/core/config.py docs/SPEC.md

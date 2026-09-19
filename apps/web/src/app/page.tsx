@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PublicHeader } from "@/components/public-header";
+import { PublicHeader } from "@/components/layout/public-header";
 import { Reveal } from "@/components/motion/reveal";
 
 export default function HomePage() {

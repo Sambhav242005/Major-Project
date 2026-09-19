@@ -1,0 +1,5 @@
+"""Refinement constants."""
+
+MAX_SKILLS_PER_AGENT = 10
+MAX_SKILL_FAILURES = 3
+STAGNATION_ALARM_CYCLES = 5

@@ -1,0 +1,6 @@
+candidate: c0002
+parent: c0001
+surface: db/session.py
+pattern: engine created with echo=True for sqlite (noisy) and no pool_pre_ping for postgres
+fix: conditional echo, pool_pre_ping for postgres, check_same_thread for sqlite
+decision: ACCEPT

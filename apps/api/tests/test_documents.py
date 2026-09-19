@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # --- Test: Upload creates document with pending status ---
 
 @pytest.mark.asyncio
-@patch("services.documents.Document")
+@patch("services.documents.crud.Document")
 async def test_upload_creates_pending_document(MockDocument):
     mock_doc_instance = MagicMock()
     MockDocument.return_value = mock_doc_instance

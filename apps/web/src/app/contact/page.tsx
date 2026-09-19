@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PublicHeader } from "@/components/public-header";
+import { PublicHeader } from "@/components/layout/public-header";
 
 export default function ContactPage() {
   const [name, setName] = useState("");

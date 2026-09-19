@@ -113,7 +113,7 @@ The KG is not assumed correct forever. Key questions: what counts as health/conf
 
 **Pinned / Protected knowledge (2026-09-03 proposal):** Important facts can be marked `is_pinned` (`pinned_by/at/reason`, owner/editor only via `project_members`, audit-logged). Pinned edges are **exempt from auto-repair on staleness** (`valid_until` expiry only flags for visibility, never auto-retires). On **conflict** (same `(source,target)` incompatible `relation_type`) a pinned edge never auto-supersedes — it creates `knowledge_health_checks {requires_review}` and prompts the user once (`Keep pinned / Overwrite pinned / Keep both disputed`); only explicit `Accept` mutates (`superseded_by` + `last_validated_at`). See `docs/TODO.md §2.23`.
 
-Evidence-backed trust is central: every answer sentence should point to a doc part (page/section/chunk + sentence span), not just a block citation — see trust discussion. See `CONTEXT.md` citation glossary and `services/chat.py` citation flow for current block-level baseline.
+Evidence-backed trust is central: every answer sentence should point to a doc part (page/section/chunk + sentence span), not just a block citation — see trust discussion. See `CONTEXT.md` citation glossary and `services/chat/` citation flow for current block-level baseline.
 
 ---
 
@@ -194,9 +194,9 @@ This is testable. It is not yet proven novel — temporal KG memory, schema evol
 
 ## 8. What the Current System Already Provides Toward This
 
-* **Ingestion self-heal (partial):** spaCy + LLM extraction, merge/dedup by `(project_id, name, type)`, fallback `co_occurs_with` edges, non-fatal extraction — `pipelines/entity_extraction.py`, `pipelines/ingestion.py`.
+* **Ingestion self-heal (partial):** spaCy + LLM extraction, merge/dedup by `(project_id, name, type)`, fallback `co_occurs_with` edges, non-fatal extraction — `pipelines/extraction/`, `pipelines/ingestion/`.
 * **Trust layer (partial):** block-level citations `citations JSON` in `chat_messages`, `audit_log` writers (PR #2) — not yet sentence-level provenance.
-* **Memory/refinement loop (scaffold):** `agent_run_traces` → `agent_skills` via `pipelines/agent_refinement.py` held-in/held-out evals — not yet tied to KG repair.
+* **Memory/refinement loop (scaffold):** `agent_run_traces` → `agent_skills` via `pipelines/refinement/` held-in/held-out evals — not yet tied to KG repair.
 
 These are starting points, not validation of the hypothesis.
 
