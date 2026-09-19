@@ -1,6 +1,0 @@
-candidate: c0001
-parent: seed (main)
-surface: core/config.py
-pattern: _force_sqlite_in_dev silently overwrote postgres DATABASE_URL in dev
-expected: respect explicit postgres URLs, only force sqlite when no postgres present
-decision: ACCEPT — held_in 46/46 no regression, held_out not fully runnable but no regression signal, raw trace archived

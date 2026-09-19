@@ -84,3 +84,16 @@ apps/api/meet_*.txt
 *.png
 body.txt
 chat_out.txt
+
+# =============================================================================
+# Agent / local research artifacts (never commit)
+# =============================================================================
+.agent/
+.agents/
+.continue/
+.omo/
+.serena/
+.claude/
+.windsurf/
+research/
+search-run/

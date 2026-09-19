@@ -6,6 +6,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api/client";
 export interface DashboardData {
+  total_documents: number;
+  total_relationships: number;
+  total_chats: number;
+  active_agents: number;
   document_count: number;
   total_chunks: number;
   total_entities: number;
@@ -49,10 +53,11 @@ export function useDashboard({
   const fetchSummary = useCallback(async () => {
     if (!token || !projectId) return;
     try {
-      const result = await apiFetch<DashboardData>("/dashboard/summary", {
+      const response = await apiFetch<DashboardData | { status: string; data: DashboardData }>("/dashboard/summary", {
         token,
         projectId,
       });
+      const result = "data" in response ? response.data : response;
       setData(result);
       setError(null);
     } catch (e) {

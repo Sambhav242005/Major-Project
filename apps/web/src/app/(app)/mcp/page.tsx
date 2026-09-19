@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/lib/api/client";
+import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useMCP } from "@/hooks/useMCP";
+import { useProjectStore } from "@/stores/project";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { MCPConnectionCard } from "@/components/features/mcp";
 import { MCPCreateDialog } from "@/components/features/mcp";
@@ -10,64 +11,28 @@ import { MCPSyncPanel } from "@/components/features/mcp";
 import type { MCPConnectionRaw } from "@/lib/types";
 
 export default function MCPPage() {
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
-  const [connections, setConnections] = useState<MCPConnectionRaw[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { activeProjectId } = useProjectStore();
+  const { token } = useAuth();
+  const { connections, loading, error, createConnection, updateConnection, deleteConnection, syncConnection, syncMeetings } = useMCP({ token, projectId: activeProjectId });
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncingMeetings, setSyncingMeetings] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchConnections = useCallback(async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const data = await apiFetch<{ connections: MCPConnectionRaw[] }>("/mcp/connections", { token: session.access_token });
-      setConnections(data.connections || []);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to fetch connections");
-    } finally {
-      setLoading(false);
-    }
-  }, [supabase]);
-
-  useEffect(() => { fetchConnections(); }, [fetchConnections]);
-
-  const getToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
-  };
 
   const handleCreate = async (direction: "sender" | "receiver", name: string) => {
-    const token = await getToken();
-    if (!token) return;
-    await apiFetch("/mcp/connections", { method: "POST", token, body: { name, direction } });
-    fetchConnections();
+    await createConnection({ name, endpoint_url: "", auth_config: { direction } });
   };
 
   const handleUpdate = async (id: string, data: Partial<MCPConnectionRaw>) => {
-    const token = await getToken();
-    if (!token) return;
-    await apiFetch(`/mcp/connections/${id}`, { method: "PATCH", token, body: data });
-    fetchConnections();
+    await updateConnection(id, data);
   };
 
   const handleDelete = async (id: string) => {
-    const token = await getToken();
-    if (!token) return;
-    await apiFetch(`/mcp/connections/${id}`, { method: "DELETE", token });
-    fetchConnections();
+    await deleteConnection(id);
   };
 
   const handleSyncConnection = async (connectionId: string) => {
     setSyncingId(connectionId);
     try {
-      const token = await getToken();
-      if (!token) return;
-      await apiFetch(`/mcp/connections/${connectionId}/sync`, { method: "POST", token });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync failed");
+      await syncConnection(connectionId);
     } finally {
       setSyncingId(null);
     }
@@ -76,11 +41,7 @@ export default function MCPPage() {
   const handleSyncMeetings = async () => {
     setSyncingMeetings(true);
     try {
-      const token = await getToken();
-      if (!token) return;
-      await apiFetch("/meetings/sync", { method: "POST", token, body: { source: "google_meet" } });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync failed");
+      await syncMeetings();
     } finally {
       setSyncingMeetings(false);
     }

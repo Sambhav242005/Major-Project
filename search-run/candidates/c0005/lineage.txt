@@ -1,6 +1,0 @@
-candidate: c0005
-parent: c0004
-surface: services/knowledge.py search()
-pattern: N+1 — per-result select DocumentChunk + select Document (2N queries)
-fix: batch chroma_id IN (...) + document_id IN (...) → 2 queries
-decision: ACCEPT

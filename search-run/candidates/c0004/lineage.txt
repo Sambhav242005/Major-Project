@@ -1,6 +1,0 @@
-candidate: c0004
-parent: c0003
-surface: services/documents.py
-pattern: duplicated dict mapping across 3 functions, unbounded list_documents
-fix: extract _doc_to_dict, add limit=min(limit,100) offset guard
-decision: ACCEPT

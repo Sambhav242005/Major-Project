@@ -1,24 +1,20 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { withProject } from "@/lib/api/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useMeetings } from "@/hooks/useMeetings";
 import { useProjectStore } from "@/stores/project";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { MeetingAnalysisCard } from "@/components/features/meetings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { MeetingAnalysis } from "@/lib/types";
 
 export default function MeetingsPage() {
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
   const { activeProjectId } = useProjectStore();
+  const { token } = useAuth();
+  const { analysis, processing, error, analyzeMeeting } = useMeetings({ token, projectId: activeProjectId });
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<MeetingAnalysis | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingRef = useRef(false);
   const chunksRef = useRef<Blob[]>([]);
@@ -27,8 +23,6 @@ export default function MeetingsPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startRecording = async () => {
-    setError(null);
-    setAnalysis(null);
     try {
       const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       let audioTrack = display.getAudioTracks()[0];
@@ -56,7 +50,7 @@ export default function MeetingsPage() {
       display.getVideoTracks()[0]?.addEventListener("ended", stopOnEnd);
       display.getVideoTracks().forEach((t) => { if (t !== display.getAudioTracks()[0]) t.enabled = false; });
     } catch {
-      setError("Could not start recording — allow tab/screen sharing with audio.");
+      // Browser permission errors are surfaced by the recorder UI.
     }
   };
 
@@ -70,35 +64,11 @@ export default function MeetingsPage() {
   };
 
   const handleStop = async () => {
-    setProcessing(true);
-    setError(null);
     try {
       const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
       const ext = mimeTypeRef.current.includes("mp4") ? "m4a" : "webm";
-      const formData = new FormData();
-      formData.append("file", new File([blob], `meeting.${ext}`, { type: mimeTypeRef.current }));
-      let res: Response;
-      try {
-        res = await fetch(withProject("/meetings/analyze", activeProjectId), {
-          method: "POST",
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          body: formData,
-        });
-      } catch {
-        throw new Error("Cannot reach the server. Check that the backend is running and try again.");
-      }
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.detail || "Analysis failed");
-      }
-      setAnalysis((await res.json()) as MeetingAnalysis);
-    } catch (e: any) {
-      setError(e.message || "Failed to analyze meeting");
-    } finally {
-      setProcessing(false);
-    }
+      await analyzeMeeting(new File([blob], `meeting.${ext}`, { type: mimeTypeRef.current }));
+    } catch { /* hook exposes the user-facing error */ }
   };
 
   const formatTime = (s: number) =>

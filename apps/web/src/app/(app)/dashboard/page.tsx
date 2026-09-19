@@ -1,84 +1,19 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { apiFetch } from "@/lib/api/client";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { DashboardStats } from "@/components/features/dashboard";
 import { PipelineHealthCard } from "@/components/features/dashboard";
 import { FailedDocsCard } from "@/components/features/dashboard";
 import { RecentActivityCard } from "@/components/features/dashboard";
 import { QuickLinksCard } from "@/components/features/dashboard";
+import { useAuth } from "@/hooks/useAuth";
+import { useDashboard } from "@/hooks/useDashboard";
 import { useProjectStore } from "@/stores/project";
 
-interface DashboardData {
-  documents: { pending: number; processing: number; processed: number; failed: number };
-  total_documents: number;
-  total_entities: number;
-  total_relationships: number;
-  total_chats: number;
-  active_agents: number;
-  recent_activity: {
-    id: string;
-    action: string;
-    resource_type: string;
-    resource_id: string | null;
-    created_at: string | null;
-  }[];
-  failed_documents: {
-    id: string;
-    filename: string;
-    error_message: string | null;
-    uploaded_at: string | null;
-  }[];
-  pipeline_health: {
-    queue_depth: number;
-    failed_count: number;
-    success_rate: number;
-  };
-}
-
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
   const { activeProjectId } = useProjectStore();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchDashboard() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session || cancelled) return;
-
-        const json = await apiFetch<{ status: string; data: DashboardData }>(
-          "/dashboard/summary",
-          { token: session.access_token, projectId: activeProjectId }
-        );
-        if (json.status === "ok" && !cancelled) {
-          setData(json.data);
-          setLoadError(null);
-          setLastUpdated(new Date());
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setLoadError(
-            e instanceof Error ? e.message : "Failed to load dashboard"
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    fetchDashboard();
-    const interval = setInterval(fetchDashboard, 10000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [activeProjectId, supabase]);
+  const { token } = useAuth();
+  const { data, loading, error: loadError, refresh } = useDashboard({ token, projectId: activeProjectId, pollInterval: 10000 });
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text">
@@ -91,11 +26,6 @@ export default function DashboardPage() {
           </h2>
           <p className="text-app-muted text-sm">
             Overview of your knowledge base and pipeline status
-            {lastUpdated && !loading && (
-              <span className="text-app-muted/70 ml-2">
-                · Updated {lastUpdated.toLocaleTimeString()}
-              </span>
-            )}
           </p>
         </div>
 
@@ -112,7 +42,7 @@ export default function DashboardPage() {
           <div className="text-center py-12">
             <p className="text-red-400 mb-4">{loadError ?? "Failed to load dashboard"}</p>
             <button
-              onClick={() => { setLoading(true); setLoadError(null); window.location.reload(); }}
+              onClick={() => refresh()}
               className="px-4 py-2 bg-brand-accent/15 text-app-text font-medium rounded-lg hover:bg-brand-accent/25 transition-colors text-sm"
             >
               Retry

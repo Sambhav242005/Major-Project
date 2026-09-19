@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { apiFetch, withProject } from "@/lib/api/client";
+import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useAgents, AgentTask } from "@/hooks/useAgents";
 import { useProjectStore } from "@/stores/project";
 import { Plus } from "lucide-react";
 import {
@@ -15,41 +15,11 @@ import {
   AgentTraceDialog,
 } from "@/components/features/agents";
 
-interface Agent {
-  id: string;
-  name: string;
-  type: string;
-  config: Record<string, any>;
-  status: string;
-  created_at: string | null;
-}
-
-interface AgentType {
-  type: string;
-  name: string;
-  description: string;
-}
-
-interface AgentTask {
-  id: string;
-  agent_id: string;
-  status: string;
-  input: string;
-  output: any;
-  error: string | null;
-  trace: any[];
-  started_at: string | null;
-  completed_at: string | null;
-}
-
 export default function AgentsPage() {
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [agentTypes, setAgentTypes] = useState<AgentType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const { token } = useAuth();
+  const { projects, activeProjectId } = useProjectStore();
+  const { agents, agentTypes, tasks, loading, fetchTasks, fetchTaskDetail, createAgent, deleteAgent, runAgent } = useAgents({ token, projectId: activeProjectId });
+  const [selectedAgent, setSelectedAgent] = useState<(typeof agents)[number] | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showTrace, setShowTrace] = useState<AgentTask | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
@@ -62,74 +32,7 @@ export default function AgentsPage() {
   const [liveTrace, setLiveTrace] = useState<any[]>([]);
   const [runError, setRunError] = useState<string>("");
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const { projects, activeProjectId, loadProjects } = useProjectStore();
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
-
-  const getToken = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token || "mock-token";
-  }, []);
-
-  useEffect(() => {
-    const init = async () => {
-      const token = await getToken();
-      if (!projects.length) await loadProjects(token);
-    };
-    init();
-  }, []);
-
-  const fetchAgents = useCallback(async () => {
-    try {
-      const token = await getToken();
-      const [agentsData, typesData] = await Promise.all([
-        apiFetch<{ agents: Agent[] }>("/agents", { token, projectId: activeProjectId }),
-        apiFetch<{ types: AgentType[] }>("/agents/types", { token, projectId: activeProjectId }),
-      ]);
-      setAgents(agentsData.agents || []);
-      setAgentTypes(typesData.types || []);
-      setRunError("");
-    } catch (e) {
-      setRunError(e instanceof Error ? e.message : "Failed to fetch agents");
-    } finally {
-      setLoading(false);
-    }
-  }, [getToken, activeProjectId]);
-
-  useEffect(() => { fetchAgents(); }, [fetchAgents]);
-
-  const fetchTasks = useCallback(
-    async (agentId: string) => {
-      try {
-        const token = await getToken();
-        const data = await apiFetch<{ tasks: AgentTask[] }>(
-          `/agents/${agentId}/tasks`,
-          { token, projectId: activeProjectId }
-        );
-        setTasks(data.tasks || []);
-      } catch (e) {
-        console.error("Failed to fetch tasks:", e);
-      }
-    },
-    [getToken, activeProjectId]
-  );
-
-  const fetchTaskDetail = useCallback(
-    async (agentId: string, taskId: string) => {
-      try {
-        const token = await getToken();
-        const data = await apiFetch<{ task: AgentTask }>(
-          `/agents/${agentId}/tasks/${taskId}`,
-          { token, projectId: activeProjectId }
-        );
-        return data.task;
-      } catch (e) {
-        console.error("Failed to fetch task detail:", e);
-      }
-      return null;
-    },
-    [getToken, activeProjectId]
-  );
 
   const handleCreate = async () => {
     if (!newName.trim()) {
@@ -139,19 +42,12 @@ export default function AgentsPage() {
     setCreating(true);
     setCreateError("");
     try {
-      const token = await getToken();
-      await apiFetch("/agents", {
-        method: "POST",
-        token,
-        projectId: activeProjectId,
-        body: { name: newName.trim(), type: newType },
-      });
+      await createAgent(newName.trim(), newType);
       setShowCreate(false);
       setNewName("");
       setNewType("summarizer");
-      fetchAgents();
-    } catch (e: any) {
-      setCreateError(e.detail || e.message || "Failed to create agent");
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : "Failed to create agent");
     } finally {
       setCreating(false);
     }
@@ -165,69 +61,29 @@ export default function AgentsPage() {
     setExpandedSteps(new Set());
 
     try {
-      const token = await getToken();
-      const data = await apiFetch<{ task_id: string }>(`/agents/${agentId}/run`, {
-        method: "POST",
-        token,
-        projectId: activeProjectId,
-        body: { input: { query: runInput.trim(), source: "manual_trigger" } },
-      });
-      const taskId = data.task_id;
       setRunInput("");
-
-      const streamToken = await getToken();
-      const evtSource = new EventSource(
-        withProject(
-          `/agents/${agentId}/tasks/${taskId}/stream?token=${streamToken}`,
-          activeProjectId
-        )
-      );
-      eventSourceRef.current = evtSource;
-
-      evtSource.onmessage = (event) => {
-        try {
-          const traceEvent = JSON.parse(event.data);
-          setLiveTrace((prev) => [...prev, traceEvent]);
-          if (traceEvent.step === "complete" || traceEvent.status === "error") {
-            evtSource.close();
-            eventSourceRef.current = null;
-            setRunning(null);
-            fetchTasks(agentId);
-          }
-        } catch {}
-      };
-
-      evtSource.onerror = () => {
-        evtSource.close();
-        eventSourceRef.current = null;
+      await runAgent(agentId, runInput.trim(), (event) => setLiveTrace((prev) => [...prev, event]), () => {
         setRunning(null);
         fetchTasks(agentId);
-      };
-    } catch (e: any) {
-      setRunError(e.message || "Failed to start agent");
+      });
+    } catch (e) {
+      setRunError(e instanceof Error ? e.message : "Failed to start agent");
       setRunning(null);
     }
   };
 
   const handleDelete = async (agentId: string) => {
     try {
-      const token = await getToken();
-      await apiFetch(`/agents/${agentId}`, {
-        method: "DELETE",
-        token,
-        projectId: activeProjectId,
-      });
+      await deleteAgent(agentId);
       if (selectedAgent?.id === agentId) {
         setSelectedAgent(null);
-        setTasks([]);
       }
-      fetchAgents();
     } catch (e) {
       setRunError(e instanceof Error ? e.message : "Failed to delete agent");
     }
   };
 
-  const selectAgent = async (agent: Agent) => {
+  const selectAgent = async (agent: (typeof agents)[number]) => {
     setSelectedAgent(agent);
     setRunInput("");
     await fetchTasks(agent.id);

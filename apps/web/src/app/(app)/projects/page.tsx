@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { useProject } from "@/hooks/useProject";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { ProjectCard, ProjectCreateDialog, ProjectRenameDialog } from "@/components/features/projects";
 
 export default function ProjectsPage() {
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
   const {
     projects,
     activeProjectId,
@@ -19,6 +17,7 @@ export default function ProjectsPage() {
     createProject,
     renameProject,
   } = useProject();
+  const { token } = useAuth();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
@@ -26,19 +25,13 @@ export default function ProjectsPage() {
   const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) await loadProjects(session.access_token);
-    };
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (token && !loaded) void loadProjects(token);
+  }, [token, loaded, loadProjects]);
 
   const handleCreate = async (name: string) => {
     setBusy(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const created = await createProject(session.access_token, name);
+    if (token) {
+      const created = await createProject(token, name);
       if (created) {
         setCreateOpen(false);
         setFlash(`Created "${created.name}" and switched to it`);
@@ -49,8 +42,7 @@ export default function ProjectsPage() {
 
   const handleRename = async (id: string, name: string) => {
     setBusy(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session && (await renameProject(session.access_token, id, name))) {
+    if (token && (await renameProject(token, id, name))) {
       setRenameTarget(null);
     }
     setBusy(false);

@@ -22,7 +22,7 @@ export function useWebhooks({ token, projectId }: UseWebhooksOptions) {
     if (!token || !projectId) return;
     setLoading(true);
     try {
-      const data = await apiFetch<WebhookSubscription[]>("/webhooks", {
+      const data = await apiFetch<WebhookSubscription[]>("/webhooks/subscriptions", {
         token,
         projectId,
       });
@@ -38,7 +38,7 @@ export function useWebhooks({ token, projectId }: UseWebhooksOptions) {
   const fetchDeliveries = useCallback(async () => {
     if (!token || !projectId) return;
     try {
-      const data = await apiFetch<WebhookDelivery[]>("/webhooks/deliveries", {
+      const data = await apiFetch<WebhookDelivery[]>("/webhooks/deliveries?limit=20", {
         token,
         projectId,
       });
@@ -57,11 +57,10 @@ export function useWebhooks({ token, projectId }: UseWebhooksOptions) {
     async (payload: { event_type: string; url: string }) => {
       if (!token || !projectId) return null;
       try {
-        const sub = await apiFetch<WebhookSubscription>("/webhooks", {
+        const sub = await apiFetch<WebhookSubscription>(`/webhooks/subscriptions?event_type=${encodeURIComponent(payload.event_type)}&url=${encodeURIComponent(payload.url)}`, {
           method: "POST",
           token,
           projectId,
-          body: payload,
         });
         setSubscriptions((prev) => [...prev, sub]);
         return sub;
@@ -77,7 +76,7 @@ export function useWebhooks({ token, projectId }: UseWebhooksOptions) {
     async (webhookId: string) => {
       if (!token || !projectId) return;
       try {
-        await apiFetch(`/webhooks/${webhookId}`, {
+        await apiFetch(`/webhooks/subscriptions/${webhookId}`, {
           method: "DELETE",
           token,
           projectId,
@@ -90,6 +89,20 @@ export function useWebhooks({ token, projectId }: UseWebhooksOptions) {
     [token, projectId]
   );
 
+  const toggleSubscription = useCallback(
+    async (webhookId: string, active: boolean) => {
+      if (!token || !projectId) return;
+      try {
+        await apiFetch(`/webhooks/subscriptions/${webhookId}`, {
+          method: "PATCH", token, projectId, body: { active },
+        });
+        setSubscriptions((prev) => prev.map((s) => s.id === webhookId ? { ...s, active } : s));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to update webhook");
+      }
+    }, [token, projectId]
+  );
+
   return {
     subscriptions,
     deliveries,
@@ -97,6 +110,7 @@ export function useWebhooks({ token, projectId }: UseWebhooksOptions) {
     error,
     createSubscription,
     deleteSubscription,
+    toggleSubscription,
     refresh: fetchSubscriptions,
   };
 }

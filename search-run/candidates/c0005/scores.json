@@ -1,1 +1,0 @@
-{"held_in": {"passed": 42, "total": 42}, "held_out": {"note": "batched IN queries eliminates N+1, 2 queries vs 2N"}}

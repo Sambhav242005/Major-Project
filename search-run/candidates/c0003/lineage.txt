@@ -1,6 +1,0 @@
-candidate: c0003
-parent: c0002
-surface: core/security.py
-pattern: JWKS cache never expired, no timeout on httpx fetch
-fix: add _jwks_cache_ts + 3600s TTL, timeout=5.0 on AsyncClient
-decision: ACCEPT
