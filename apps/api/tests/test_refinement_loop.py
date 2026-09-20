@@ -137,13 +137,13 @@ async def test_run_refinement_cycle_uses_measured_deltas():
     mock_db = AsyncMock()
 
     with patch(
-        "pipelines.agent_refinement.mine_failures", new_callable=AsyncMock
+        "pipelines.refinement.gate.mine_failures", new_callable=AsyncMock
     ) as mock_mine, patch(
-        "pipelines.agent_refinement.propose_skill_delta", new_callable=AsyncMock
+        "pipelines.refinement.gate.propose_skill_delta", new_callable=AsyncMock
     ) as mock_propose, patch(
-        "pipelines.agent_refinement.evaluate_on_split", new_callable=AsyncMock
+        "pipelines.refinement.gate.evaluate_on_split", new_callable=AsyncMock
     ) as mock_eval, patch(
-        "pipelines.agent_refinement.apply_delta", new_callable=AsyncMock
+        "pipelines.refinement.gate.apply_delta", new_callable=AsyncMock
     ) as mock_apply:
         mock_mine.return_value = [{"scores": {"entity_count": 0.1}}]
         mock_propose.return_value = {

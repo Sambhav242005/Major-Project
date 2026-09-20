@@ -55,7 +55,11 @@ async def test_get_session_returns_none_for_nonexistent():
 
     from services.chat import get_session
 
-    result = await get_session(mock_db, "nonexistent", "proj-1")
+    result = await get_session(
+        mock_db,
+        "550e8400-e29b-41d4-a716-446655440002",
+        "550e8400-e29b-41d4-a716-446655440001",
+    )
 
     assert result is None
 
@@ -71,7 +75,10 @@ async def test_list_sessions_returns_list():
 
     from services.chat import list_sessions
 
-    result = await list_sessions(mock_db, "proj-1")
+    result = await list_sessions(
+        mock_db,
+        "550e8400-e29b-41d4-a716-446655440001",
+    )
 
     assert isinstance(result, list)
 
@@ -98,7 +105,7 @@ def test_format_source_block():
 # --- Test: Send message yields events ---
 
 @pytest.mark.asyncio
-@patch("services.chat.query_chunks")
+@patch("services.chat.streaming.query_chunks")
 async def test_send_message_yields_events(mock_query_chunks):
     mock_query_chunks.return_value = []
 
@@ -113,9 +120,10 @@ async def test_send_message_yields_events(mock_query_chunks):
     events = []
     async for event in send_message(
         db=mock_db,
-        session_id="session-1",
+        session_id="550e8400-e29b-41d4-a716-446655440002",
         message="Hello",
-        project_id="proj-1",
+        project_id="550e8400-e29b-41d4-a716-446655440001",
+        actor_id="550e8400-e29b-41d4-a716-446655440000",
     ):
         events.append(event)
 

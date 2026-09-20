@@ -72,7 +72,7 @@ async def test_foreign_document_chunks_denied():
 
     # get_document returns None because the doc belongs to project A
     with patch(
-        "routers.documents.doc_service.get_document", new_callable=AsyncMock
+        "routers.documents.router.doc_service.get_document", new_callable=AsyncMock
     ) as mock_get:
         mock_get.return_value = None
         client = TestClient(app)
@@ -88,9 +88,9 @@ async def test_own_document_chunks_allowed():
     app, mock_db = _build_app(PROJECT_A)
 
     with patch(
-        "routers.documents.doc_service.get_document", new_callable=AsyncMock
+        "routers.documents.router.doc_service.get_document", new_callable=AsyncMock
     ) as mock_get, patch(
-        "routers.documents.doc_service.get_document_chunks", new_callable=AsyncMock
+        "routers.documents.router.doc_service.get_document_chunks", new_callable=AsyncMock
     ) as mock_chunks:
         mock_get.return_value = {"id": DOC_A, "status": "processed"}
         mock_chunks.return_value = [{"id": str(uuid.uuid4()), "text": "x"}]
@@ -106,7 +106,7 @@ async def test_foreign_document_entities_denied():
     app, mock_db = _build_app(PROJECT_B)
 
     with patch(
-        "routers.documents.doc_service.get_document", new_callable=AsyncMock
+        "routers.documents.router.doc_service.get_document", new_callable=AsyncMock
     ) as mock_get:
         mock_get.return_value = None
         client = TestClient(app)
@@ -120,7 +120,7 @@ async def test_foreign_document_stream_denied():
     app, mock_db = _build_app(PROJECT_B)
 
     with patch(
-        "routers.documents.doc_service.get_document", new_callable=AsyncMock
+        "routers.documents.router.doc_service.get_document", new_callable=AsyncMock
     ) as mock_get:
         mock_get.return_value = None
         client = TestClient(app)
