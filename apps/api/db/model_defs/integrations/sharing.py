@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, ForeignKey, String, UniqueConstraint, Uuid, datetime, gen_uuid, relationship
 
 
@@ -12,7 +13,7 @@ class ProjectMemoryShare(Base):
     source_project_id = Column(Uuid(), ForeignKey("projects.id"), nullable=False)
     target_project_id = Column(Uuid(), ForeignKey("projects.id"), nullable=False)
     permission = Column(String(10), nullable=False, default="read")
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     source_project = relationship("Project", foreign_keys=[source_project_id])
     target_project = relationship("Project", foreign_keys=[target_project_id])

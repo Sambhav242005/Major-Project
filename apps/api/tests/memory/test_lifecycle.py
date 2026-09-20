@@ -1,7 +1,7 @@
 """Lifecycle tests — delete, cleanup, checkpoints."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,7 +22,7 @@ async def test_delete_memory_removes_row():
         project_id=uuid.UUID(PROJECT_ID),
         memory_type="episodic",
         content={"delete": "me"},
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
 
     mock_result = MagicMock()
@@ -119,7 +119,7 @@ async def test_load_latest_checkpoint_returns_most_recent():
         agent_id=uuid.UUID(AGENT_ID),
         task_id=None,
         state={"resumed": True},
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
 
     mock_result = MagicMock()

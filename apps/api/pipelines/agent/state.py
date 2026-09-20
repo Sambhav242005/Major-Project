@@ -1,6 +1,6 @@
 """Agent LangGraph state."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, TypedDict
 
 
@@ -27,7 +27,7 @@ def _add_trace(state: AgentState, step: str, status: str, **kwargs) -> dict:
     event = {
         "step": step,
         "status": status,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         **kwargs,
     }
     return {"trace": state["trace"] + [event]}

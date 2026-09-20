@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, ForeignKey, Integer, JSON, String, Text, Uuid, datetime, gen_uuid, relationship
 
 
@@ -12,7 +13,7 @@ class AgentMemory(Base):
     content = Column(JSON, nullable=False)
     embedding = Column(Text)
     metadata_ = Column("metadata", JSON, default=dict)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime(timezone=True))
 
     agent = relationship("Agent", back_populates="memories")
@@ -26,7 +27,7 @@ class AgentCheckpoint(Base):
     agent_id = Column(Uuid(), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
     task_id = Column(Uuid(), ForeignKey("agent_tasks.id"))
     state = Column(JSON, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     agent = relationship("Agent", back_populates="checkpoints")
 
@@ -44,8 +45,8 @@ class AgentSkill(Base):
     failure_count = Column(Integer, default=0)
     helpful_count = Column(Integer, default=0)
     harmful_count = Column(Integer, default=0)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     agent = relationship("Agent", back_populates="skills")
 

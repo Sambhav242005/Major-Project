@@ -1,7 +1,7 @@
 """Lifecycle nodes: initialize, build_prompt, post_process."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.security_utils import sanitize_for_llm, detect_injection
 from pipelines.agent.state import AgentState, _add_trace
@@ -25,7 +25,7 @@ async def node_initialize(state: AgentState) -> dict:
             "trace": state["trace"] + [{
                 "step": "initialize", "status": "error",
                 "error": "Input rejected: potential prompt injection detected",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }],
         }
 
@@ -52,7 +52,7 @@ async def node_initialize(state: AgentState) -> dict:
         "tool_call_history": [],
         "trace": state["trace"] + [{
             "step": "initialize", "status": "completed",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }
 
@@ -97,7 +97,7 @@ async def node_build_prompt(state: AgentState) -> dict:
         "trace": state["trace"] + [{
             "step": "prompt_built", "status": "completed",
             "output": f"Messages prepared: {len(messages)} messages",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }
 
@@ -139,6 +139,6 @@ async def node_post_process(state: AgentState) -> dict:
         "trace": state["trace"] + [{
             "step": "post_process", "status": "completed",
             "output": result,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }

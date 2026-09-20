@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, ForeignKey, JSON, Text, Uuid, datetime, gen_uuid
 
 
@@ -12,7 +13,7 @@ class AuditLog(Base):
     resource_type = Column(Text)
     resource_id = Column(Uuid())
     meta = Column(JSON)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 __all__ = ["AuditLog"]

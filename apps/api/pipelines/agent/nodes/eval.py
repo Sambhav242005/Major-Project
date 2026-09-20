@@ -1,7 +1,7 @@
 """Evaluation and refinement nodes."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pipelines.agent.state import AgentState
 
@@ -24,7 +24,7 @@ async def node_evaluate(state: AgentState) -> dict:
             "step": "evaluate", "status": "completed",
             "score": evaluation["score"],
             "details": evaluation.get("details", {}),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }
 
@@ -51,6 +51,6 @@ async def node_refine(state: AgentState) -> dict:
         "trace": state["trace"] + [{
             "step": "refine", "status": "completed",
             "refinement": refinement_result,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }

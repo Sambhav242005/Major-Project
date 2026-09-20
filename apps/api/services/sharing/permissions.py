@@ -1,7 +1,7 @@
 """Sharing permissions — grant, revoke, list, and checks."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,7 +77,7 @@ async def grant_share(
         source_project_id=uuid.UUID(source_project_id),
         target_project_id=uuid.UUID(target_project_id),
         permission=permission,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(share)
     await db.flush()

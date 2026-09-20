@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, ForeignKey, String, Text, Uuid, datetime, gen_uuid, relationship
 
 
@@ -7,7 +8,7 @@ class Profile(Base):
 
     id = Column(Uuid(), primary_key=True, default=gen_uuid)
     full_name = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     projects = relationship("Project", back_populates="owner")
     memberships = relationship("ProjectMember", back_populates="user")
@@ -20,7 +21,7 @@ class Project(Base):
     id = Column(Uuid(), primary_key=True, default=gen_uuid)
     name = Column(Text, nullable=False)
     owner_id = Column(Uuid(), ForeignKey("profiles.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     owner = relationship("Profile", back_populates="projects")
     members = relationship("ProjectMember", back_populates="project")

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .browser import _run_blocking, join_and_record
 from .errors import GoogleMeetError
@@ -77,7 +77,7 @@ async def run_meeting_bot(meet_link: str, duration_seconds: int = 60, progress=N
             await progress({
                 "step": step,
                 "status": status,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 **kwargs,
             })
 
@@ -108,7 +108,7 @@ async def run_meeting_bot(meet_link: str, duration_seconds: int = 60, progress=N
         "action_items": analysis.get("action_items", []),
         "sentiment": analysis.get("sentiment", "neutral"),
         "sentiment_reason": analysis.get("sentiment_reason", ""),
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     await emit("complete", "completed", output=result)
     return result

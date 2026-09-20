@@ -1,7 +1,7 @@
 """Agent execution entry point."""
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from pipelines.agent.graph import _get_graph
@@ -34,15 +34,15 @@ async def execute_agent(
             yield {
                 "step": "post_process", "status": "completed",
                 "output": result,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             yield {
                 "step": "complete", "status": "completed",
                 "output": result,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         except GoogleMeetError as e:
-            err = {"step": "execution", "status": "error", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
+            err = {"step": "execution", "status": "error", "error": str(e), "timestamp": datetime.now(timezone.utc).isoformat()}
             all_traces.append(err)
             yield err
         return

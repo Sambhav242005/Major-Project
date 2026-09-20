@@ -1,7 +1,7 @@
 """Agent execution endpoints (run, tasks, SSE stream)."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +42,7 @@ async def run_agent(
         input=req.input,
         status="running",
         trace=[],
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc),
     )
     db.add(task)
     await db.flush()
@@ -59,7 +59,7 @@ async def run_agent(
     except Exception as e:
         task.status = "failed"
         task.error = f"Failed to start: {e}"
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now(timezone.utc)
         await db.commit()
         raise HTTPException(status_code=500, detail=f"Failed to start agent: {e}")
 

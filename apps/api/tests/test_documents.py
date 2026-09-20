@@ -12,7 +12,13 @@ async def test_upload_creates_pending_document(MockDocument):
     mock_doc_instance = MagicMock()
     MockDocument.return_value = mock_doc_instance
 
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
 
     from services.documents import upload_document
 
@@ -42,7 +48,13 @@ async def test_list_documents_returns_list():
     mock_result = MagicMock()
     mock_result.scalars.return_value = mock_scalars
 
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
     mock_db.execute = AsyncMock(return_value=mock_result)
 
     from services.documents import list_documents
@@ -59,7 +71,13 @@ async def test_get_nonexistent_document_returns_none():
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
 
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
     mock_db.execute = AsyncMock(return_value=mock_result)
 
     from services.documents import get_document

@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, ForeignKey, JSON, String, Text, Uuid, datetime, gen_uuid, relationship
 
 
@@ -28,7 +29,7 @@ class MCPAuthToken(Base):
     refresh_token = Column(Text)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     scope = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     connection = relationship("MCPConnection", back_populates="auth_tokens")
 

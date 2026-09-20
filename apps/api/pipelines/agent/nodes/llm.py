@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pipelines.agent.state import AgentState
 from pipelines.agent_tools import execute_tool
@@ -36,7 +36,7 @@ async def node_execute_llm(state: AgentState) -> dict:
                     "output": full_response,
                     "elapsed_seconds": round(elapsed, 2),
                     "attempt": attempt + 1,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }],
             }
         except Exception as e:
@@ -51,7 +51,7 @@ async def node_execute_llm(state: AgentState) -> dict:
                         "step": "llm_execution", "status": "error",
                         "error": str(e),
                         "attempts": MAX_RETRIES,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }],
                 }
 
@@ -81,7 +81,7 @@ async def node_execute_tool(state: AgentState) -> dict:
                 "step": "tool_check", "status": "completed",
                 "tool_found": False,
                 "iterations_used": iterations,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }],
         }
 
@@ -99,7 +99,7 @@ async def node_execute_tool(state: AgentState) -> dict:
         "tool": tool_name,
         "arguments": arguments,
         "result": result_str[:2000],
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
     new_messages = state["messages"] + [
@@ -118,6 +118,6 @@ async def node_execute_tool(state: AgentState) -> dict:
             "arguments": arguments,
             "result_preview": result_str[:500],
             "iteration": iterations + 1,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }],
     }

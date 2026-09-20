@@ -1,7 +1,7 @@
 """Trace storage and failure mining."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +29,7 @@ async def store_run_trace(
         tool_calls=tool_calls,
         scores=scores,
         skills_used=skills_used,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(trace)
     await db.flush()
@@ -51,7 +51,7 @@ async def store_run_trace(
                 elif harmful:
                     skill.harmful_count += 1
                     skill.failure_count += 1
-                skill.updated_at = datetime.utcnow()
+                skill.updated_at = datetime.now(timezone.utc)
 
 
 async def mine_failures(

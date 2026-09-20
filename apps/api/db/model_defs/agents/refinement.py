@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Boolean, Column, DateTime, Float, ForeignKey, JSON, Text, Uuid, datetime, gen_uuid, relationship
 
 
@@ -13,7 +14,7 @@ class AgentRunTrace(Base):
     tool_calls = Column(JSON)
     scores = Column(JSON)
     skills_used = Column(JSON)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     agent = relationship("Agent", back_populates="run_traces")
 
@@ -28,7 +29,7 @@ class RefinementEvalSet(Base):
     task_name = Column(Text, nullable=False)
     input_text = Column(Text, nullable=False)
     expected_output = Column(JSON)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class RefinementLog(Base):
@@ -46,7 +47,7 @@ class RefinementLog(Base):
     held_in_delta = Column(Float)
     held_out_delta = Column(Float)
     accepted = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 __all__ = ["AgentRunTrace", "RefinementEvalSet", "RefinementLog"]

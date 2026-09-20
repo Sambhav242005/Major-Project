@@ -1,7 +1,7 @@
 """Hydration tests — hydrate_agent_context and format_memory_context."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,12 +20,12 @@ async def test_hydrate_agent_context_builds_prompt():
     working_mem = AgentMemory(
         id=uuid.uuid4(), agent_id=uuid.UUID(AGENT_ID), project_id=uuid.UUID(PROJECT_ID),
         memory_type="working", content={"task": "review"}, embedding=None, metadata_={},
-        created_at=datetime.utcnow(), expires_at=None,
+        created_at=datetime.now(timezone.utc), expires_at=None,
     )
     episodic_mem = AgentMemory(
         id=uuid.uuid4(), agent_id=uuid.UUID(AGENT_ID), project_id=uuid.UUID(PROJECT_ID),
         memory_type="episodic", content={"past": "done"}, embedding=None, metadata_={},
-        created_at=datetime.utcnow(), expires_at=None,
+        created_at=datetime.now(timezone.utc), expires_at=None,
     )
 
     call_count = 0

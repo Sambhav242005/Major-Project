@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,8 +44,8 @@ async def fire_event(
             payload=payload,
             attempts=0,
             success=False,
-            next_retry_at=datetime.utcnow(),
-            created_at=datetime.utcnow(),
+            next_retry_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc),
         )
         db.add(delivery)
         deliveries_created += 1

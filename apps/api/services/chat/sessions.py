@@ -1,7 +1,7 @@
 """Chat session management — create/get/list_sessions."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,7 @@ async def create_session(
         project_id=uuid.UUID(project_id),
         user_id=uuid.UUID(user.id),
         title=title or "New Chat",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(session)
     await db.flush()

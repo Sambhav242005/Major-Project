@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ async def store_memory(
     if memory_type not in ("working", "episodic", "semantic"):
         raise ValueError(f"Invalid memory_type: {memory_type}")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expires_at = None
     if memory_type == "working":
         expires_at = now + timedelta(hours=ttl_hours or 24)
@@ -71,7 +71,7 @@ async def retrieve_memories(
         conditions.append(AgentMemory.memory_type == memory_type)
     if not include_expired:
         conditions.append(
-            (AgentMemory.expires_at.is_(None)) | (AgentMemory.expires_at > datetime.utcnow())
+            (AgentMemory.expires_at.is_(None)) | (AgentMemory.expires_at > datetime.now(timezone.utc))
         )
 
     stmt = (
@@ -119,7 +119,7 @@ async def cleanup_expired_memories(db: AsyncSession, agent_id: str, project_id: 
         AgentMemory.project_id == uuid.UUID(project_id),
         AgentMemory.memory_type == "working",
         AgentMemory.expires_at.isnot(None),
-        AgentMemory.expires_at < datetime.utcnow(),
+        AgentMemory.expires_at < datetime.now(timezone.utc),
     )
     result = await db.execute(stmt)
     await db.flush()
@@ -141,7 +141,7 @@ async def retrieve_project_memories(
         conditions.append(AgentMemory.memory_type == memory_type)
     if not include_expired:
         conditions.append(
-            (AgentMemory.expires_at.is_(None)) | (AgentMemory.expires_at > datetime.utcnow())
+            (AgentMemory.expires_at.is_(None)) | (AgentMemory.expires_at > datetime.now(timezone.utc))
         )
 
     stmt = (
