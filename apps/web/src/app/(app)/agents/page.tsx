@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useAgents, AgentTask } from "@/hooks/useAgents";
+import { useAgents, type AgentTask } from "@/hooks/useAgents";
+import type { AgentTraceStep } from "@/lib/types";
 import { useProjectStore } from "@/stores/project";
 import { Plus } from "lucide-react";
 import {
@@ -29,7 +30,7 @@ export default function AgentsPage() {
   const [creating, setCreating] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
   const [runInput, setRunInput] = useState("");
-  const [liveTrace, setLiveTrace] = useState<any[]>([]);
+  const [liveTrace, setLiveTrace] = useState<AgentTraceStep[]>([]);
   const [runError, setRunError] = useState<string>("");
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
@@ -272,7 +273,7 @@ export default function AgentsPage() {
         onExpandAll={() => {
           const trace = showTrace?.trace || [];
           setExpandedSteps((prev) =>
-            prev.size === trace.length ? new Set() : new Set(trace.map((_: any, i: number) => i))
+            prev.size === trace.length ? new Set() : new Set(trace.map((_, i) => i))
           );
         }}
         onClose={() => setShowTrace(null)}

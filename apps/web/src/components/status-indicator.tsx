@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api/client";
 import { m, AnimatePresence } from "motion/react";
@@ -20,7 +20,7 @@ interface SystemStatus {
 }
 
 export function StatusIndicator() {
-  const supabaseRef = useRef(createClient());
+  const [supabase] = useState(() => createClient());
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [expanded, setExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,7 +28,7 @@ export function StatusIndicator() {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const { data: { session } } = await supabaseRef.current.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         setStatus(
           await apiFetch<SystemStatus>("/system/status", {
             token: session?.access_token ?? null,
@@ -37,7 +37,7 @@ export function StatusIndicator() {
       } catch {}
     };
     fetchStatus();
-  }, []);
+  }, [supabase.auth]);
 
   useEffect(() => {
     if (!expanded) return;

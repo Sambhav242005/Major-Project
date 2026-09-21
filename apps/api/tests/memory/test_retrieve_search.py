@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -26,7 +26,7 @@ async def test_retrieve_memories_returns_list():
         content={"task": "review"},
         embedding=None,
         metadata_={},
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         expires_at=None,
     )
 
@@ -102,7 +102,7 @@ async def test_search_memories_cosine_similarity():
         content={"topic": "auth"},
         embedding=json.dumps([1.0, 0.0, 0.0]),
         metadata_={},
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         expires_at=None,
     )
     mem2 = AgentMemory(
@@ -113,7 +113,7 @@ async def test_search_memories_cosine_similarity():
         content={"topic": "storage"},
         embedding=json.dumps([0.0, 1.0, 0.0]),
         metadata_={},
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         expires_at=None,
     )
 
@@ -150,7 +150,7 @@ async def test_search_memories_respects_limit():
             content={"i": i},
             embedding=json.dumps([1.0, 0.0]),
             metadata_={},
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             expires_at=None,
         )
         for i in range(10)
@@ -185,7 +185,7 @@ async def test_search_memories_skips_none_embedding():
         content={"no": "embedding"},
         embedding=None,
         metadata_={},
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         expires_at=None,
     )
     mem_with_embed = AgentMemory(
@@ -196,7 +196,7 @@ async def test_search_memories_skips_none_embedding():
         content={"has": "embedding"},
         embedding=json.dumps([0.5, 0.5]),
         metadata_={},
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         expires_at=None,
     )
 

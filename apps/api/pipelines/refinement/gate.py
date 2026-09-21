@@ -1,7 +1,7 @@
 """Acceptance gate and refinement cycle."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,8 +34,8 @@ async def apply_delta(
                 failure_count=0,
                 helpful_count=0,
                 harmful_count=0,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
             )
             db.add(new_skill)
         target_id = None
@@ -50,7 +50,7 @@ async def apply_delta(
             if skill:
                 skill.content = proposal["content"]
                 skill.evidence = proposal["reason"]
-                skill.updated_at = datetime.utcnow()
+                skill.updated_at = datetime.now(timezone.utc)
         target_id = proposal.get("skill_id")
 
     elif proposal["action"] == "remove":
@@ -78,7 +78,7 @@ async def apply_delta(
         held_in_delta=held_in_delta,
         held_out_delta=held_out_delta,
         accepted=accepted,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(log)
     await db.flush()

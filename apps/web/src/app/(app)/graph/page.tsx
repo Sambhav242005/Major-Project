@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch } from "@/lib/api/client";
 import Link from "next/link";
-import { GraphEdge, GraphNode } from "reagraph";
+import type { GraphEdge as ReagraphEdge, GraphNode as ReagraphNode } from "reagraph";
 import { useGraphStore } from "@/stores/graph";
 import { useProjectStore } from "@/stores/project";
+import type { EntityChunk, EntityDetail } from "@/lib/types";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { GraphCanvas, GraphSearch, GraphTypeFilter, GraphControls, EntityDetailPanel, GraphLegend } from "@/components/features/graph";
 
@@ -18,36 +19,77 @@ const ENTITY_COLORS: Record<string, string> = {
   CONCEPT: "#38bdf8",
 };
 
+interface ApiGraphNode {
+  id: string;
+  name: string;
+  type: string;
+  description: string | null;
+}
+
+interface ApiGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation_type: string;
+  description: string | null;
+  confidence: number;
+}
+
+interface ApiGraphResponse {
+  nodes: ApiGraphNode[];
+  edges: ApiGraphEdge[];
+}
+
+
+interface ApiGraphNode {
+  id: string;
+  name: string;
+  type: string;
+  description: string | null;
+}
+
+interface ApiGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation_type: string;
+  description: string | null;
+  confidence: number;
+}
+
+interface ApiGraphResponse {
+  nodes: ApiGraphNode[];
+  edges: ApiGraphEdge[];
+}
+
+
 export default function GraphPage() {
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
+  const [supabase] = useState(() => createClient());
+
   const {
     nodes: storeNodes,
-    edges: storeEdges,
     selectedEntityId,
     searchQuery,
     depth,
     setGraphData,
     selectEntity,
-    setSearchQuery,
     setDepth,
     clearGraph,
   } = useGraphStore();
   const { projects, activeProjectId, loadProjects } = useProjectStore();
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
-  const [graphNodes, setGraphNodes] = useState<GraphNode[]>([]);
-  const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
-  const [selectedEntity, setSelectedEntity] = useState<any>(null);
-  const [entityChunks, setEntityChunks] = useState<any[]>([]);
+  const [graphNodes, setGraphNodes] = useState<ReagraphNode[]>([]);
+  const [graphEdges, setGraphEdges] = useState<ReagraphEdge[]>([]);
+  const [selectedEntity, setSelectedEntity] = useState<EntityDetail | null>(null);
+  const [entityChunks, setEntityChunks] = useState<EntityChunk[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [viewerKey, setViewerKey] = useState(0);
-  const canvasRef = useRef<{ zoomIn?: () => void; zoomOut?: () => void; fit?: () => void } | null>(null);
 
-  const entityTypes = Array.from(new Set(storeNodes.map((n: any) => n.type)));
+  const entityTypes = Array.from(new Set(storeNodes.map((n) => n.type)));
 
   const toggleType = useCallback((type: string) => {
     setTypeFilter((prev) =>
@@ -56,17 +98,17 @@ export default function GraphPage() {
   }, []);
 
   const fetchGraph = useCallback(
-    async (entityId?: string) => {
+    async (entityId?: string, depthOverride = depth) => {
       setLoading(true);
       setError(null);
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        const params = new URLSearchParams({ depth: String(depth) });
+        const params = new URLSearchParams({ depth: String(depthOverride) });
         if (entityId) params.set("entity_id", entityId);
 
-        const data = await apiFetch<{ nodes: any[]; edges: any[] }>(
+        const data = await apiFetch<ApiGraphResponse>(
           `/kb/graph?${params}`,
           { token: session.access_token, projectId: activeProjectId }
         );
@@ -75,27 +117,39 @@ export default function GraphPage() {
         const apiEdges = data.edges || [];
 
         const active = typeFilter.length === 0 ? null : typeFilter;
-        const visibleNodes = active ? apiNodes.filter((n: any) => active.includes(n.type)) : apiNodes;
-        const visibleIds = new Set(visibleNodes.map((n: any) => n.id));
+        const visibleNodes = active ? apiNodes.filter((n) => active.includes(n.type)) : apiNodes;
+        const visibleIds = new Set(visibleNodes.map((n) => n.id));
         const visibleEdges = apiEdges.filter(
-          (e: any) => visibleIds.has(e.source) && visibleIds.has(e.target)
+          (e) => visibleIds.has(e.source) && visibleIds.has(e.target)
         );
 
-        const nodes: GraphNode[] = visibleNodes.map((n: any) => ({
+        const nodes: ReagraphNode[] = visibleNodes.map((n) => ({
           id: n.id,
           label: n.name,
           fill: ENTITY_COLORS[n.type] || "#64748b",
           size: 8,
         }));
 
-        const edges: GraphEdge[] = visibleEdges.map((e: any) => ({
+        const edges: ReagraphEdge[] = visibleEdges.map((e) => ({
           id: e.id,
           source: e.source,
           target: e.target,
           label: e.relation_type || "",
         }));
 
-        setGraphData(apiNodes, apiEdges);
+        setGraphData(
+          apiNodes.map((node) => ({
+            ...node,
+            description: node.description ?? undefined,
+          })),
+          apiEdges.map((edge) => ({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            label: edge.relation_type,
+            confidence: edge.confidence,
+          }))
+        );
         setGraphNodes(nodes);
         setGraphEdges(edges);
       } catch (e) {
@@ -106,7 +160,7 @@ export default function GraphPage() {
         setLoading(false);
       }
     },
-    [depth, typeFilter, setGraphData, activeProjectId]
+    [depth, typeFilter, setGraphData, activeProjectId, supabase.auth]
   );
 
   const fetchEntity = useCallback(
@@ -116,18 +170,18 @@ export default function GraphPage() {
         if (!session) return;
 
         const [entityRes, chunksRes] = await Promise.all([
-          apiFetch<{ entity: any }>(`/kb/entities/${entityId}`, {
+          apiFetch<{ entity: EntityDetail }>(`/kb/entities/${entityId}`, {
             token: session.access_token,
             projectId: activeProjectId,
           }),
-          apiFetch<{ chunks: any[] }>(`/kb/entities/${entityId}/chunks`, {
+          apiFetch<{ chunks: EntityChunk[] }>(`/kb/entities/${entityId}/chunks`, {
             token: session.access_token,
             projectId: activeProjectId,
           }),
         ]);
         setSelectedEntity(entityRes.entity);
         const seen = new Set<string>();
-        const uniqueChunks = (chunksRes.chunks || []).filter((c: any) => {
+        const uniqueChunks = (chunksRes.chunks || []).filter((c) => {
           const key = `${c.filename}|${c.page_number ?? 0}`;
           if (seen.has(key)) return false;
           seen.add(key);
@@ -150,16 +204,15 @@ export default function GraphPage() {
       if (!projects.length) await loadProjects(session.access_token);
     };
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadProjects, projects.length, supabase.auth]);
 
   useEffect(() => {
     fetchGraph();
   }, [fetchGraph]);
 
   const handleNodeClick = useCallback(
-    (node: any) => {
-      const nodeId = node?.id || node;
+    (node: ReagraphNode) => {
+      const nodeId = node.id;
       selectEntity(nodeId);
       fetchEntity(nodeId);
     },
@@ -168,7 +221,7 @@ export default function GraphPage() {
 
   const handleDepthChange = (newDepth: number) => {
     setDepth(newDepth);
-    fetchGraph(selectedEntityId || undefined);
+    void fetchGraph(selectedEntityId || undefined, newDepth);
   };
 
   const handleSearch = () => {

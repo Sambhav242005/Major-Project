@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,7 @@ async def send_message(
         session_id=uuid.UUID(session_id) if not isinstance(session_id, uuid.UUID) else session_id,
         role="user",
         content=message,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(user_msg)
     await db.flush()
@@ -136,7 +136,7 @@ async def send_message(
         role="assistant",
         content=full_response,
         citations=citations,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(assistant_msg)
     await write_audit_log(

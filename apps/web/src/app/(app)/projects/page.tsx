@@ -19,7 +19,6 @@ export default function ProjectsPage() {
   } = useProject();
   const { token } = useAuth();
 
-  const [createOpen, setCreateOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -33,7 +32,6 @@ export default function ProjectsPage() {
     if (token) {
       const created = await createProject(token, name);
       if (created) {
-        setCreateOpen(false);
         setFlash(`Created "${created.name}" and switched to it`);
       }
     }

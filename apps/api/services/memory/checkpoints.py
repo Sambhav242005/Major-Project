@@ -1,7 +1,7 @@
 """Memory checkpoints — save and load agent state snapshots."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,7 @@ async def save_checkpoint(
         agent_id=uuid.UUID(agent_id),
         task_id=uuid.UUID(task_id) if task_id else None,
         state=state,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(checkpoint)
     await db.flush()

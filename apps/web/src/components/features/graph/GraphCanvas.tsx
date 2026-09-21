@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import {
-  GraphCanvas as ReagraphCanvas,
-  GraphEdge,
-  GraphNode,
-} from "reagraph";
+import { GraphCanvas as ReagraphCanvas } from "reagraph";
+import type { GraphEdge, GraphNode } from "reagraph";
 
 interface GraphCanvasWrapperProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  onNodeClick?: (node: any) => void;
+  onNodeClick?: (node: GraphNode) => void;
   loading?: boolean;
   empty?: boolean;
   emptyMessage?: string;

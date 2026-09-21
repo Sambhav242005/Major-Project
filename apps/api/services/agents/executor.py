@@ -3,7 +3,7 @@
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,7 +65,7 @@ async def run_agent(
         input=input_data,
         status="running",
         trace=[],
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc),
     )
     db.add(task)
     await db.flush()
@@ -117,7 +117,7 @@ async def run_agent(
             "step": "execution",
             "status": "error",
             "error": str(e),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
         await save_checkpoint(
             db, agent_id, str(task.id),
@@ -125,7 +125,7 @@ async def run_agent(
         )
 
     task.trace = trace
-    task.completed_at = datetime.utcnow()
+    task.completed_at = datetime.now(timezone.utc)
 
     # Store run trace for refinement
     try:
@@ -165,7 +165,7 @@ async def run_agent(
         logger.warning(f"Failed to store run trace: {e}")
 
     # Update agent's last_active_at
-    agent.last_active_at = datetime.utcnow()
+    agent.last_active_at = datetime.now(timezone.utc)
 
     await db.flush()
 

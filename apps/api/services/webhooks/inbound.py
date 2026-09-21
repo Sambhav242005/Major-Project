@@ -1,7 +1,7 @@
 """Webhook inbound — routing and handlers for inbound webhooks."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
@@ -107,7 +107,7 @@ async def _handle_mcp_receive(
     doc = Document(
         id=uuid.uuid4(),
         project_id=webhook.project_id,
-        filename=f"mcp_{source}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.txt",
+        filename=f"mcp_{source}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.txt",
         file_type="text/plain",
         storage_path=f"mcp://{source}",
         status="processing",
@@ -137,7 +137,7 @@ async def _handle_mcp_receive(
             db.add(db_chunk)
 
     doc.status = "processed"
-    doc.processed_at = datetime.utcnow()
+    doc.processed_at = datetime.now(timezone.utc)
     await db.flush()
 
     return {"status": "ingested", "document_id": str(doc.id), "chunk_count": len(chunks)}

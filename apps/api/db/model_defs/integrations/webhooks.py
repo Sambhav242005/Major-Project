@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Boolean, Column, DateTime, ForeignKey, Integer, JSON, Text, Uuid, datetime, gen_uuid, relationship
 
 
@@ -11,8 +12,8 @@ class WebhookSubscription(Base):
     url = Column(Text, nullable=False)
     secret = Column(Text)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="webhook_subscriptions")
     deliveries = relationship("WebhookDelivery", back_populates="subscription", cascade="all, delete-orphan")
@@ -31,7 +32,7 @@ class WebhookDelivery(Base):
     attempts = Column(Integer, default=0)
     success = Column(Boolean, default=False)
     next_retry_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     subscription = relationship("WebhookSubscription", back_populates="deliveries")
 
@@ -47,7 +48,7 @@ class InboundWebhook(Base):
     handler = Column(Text, nullable=False)
     config = Column(JSON, default=dict)
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="inbound_webhooks")
 

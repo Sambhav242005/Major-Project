@@ -1,7 +1,7 @@
 """Document CRUD — upload, fetch, list, update, delete."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +41,7 @@ async def upload_document(
         file_type=file_type,
         storage_path=storage_path,
         status="pending",
-        uploaded_at=datetime.utcnow(),
+        uploaded_at=datetime.now(timezone.utc),
     )
     db.add(doc)
     await db.flush()
@@ -110,7 +110,7 @@ async def update_document_status(
         if page_count is not None:
             doc.page_count = page_count
         if status == "processed":
-            doc.processed_at = datetime.utcnow()
+            doc.processed_at = datetime.now(timezone.utc)
         await db.flush()
 
 

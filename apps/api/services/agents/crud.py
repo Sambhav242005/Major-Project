@@ -1,7 +1,7 @@
 """Agent CRUD — list/get/create/update/delete and type listing."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,7 +73,7 @@ async def create_agent(
         type=agent_type,
         config={**type_info, **config},
         status="active",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(agent)
     await db.flush()

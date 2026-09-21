@@ -4,7 +4,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiFetch, withProject, API_BASE } from "@/lib/api/client";
+import { apiFetch, withProject } from "@/lib/api/client";
 import { ChatSession, ChatMessage } from "@/lib/validators";
 
 interface UseChatOptions {

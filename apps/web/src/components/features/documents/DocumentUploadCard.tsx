@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react";
 import { Upload, FileText, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from "@/lib/types";
 
 interface DocumentUploadCardProps {

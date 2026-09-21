@@ -1,17 +1,18 @@
 "use client";
 
-import { Bot, FileText, Brain, Search, CheckCircle, Zap, Trash2, Loader2 } from "lucide-react";
+import {
+  Bot,
+  FileText,
+  Brain,
+  Search,
+  CheckCircle,
+  Zap,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
+import type { AgentRecord } from "@/hooks/useAgents";
 
-interface Agent {
-  id: string;
-  name: string;
-  type: string;
-  config: Record<string, any>;
-  status: string;
-  created_at: string | null;
-}
-
-const TYPE_ICONS: Record<string, any> = {
+const TYPE_ICONS: Record<string, LucideIcon> = {
   summarizer: FileText,
   extractor: Brain,
   qa: Search,
@@ -28,10 +29,10 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 interface AgentCardProps {
-  agent: Agent;
+  agent: AgentRecord;
   isSelected: boolean;
   isRunning: boolean;
-  onSelect: (agent: Agent) => void;
+  onSelect: (agent: AgentRecord) => void;
   onDelete: (agentId: string) => void;
 }
 
@@ -63,6 +64,7 @@ export function AgentCard({
             className={isSelected ? "text-sky-400" : "text-app-muted"}
           />
         </div>
+
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-medium text-app-text truncate">
@@ -72,6 +74,7 @@ export function AgentCard({
               <div className="pulse-dot text-sky-400 bg-sky-400" />
             )}
           </div>
+
           <div className="flex items-center gap-2 mt-1">
             <span className={`text-[10px] px-1.5 py-0.5 rounded ${colorTag}`}>
               {agent.type}
@@ -85,6 +88,7 @@ export function AgentCard({
             </span>
           </div>
         </div>
+
         <button
           onClick={(e) => {
             e.stopPropagation();

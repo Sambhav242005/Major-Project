@@ -60,27 +60,76 @@ export interface SearchResults {
   }>;
 }
 
-/** Entity detail with full metadata (agents page sidebar) */
+/** Entity detail returned by the knowledge-base API. */
 export interface EntityDetail {
   id: string;
   name: string;
   type: string;
   description: string | null;
+  first_seen_document_id?: string | null;
+  created_at?: string | null;
   mentions_count?: number;
   relationships?: Array<{
     id: string;
-    name: string;
-    type: string;
     relation_type: string;
-    confidence?: number;
+    description: string | null;
+    confidence: number | null;
+    other_entity_id: string;
+    other_entity_name: string;
+    direction: "outgoing" | "incoming";
   }>;
-  mentions?: Array<{
-    document_id: string;
-    filename: string;
-    chunk_id: string;
-    context: string;
-    created_at: string;
-  }>;
+}
+
+/** Entity source chunk returned by the knowledge-base API. */
+export interface EntityChunk {
+  chunk_id: string;
+  text: string;
+  page_number: number | null;
+  filename: string;
+  mention_text?: string | null;
+  confidence?: number | null;
+}
+
+/** One structured agent trace event emitted by the agent SSE stream. */
+export interface AgentTraceStep {
+  step: string;
+  status: string;
+  tool?: string;
+  output?: unknown;
+  error?: string;
+  elapsed_seconds?: number;
+  score?: number;
+  result_preview?: string;
+  arguments?: Record<string, unknown>;
+  details?: unknown;
+  refinement?: unknown;
+}
+
+/** Structured tool call captured in an agent result. */
+export interface AgentToolCall {
+  tool: string;
+  result_preview?: string;
+  arguments?: Record<string, unknown>;
+}
+
+/** Final structured output returned by an agent task. */
+export interface AgentTaskOutput {
+  response?: string;
+  tool_calls?: AgentToolCall[];
+  [key: string]: unknown;
+}
+
+/** Agent task returned by the agents API. */
+export interface AgentTask {
+  id: string;
+  agent_id: string;
+  status: string;
+  input: Record<string, unknown> | null;
+  output: AgentTaskOutput | null;
+  trace: AgentTraceStep[] | null;
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
 }
 
 /** Meeting analysis result */

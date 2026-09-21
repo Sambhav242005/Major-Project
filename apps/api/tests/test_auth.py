@@ -6,6 +6,10 @@ from fastapi import HTTPException
 
 from core.security import get_current_user, User
 
+@pytest.fixture(autouse=True)
+def _disable_mock_auth(monkeypatch):
+    monkeypatch.setattr("core.security.settings.MOCK_AUTH", False)
+
 
 # --- Test: Valid token returns User ---
 
@@ -19,7 +23,7 @@ async def test_valid_token_returns_user(mock_decode, mock_get_key):
     credentials = MagicMock()
     credentials.credentials = "valid-token"
 
-    user = await get_current_user(credentials)
+    user = await get_current_user(MagicMock(), credentials)
 
     assert user.id == "user-123"
     assert user.email == "test@example.com"
@@ -38,7 +42,7 @@ async def test_missing_sub_raises_401(mock_decode, mock_get_key):
     credentials.credentials = "token-no-sub"
 
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(credentials)
+        await get_current_user(MagicMock(), credentials)
 
     assert exc_info.value.status_code == 401
     assert "missing sub claim" in exc_info.value.detail
@@ -59,7 +63,7 @@ async def test_expired_token_raises_401(mock_decode, mock_get_key):
     credentials.credentials = "expired-token"
 
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(credentials)
+        await get_current_user(MagicMock(), credentials)
 
     assert exc_info.value.status_code == 401
 
@@ -79,6 +83,6 @@ async def test_malformed_token_raises_401(mock_decode, mock_get_key):
     credentials.credentials = "not-a-jwt"
 
     with pytest.raises(HTTPException) as exc_info:
-        await get_current_user(credentials)
+        await get_current_user(MagicMock(), credentials)
 
     assert exc_info.value.status_code == 401

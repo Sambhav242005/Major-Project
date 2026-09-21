@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, ForeignKey, Integer, String, Text, Uuid, datetime, gen_uuid, relationship
 
 
@@ -14,7 +15,7 @@ class Document(Base):
     status = Column(String(20), default="pending")
     page_count = Column(Integer)
     error_message = Column(Text)
-    uploaded_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    uploaded_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     processed_at = Column(DateTime(timezone=True))
 
     project = relationship("Project", back_populates="documents")

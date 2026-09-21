@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import partial
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,10 +34,10 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
 
         await update_document_status(db, document_id, "processing")
         await db.commit()
-        _notify(document_id, {"stage": "processing", "status": "running", "timestamp": datetime.utcnow().isoformat()})
+        _notify(document_id, {"stage": "processing", "status": "running", "timestamp": datetime.now(timezone.utc).isoformat()})
 
         logger.info(f"Parsing {doc.filename}")
-        _notify(document_id, {"stage": "parsing", "status": "running", "timestamp": datetime.utcnow().isoformat()})
+        _notify(document_id, {"stage": "parsing", "status": "running", "timestamp": datetime.now(timezone.utc).isoformat()})
         pages = await _offload(parse_document, file_content, doc.filename, doc.file_type)
 
         if not pages or all(not p.get("text", "").strip() for p in pages):
@@ -49,7 +49,7 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
             return
 
         logger.info(f"Chunking {len(pages)} pages")
-        _notify(document_id, {"stage": "chunking", "status": "running", "page_count": len(pages), "timestamp": datetime.utcnow().isoformat()})
+        _notify(document_id, {"stage": "chunking", "status": "running", "page_count": len(pages), "timestamp": datetime.now(timezone.utc).isoformat()})
         chunks = await _offload(chunk_pages, pages, 600, 80)
 
         if not chunks:
@@ -61,7 +61,7 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
             return
 
         logger.info(f"Embedding {len(chunks)} chunks")
-        _notify(document_id, {"stage": "embedding", "status": "running", "chunk_count": len(chunks), "timestamp": datetime.utcnow().isoformat()})
+        _notify(document_id, {"stage": "embedding", "status": "running", "chunk_count": len(chunks), "timestamp": datetime.now(timezone.utc).isoformat()})
         chroma_ids = await _offload(
             upsert_chunks,
             chunks,
@@ -85,7 +85,7 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
         await db.flush()
 
         logger.info(f"Extracting entities from {len(chunks)} chunks")
-        _notify(document_id, {"stage": "extracting_entities", "status": "running", "timestamp": datetime.utcnow().isoformat()})
+        _notify(document_id, {"stage": "extracting_entities", "status": "running", "timestamp": datetime.now(timezone.utc).isoformat()})
         try:
             from pipelines.entity_extraction import extract_entities_from_chunks
 
@@ -118,7 +118,7 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
         _notify(document_id, {
             "stage": "complete", "status": "completed",
             "chunk_count": len(chunks), "page_count": len(pages),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         try:

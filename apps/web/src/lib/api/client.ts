@@ -58,7 +58,7 @@ function humanError(status: number, detail?: string): string {
  * project context is active. Handles paths that already carry a query string.
  */
 export function withProject(path: string, projectId?: string | null): string {
-  let url = `${API_BASE}${path}`;
+  const url = `${API_BASE}${path}`;
   if (!projectId) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}project_id=${encodeURIComponent(projectId)}`;

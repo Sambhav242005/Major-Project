@@ -4,11 +4,9 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch, API_BASE } from "@/lib/api/client";
-import Link from "next/link";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { StatusPill } from "@/components/shared/StatusPill";
 import { Badge } from "@/components/ui/badge";
 
 interface DocumentDetail {
@@ -54,8 +52,8 @@ export default function DocumentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
+  const [supabase] = useState(() => createClient());
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -79,7 +77,7 @@ export default function DocumentDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [documentId]);
+  }, [documentId, supabase.auth]);
 
   useEffect(() => {
     fetchData();
@@ -107,12 +105,15 @@ export default function DocumentDetailPage() {
       }
       let res: Response;
       try {
+        const formData = new FormData();
+        formData.append("file", file);
+
         res = await fetch(
           `${API_BASE}/documents/${documentId}/retry`,
           {
             method: "POST",
             headers: { Authorization: `Bearer ${session.access_token}` },
-            body: file,
+            body: formData,
           }
         );
       } catch {

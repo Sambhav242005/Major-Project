@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, FolderKanban } from "lucide-react";
 import { Select } from "@base-ui/react/select";
-import { createClient } from "@/lib/supabase/client";
 import { useProjectStore } from "@/stores/project";
 import { cn } from "@/lib/utils";
 
@@ -14,18 +12,8 @@ import { cn } from "@/lib/utils";
  * viewing (chat, graph, documents, agents all scope to this).
  */
 export function ProjectSwitcher() {
-  const { projects, activeProjectId, loaded, error, offline, loadProjects, setActiveProject } =
+  const { projects, activeProjectId, loaded, error, offline, setActiveProject } =
     useProjectStore();
-  const supabaseRef = useRef(createClient());
-
-  useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabaseRef.current.auth.getSession();
-      if (!session) return;
-      await loadProjects(session.access_token);
-    };
-    init();
-  }, [loadProjects]);
 
   const active = projects.find((p) => p.id === activeProjectId) ?? null;
 

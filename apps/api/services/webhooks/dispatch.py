@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy import select
@@ -61,7 +61,7 @@ async def dispatch_delivery(db: AsyncSession, delivery_id: str) -> bool:
                 delivery.success = False
                 if delivery.attempts < MAX_RETRIES:
                     delay = RETRY_DELAYS[min(delivery.attempts, len(RETRY_DELAYS) - 1)]
-                    delivery.next_retry_at = datetime.utcnow() + timedelta(seconds=delay)
+                    delivery.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
                 await db.flush()
                 return False
 
@@ -71,7 +71,7 @@ async def dispatch_delivery(db: AsyncSession, delivery_id: str) -> bool:
         delivery.success = False
         if delivery.attempts < MAX_RETRIES:
             delay = RETRY_DELAYS[min(delivery.attempts, len(RETRY_DELAYS) - 1)]
-            delivery.next_retry_at = datetime.utcnow() + timedelta(seconds=delay)
+            delivery.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
         await db.flush()
         return False
 
@@ -81,7 +81,7 @@ async def dispatch_pending_deliveries(db: AsyncSession) -> int:
     stmt = select(WebhookDelivery).where(
         WebhookDelivery.success == False,
         WebhookDelivery.attempts < MAX_RETRIES,
-        WebhookDelivery.next_retry_at <= datetime.utcnow(),
+        WebhookDelivery.next_retry_at <= datetime.now(timezone.utc),
     )
     result = await db.execute(stmt)
     deliveries = result.scalars().all()

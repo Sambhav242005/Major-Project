@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, ForeignKey, JSON, String, Text, Uuid, datetime, gen_uuid, relationship
 
 
@@ -9,7 +10,7 @@ class ChatSession(Base):
     project_id = Column(Uuid(), ForeignKey("projects.id"))
     user_id = Column(Uuid(), ForeignKey("profiles.id"))
     title = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="chat_sessions")
     messages = relationship("ChatMessage", back_populates="session")
@@ -24,7 +25,7 @@ class ChatMessage(Base):
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     citations = Column(JSON)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     session = relationship("ChatSession", back_populates="messages")
 

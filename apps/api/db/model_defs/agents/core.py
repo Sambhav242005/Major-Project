@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, ForeignKey, JSON, String, Text, Uuid, datetime, gen_uuid, relationship
 
 
@@ -14,7 +15,7 @@ class Agent(Base):
     status = Column(String(20), default="active")
     last_checkpoint = Column(JSON)
     last_active_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="agents")
     owner = relationship("Profile")

@@ -7,9 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # --- Test: Search returns formatted results ---
 
 @pytest.mark.asyncio
-@patch("services.knowledge.query_chunks")
-@patch("services.knowledge.select")
-async def test_search_returns_enriched_results(mock_select, mock_query_chunks):
+@patch("services.knowledge.search.query_chunks")
+async def test_search_returns_enriched_results(mock_query_chunks):
     # Mock ChromaDB results
     mock_query_chunks.return_value = [
         {
@@ -24,21 +23,23 @@ async def test_search_returns_enriched_results(mock_select, mock_query_chunks):
     # Mock DB results
     mock_chunk = MagicMock()
     mock_chunk.id = "chunk-1"
+    mock_chunk.chroma_id = "chunk-1"
     mock_chunk.document_id = "doc-1"
     mock_chunk.page_number = 1
     mock_chunk.chunk_index = 0
 
     mock_doc = MagicMock()
+    mock_doc.id = "doc-1"
     mock_doc.filename = "test.pdf"
 
     mock_db = AsyncMock()
 
     # Chain the mock calls
     mock_result1 = MagicMock()
-    mock_result1.scalar_one_or_none.return_value = mock_chunk
+    mock_result1.scalars.return_value.all.return_value = [mock_chunk]
 
     mock_result2 = MagicMock()
-    mock_result2.scalar_one_or_none.return_value = mock_doc
+    mock_result2.scalars.return_value.all.return_value = [mock_doc]
 
     mock_db.execute = AsyncMock(side_effect=[mock_result1, mock_result2])
 
@@ -54,7 +55,7 @@ async def test_search_returns_enriched_results(mock_select, mock_query_chunks):
 # --- Test: Search returns empty on no results ---
 
 @pytest.mark.asyncio
-@patch("services.knowledge.query_chunks")
+@patch("services.knowledge.search.query_chunks")
 async def test_search_returns_empty_when_no_chunks(mock_query_chunks):
     mock_query_chunks.return_value = []
 
@@ -78,7 +79,11 @@ async def test_get_entity_returns_none_for_nonexistent():
 
     from services.knowledge import get_entity
 
-    result = await get_entity(mock_db, "nonexistent-id", "proj-1")
+    result = await get_entity(
+        mock_db,
+        "550e8400-e29b-41d4-a716-446655440002",
+        "550e8400-e29b-41d4-a716-446655440001",
+    )
 
     assert result is None
 
@@ -94,6 +99,10 @@ async def test_get_graph_returns_empty_when_no_entities():
 
     from services.knowledge import get_graph
 
-    result = await get_graph(mock_db, None, "proj-1")
+    result = await get_graph(
+        mock_db,
+        None,
+        "550e8400-e29b-41d4-a716-446655440001",
+    )
 
     assert result == {"nodes": [], "edges": []}

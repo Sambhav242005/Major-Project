@@ -24,7 +24,7 @@ def _make_trace(agent_id: str, score: float, output_text: str, input_text: str =
         tool_calls=[],
         scores={"score": score},
         skills_used=[],
-        created_at=__import__("datetime").datetime.utcnow(),
+        created_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
     )
 
 
@@ -34,7 +34,13 @@ async def test_evaluate_on_split_scores_real_traces():
     from pipelines.agent_refinement import evaluate_on_split
 
     agent_id = str(uuid.uuid4())
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
 
     # eval set lookup: no rows -> eval_inputs empty (fall back to all traces)
     eval_result = MagicMock()
@@ -65,7 +71,13 @@ async def test_evaluate_on_split_returns_neutral_when_no_data():
     from pipelines.agent_refinement import evaluate_on_split
 
     agent_id = str(uuid.uuid4())
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
 
     eval_result = MagicMock()
     eval_result.all.return_value = []
@@ -91,7 +103,13 @@ async def test_store_run_trace_bumps_counters():
 
     agent_id = str(uuid.uuid4())
     skill_id = str(uuid.uuid4())
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
 
     skill = AgentSkill(
         id=uuid.UUID(skill_id),
@@ -134,16 +152,22 @@ async def test_run_refinement_cycle_uses_measured_deltas():
     from pipelines.agent_refinement import run_refinement_cycle
 
     agent_id = str(uuid.uuid4())
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
 
     with patch(
-        "pipelines.agent_refinement.mine_failures", new_callable=AsyncMock
+        "pipelines.refinement.gate.mine_failures", new_callable=AsyncMock
     ) as mock_mine, patch(
-        "pipelines.agent_refinement.propose_skill_delta", new_callable=AsyncMock
+        "pipelines.refinement.gate.propose_skill_delta", new_callable=AsyncMock
     ) as mock_propose, patch(
-        "pipelines.agent_refinement.evaluate_on_split", new_callable=AsyncMock
+        "pipelines.refinement.gate.evaluate_on_split", new_callable=AsyncMock
     ) as mock_eval, patch(
-        "pipelines.agent_refinement.apply_delta", new_callable=AsyncMock
+        "pipelines.refinement.gate.apply_delta", new_callable=AsyncMock
     ) as mock_apply:
         mock_mine.return_value = [{"scores": {"entity_count": 0.1}}]
         mock_propose.return_value = {

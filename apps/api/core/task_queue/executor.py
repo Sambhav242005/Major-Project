@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -33,7 +33,7 @@ async def _run_agent_background(session_factory, agent_id, task_id, project_id, 
             _publish_event(task_id, {
                 "step": "initialize", "status": "error",
                 "error": "Agent not found",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             })
             return
 
@@ -75,7 +75,7 @@ async def _run_agent_background(session_factory, agent_id, task_id, project_id, 
                     task.status = "failed"
                     task.error = event.get("error", "Unknown error")
                     task.trace = trace
-                    task.completed_at = datetime.utcnow()
+                    task.completed_at = datetime.now(timezone.utc)
                     await db.flush()
                 await save_checkpoint(
                     db, agent_id, task_id,
@@ -91,9 +91,9 @@ async def _run_agent_background(session_factory, agent_id, task_id, project_id, 
             task.status = "completed"
             task.output = final_output
             task.trace = trace
-            task.completed_at = datetime.utcnow()
+            task.completed_at = datetime.now(timezone.utc)
 
-        agent.last_active_at = datetime.utcnow()
+        agent.last_active_at = datetime.now(timezone.utc)
 
         if final_output:
             await store_memory(
@@ -112,7 +112,7 @@ async def _run_agent_background(session_factory, agent_id, task_id, project_id, 
         _publish_event(task_id, {
             "step": "complete", "status": "completed",
             "output": final_output,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         try:
@@ -141,7 +141,7 @@ async def _run_agent_background(session_factory, agent_id, task_id, project_id, 
             if task:
                 task.status = "failed"
                 task.error = str(e)
-                task.completed_at = datetime.utcnow()
+                task.completed_at = datetime.now(timezone.utc)
                 await db.commit()
         except Exception:
             logger.exception("Failed to update task status after error")
@@ -149,7 +149,7 @@ async def _run_agent_background(session_factory, agent_id, task_id, project_id, 
         _publish_event(task_id, {
             "step": "execution", "status": "error",
             "error": str(e),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         try:

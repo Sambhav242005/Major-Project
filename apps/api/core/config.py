@@ -1,8 +1,12 @@
 from pydantic_settings import BaseSettings
-from pydantic import model_validator
+from pydantic import ConfigDict, model_validator
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
     ENVIRONMENT: str = "development"
     PROJECT_NAME: str = "AI Knowledge Graph Builder"
 
@@ -65,9 +69,7 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+
 
 
 settings = Settings()

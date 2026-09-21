@@ -1,3 +1,4 @@
+from datetime import timezone
 from db.model_defs.base import Base, Column, DateTime, Float, ForeignKey, String, Text, UniqueConstraint, Uuid, datetime, gen_uuid, relationship
 
 
@@ -11,7 +12,7 @@ class Entity(Base):
     type = Column(String(20), nullable=False)
     description = Column(Text)
     first_seen_document_id = Column(Uuid(), ForeignKey("documents.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="entities")
     mentions = relationship("EntityMention", back_populates="entity")
@@ -43,7 +44,7 @@ class Relationship(Base):
     description = Column(Text)
     confidence = Column(Float)
     source_document_id = Column(Uuid(), ForeignKey("documents.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="relationships")
     source_entity = relationship("Entity", foreign_keys=[source_entity_id])
