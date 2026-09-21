@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 const MOCK_AUTH = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
@@ -16,7 +17,7 @@ export async function createClient() {
         getUser: async () => ({ data: { user: MOCK_USER }, error: null }),
         signOut: async () => ({ error: null }),
       },
-    } as any;
+    } as unknown as SupabaseClient;
   }
 
   const cookieStore = await cookies();

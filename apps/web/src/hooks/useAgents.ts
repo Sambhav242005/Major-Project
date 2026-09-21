@@ -5,8 +5,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, withProject } from "@/lib/api/client";
-import { Agent } from "@/lib/validators";
-import { SearchResults, EntityDetail } from "@/lib/types";
+import type {
+  SearchResults,
+  EntityDetail,
+  AgentTask,
+  AgentTraceStep,
+} from "@/lib/types";
+
+export type { AgentTask } from "@/lib/types";
 
 interface UseAgentsOptions {
   token: string | null;
@@ -23,10 +29,6 @@ export interface AgentRecord {
 }
 
 export interface AgentType { type: string; name: string; description: string }
-export interface AgentTask {
-  id: string; agent_id: string; status: string; input: string; output: string | null;
-  error: string | null; trace: any[]; started_at: string | null; completed_at: string | null;
-}
 
 export function useAgents({ token, projectId }: UseAgentsOptions) {
   const [agents, setAgents] = useState<AgentRecord[]>([]);
@@ -79,7 +81,7 @@ export function useAgents({ token, projectId }: UseAgentsOptions) {
     setAgents((prev) => prev.filter((agent) => agent.id !== agentId));
   }, [token, projectId]);
 
-  const runAgent = useCallback(async (agentId: string, input: string, onTrace: (event: any) => void, onDone: () => void) => {
+  const runAgent = useCallback(async (agentId: string, input: string, onTrace: (event: AgentTraceStep) => void, onDone: () => void) => {
     if (!token || !projectId) return;
     const response = await apiFetch<{ task_id: string }>(`/agents/${agentId}/run`, {
       method: "POST", token, projectId, body: { input: { query: input, source: "manual_trigger" } },
@@ -125,11 +127,11 @@ export function useAgents({ token, projectId }: UseAgentsOptions) {
     async (entityId: string) => {
       if (!token || !projectId) return;
       try {
-        const detail = await apiFetch<EntityDetail>(`/entities/${entityId}`, {
+        const detail = await apiFetch<{ entity: EntityDetail }>(`/kb/entities/${entityId}`, {
           token,
           projectId,
         });
-        setEntityDetail(detail);
+        setEntityDetail(detail.entity);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load entity");
       }

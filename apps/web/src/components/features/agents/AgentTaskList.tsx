@@ -2,17 +2,8 @@
 
 import { Clock } from "lucide-react";
 import { StatusPill } from "@/components/shared/StatusPill";
+import type { AgentTask } from "@/lib/types";
 
-interface AgentTask {
-  id: string;
-  agent_id: string;
-  status: string;
-  input: string;
-  output: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  error: string | null;
-}
 
 interface AgentTaskListProps {
   tasks: AgentTask[];

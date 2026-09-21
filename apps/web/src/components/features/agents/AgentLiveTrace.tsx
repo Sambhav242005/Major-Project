@@ -1,5 +1,7 @@
 "use client";
 
+import type { AgentTraceStep } from "@/lib/types";
+
 import {
   CheckCircle,
   AlertCircle,
@@ -8,37 +10,21 @@ import {
   ChevronDown,
   ChevronRight,
   BarChart3,
-  Bot,
 } from "lucide-react";
 
-interface TraceStep {
-  step: string;
-  status: string;
-  tool?: string;
-  output?: any;
-  error?: string;
-  elapsed_seconds?: number;
-  score?: number;
-  result_preview?: string;
-  arguments?: any;
-  details?: any;
-  refinement?: any;
-}
 
 interface AgentLiveTraceProps {
   running: boolean;
-  liveTrace: TraceStep[];
+  liveTrace: AgentTraceStep[];
   expandedSteps: Set<number>;
   onToggleStep: (index: number) => void;
 }
 
 function PipelineNode({
   step,
-  index,
   isLast,
 }: {
-  step: TraceStep;
-  index: number;
+  step: AgentTraceStep;
   isLast: boolean;
 }) {
   return (
@@ -76,7 +62,7 @@ function StepDetail({
   expanded,
   onToggle,
 }: {
-  step: TraceStep;
+  step: AgentTraceStep;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -193,7 +179,6 @@ export function AgentLiveTrace({
           <PipelineNode
             key={i}
             step={step}
-            index={i}
             isLast={i === liveTrace.length - 1}
           />
         ))}

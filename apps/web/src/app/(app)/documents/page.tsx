@@ -28,14 +28,38 @@ const STAGE_LABELS: Record<string, string> = {
   complete: "Done!",
 };
 
+interface DocumentApiRecord {
+  id: string;
+  filename: string;
+  file_type: string;
+  status: Document["status"];
+  page_count: number | null;
+  error_message: string | null;
+  uploaded_at: string;
+  processed_at: string | null;
+}
+
+
+interface DocumentApiRecord {
+  id: string;
+  filename: string;
+  file_type: string;
+  status: Document["status"];
+  page_count: number | null;
+  error_message: string | null;
+  uploaded_at: string;
+  processed_at: string | null;
+}
+
+
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingDoc, setProcessingDoc] = useState<string | null>(null);
   const [processStage, setProcessStage] = useState<string>("");
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
+  const [supabase] = useState(() => createClient());
+
   const eventSourceRef = useRef<EventSource | null>(null);
   const { projects, activeProjectId, loadProjects } = useProjectStore();
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
@@ -45,18 +69,17 @@ export default function DocumentsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const data = await apiFetch<{ documents: any[] }>("/documents", {
+      const data = await apiFetch<{ documents: DocumentApiRecord[] }>("/documents", {
         token: session.access_token,
         projectId: activeProjectId,
       });
 
-      const docs = (data.documents || []).map((d: any) => ({
+      const docs: Document[] = (data.documents || []).map((d) => ({
         id: d.id,
         filename: d.filename,
         fileType: d.file_type,
         status: d.status,
         pageCount: d.page_count,
-        chunkCount: d.chunk_count,
         errorMessage: d.error_message,
         uploadedAt: d.uploaded_at,
         processedAt: d.processed_at,
@@ -159,7 +182,7 @@ export default function DocumentsPage() {
       if (!projects.length) await loadProjects(session.access_token);
     };
     init();
-  }, []);
+  }, [loadProjects, projects.length, supabase.auth]);
 
   const handleUpload = async (file: File) => {
     const { data: { session } } = await supabase.auth.getSession();

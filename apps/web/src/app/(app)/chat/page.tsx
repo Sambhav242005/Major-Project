@@ -9,8 +9,8 @@ import { ChatBubble, ChatSuggestions, ChatInput, ChatHeader } from "@/components
 import type { ChatMessage } from "@/components/features/chat";
 
 export default function ChatPage() {
-  const supabaseRef = useRef(createClient());
-  const supabase = supabaseRef.current;
+  const [supabase] = useState(() => createClient());
+
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export default function ChatPage() {
   const streamBufferRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
-  const { projects, activeProjectId, loadProjects } = useProjectStore();
+  const { projects, activeProjectId } = useProjectStore();
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   useEffect(() => {
@@ -31,32 +31,40 @@ export default function ChatPage() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const createSession = async () => {
-      setLoading(true);
-      setMessages([]);
-      setSessionId(null);
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-        if (!projects.length) await loadProjects(session.access_token);
-        const data = await apiFetch<{ id: string }>("/chat/sessions", {
-          method: "POST",
-          token: session.access_token,
-          projectId: activeProjectId,
-          body: { title: "New Chat" },
-        });
-        if (!cancelled) setSessionId(data.id);
-      } catch (e) {
-        console.error("Failed to create chat session:", e);
-      } finally {
-        if (!cancelled) setLoading(false);
+  const createSession = useCallback(async () => {
+    setLoading(true);
+    setMessages([]);
+    setSessionId(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      if (!activeProjectId) return;
+
+      const data = await apiFetch<{ id: string }>("/chat/sessions", {
+        method: "POST",
+        token: session.access_token,
+        projectId: activeProjectId,
+        body: { title: "New Chat" },
+      });
+
+      if (mountedRef.current) {
+        setSessionId(data.id);
       }
-    };
-    createSession();
-    return () => { cancelled = true; };
-  }, [activeProjectId, projects.length, loadProjects, supabase]);
+    } catch (e) {
+      console.error("Failed to create chat session:", e);
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [activeProjectId, supabase.auth]);
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+    void createSession();
+  }, [activeProjectId, createSession]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -76,8 +84,8 @@ export default function ChatPage() {
     });
   }, []);
 
-  const handleSend = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSend = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!message.trim() || streaming || !sessionId) return;
     const userMessage = message.trim();
     setMessage("");
@@ -191,7 +199,7 @@ export default function ChatPage() {
       <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 flex flex-col">
         <ChatHeader
           projectName={activeProject?.name ?? null}
-          onNewSession={sessionId ? () => { setSessionId(null); setMessages([]); } : undefined}
+          onNewSession={sessionId ? () => { void createSession(); } : undefined}
           isStreaming={streaming}
         />
         <div className="flex-1 overflow-y-auto mb-4 space-y-4 scrollbar-dark">
@@ -221,8 +229,7 @@ export default function ChatPage() {
           value={message}
           onChange={setMessage}
           onSend={() => {
-            const form = new Event("submit");
-            handleSend(form as any);
+            void handleSend();
           }}
           onStop={stopStreaming}
           isStreaming={streaming}

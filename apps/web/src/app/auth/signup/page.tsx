@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -12,14 +12,14 @@ export default function SignUp() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const supabaseRef = useRef(createClient());
+  const [supabase] = useState(() => createClient());
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const { error } = await supabaseRef.current.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {

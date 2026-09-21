@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useProject } from "@/hooks/useProject";
-import { DashboardHeader } from "@/components/layout/dashboard-header";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, token, loading: authLoading } = useAuth();
@@ -13,11 +12,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authLoading && !user) {
-      router.replace("/auth/login");
+      router.replace("/auth/signin");
     }
   }, [authLoading, user, router]);
 
-  // Load projects once authenticated
   useEffect(() => {
     if (token && !projectsLoaded) {
       loadProjects(token);
@@ -36,7 +34,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text">
-      <DashboardHeader title="AI Knowledge Graph Builder" />
       <main>{children}</main>
     </div>
   );

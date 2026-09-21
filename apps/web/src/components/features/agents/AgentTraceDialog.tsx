@@ -11,32 +11,8 @@ import {
   Loader2,
 } from "lucide-react";
 import Markdown from "react-markdown";
+import type { AgentTask } from "@/lib/types";
 
-interface TraceStep {
-  step: string;
-  status: string;
-  tool?: string;
-  output?: any;
-  error?: string;
-  elapsed_seconds?: number;
-  score?: number;
-  result_preview?: string;
-  arguments?: any;
-  details?: any;
-  refinement?: any;
-}
-
-interface AgentTask {
-  id: string;
-  agent_id: string;
-  status: string;
-  input: string;
-  output: any;
-  trace: TraceStep[] | null;
-  error: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-}
 
 interface AgentTraceDialogProps {
   task: AgentTask | null;
@@ -259,10 +235,8 @@ export function AgentTraceDialog({
             </p>
             <div className="output-box p-4 text-sm">
               <Markdown>
-                {typeof task.output === "string"
-                  ? task.output
-                  : task.output.response ||
-                    JSON.stringify(task.output, null, 2)}
+                {task.output.response ||
+                  JSON.stringify(task.output, null, 2)}
               </Markdown>
             </div>
             {task.output.tool_calls && task.output.tool_calls.length > 0 && (
@@ -270,7 +244,7 @@ export function AgentTraceDialog({
                 <p className="text-[10px] text-app-muted uppercase tracking-wider mb-1.5">
                   Tool Calls
                 </p>
-                {task.output.tool_calls.map((tc: any, i: number) => (
+                {task.output.tool_calls.map((tc, i) => (
                   <div key={i} className="trace-step p-2 mb-1">
                     <span className="text-xs text-sky-400 font-medium">
                       {tc.tool}
