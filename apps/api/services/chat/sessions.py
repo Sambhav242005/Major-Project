@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.deps import _user_uuid
 from core.security import User
 from db.models import ChatMessage, ChatSession
 
@@ -19,7 +20,7 @@ async def create_session(
     """Create a new chat session."""
     session = ChatSession(
         project_id=uuid.UUID(project_id),
-        user_id=uuid.UUID(user.id),
+        user_id=_user_uuid(user.id),
         title=title or "New Chat",
         created_at=datetime.now(timezone.utc),
     )
