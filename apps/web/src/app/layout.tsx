@@ -3,7 +3,7 @@ import "./globals.css";
 import { LazyMotion, domAnimation } from "motion/react";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
 export const metadata: Metadata = {
   title: "AI Knowledge Graph Builder",

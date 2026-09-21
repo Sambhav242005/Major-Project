@@ -1,8 +1,12 @@
 from pydantic_settings import BaseSettings
-from pydantic import model_validator
+from pydantic import ConfigDict, model_validator
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
     ENVIRONMENT: str = "development"
     PROJECT_NAME: str = "AI Knowledge Graph Builder"
 
@@ -20,8 +24,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _force_sqlite_in_dev(self):
+        # Respect explicit postgres DATABASE_URL in development (e.g. docker-compose).
+        # Only force SQLite when no postgres URL was provided.
         if self.ENVIRONMENT == "development":
-            self.DATABASE_URL = "sqlite+aiosqlite:///./akgb.db"
+            low = self.DATABASE_URL.lower()
+            if "postgres" not in low and "postgresql" not in low:
+                self.DATABASE_URL = "sqlite+aiosqlite:///./akgb.db"
         return self
 
     @model_validator(mode="after")
@@ -61,9 +69,7 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+
 
 
 settings = Settings()

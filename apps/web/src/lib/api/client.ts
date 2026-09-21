@@ -58,7 +58,7 @@ function humanError(status: number, detail?: string): string {
  * project context is active. Handles paths that already carry a query string.
  */
 export function withProject(path: string, projectId?: string | null): string {
-  let url = `${API_BASE}${path}`;
+  const url = `${API_BASE}${path}`;
   if (!projectId) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}project_id=${encodeURIComponent(projectId)}`;
@@ -78,7 +78,7 @@ export async function apiFetch<T = unknown>(
     ...(headers as Record<string, string> | undefined),
   };
 
-  if (body !== undefined) {
+  if (body !== undefined && !(typeof FormData !== "undefined" && body instanceof FormData)) {
     finalHeaders["Content-Type"] = "application/json";
   }
   if (token) {
@@ -97,7 +97,9 @@ export async function apiFetch<T = unknown>(
       ...init,
       signal: controller.signal,
       headers: finalHeaders,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body !== undefined
+        ? (typeof FormData !== "undefined" && body instanceof FormData ? body : JSON.stringify(body))
+        : undefined,
     });
   } catch (e) {
     const aborted = controller.signal.aborted;

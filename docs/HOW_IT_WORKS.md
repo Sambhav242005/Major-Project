@@ -59,13 +59,13 @@ MajorProject/
 
 ### The two pipelines (the heart of the app)
 
-**Ingestion pipeline** (`apps/api/pipelines/ingestion.py`) — runs in the background after upload:
+**Ingestion pipeline** (`apps/api/pipelines/ingestion/pipeline.py`) — runs in the background after upload:
 
 ```
 parse → chunk → embed → store chunk rows → extract entities/relations → mark processed
 ```
 
-**Retrieval / RAG pipeline** (`apps/api/services/chat.py`) — runs per chat message:
+**Retrieval / RAG pipeline** (`apps/api/services/chat/retrieval.py`) — runs per chat message:
 
 ```
 embed question → Chroma top-k=8 → find entities in chunks → expand 1 hop via relationships
@@ -194,7 +194,7 @@ The graph is **not** Neo4j. The deliberate architecture decision (see `docs/adr/
 
 - **Vertices = rows in `entities`** (one per unique name+type per project).
 - **Edges = rows in `relationships`** (source_entity_id → target_entity_id + relation_type).
-- **Traversal happens in memory with NetworkX** (`apps/api/services/knowledge.py`): on each graph request, all project entities + relationships are loaded and assembled into a `nx.DiGraph()` (nodes carry name/type/description; edges carry relation_type/confidence), then a **k-hop subgraph** is extracted around a chosen entity.
+- **Traversal happens in memory with NetworkX** (`apps/api/services/knowledge/graph.py`): on each graph request, all project entities + relationships are loaded and assembled into a `nx.DiGraph()` (nodes carry name/type/description; edges carry relation_type/confidence), then a **k-hop subgraph** is extracted around a chosen entity.
 
 Why this design: for the MVP's few-thousand-entity graphs, a full graph database is overkill — Postgres rows are easy to query, back up, and explain in a viva. The relationship table is shaped so a future Neo4j migration is straightforward.
 
@@ -203,9 +203,9 @@ Why this design: for the MVP's few-thousand-entity graphs, a full graph database
 1. **Upload** → `POST /documents` (rate-limited 30/min) validates MIME type + 25 MB cap, inserts a `documents` row with `status=pending`, and fires a background `asyncio` task (`ingest_document`). The API returns `202` immediately — the UI polls/SSE-watches the status.
 2. **Parse** → `pipelines/parser.py`: PyMuPDF for PDFs, python-docx for DOCX, Tesseract OCR for images/scanned PDFs. Produces `{text, page_number}` pages.
 3. **Chunk** → `pipelines/chunking.py`: ~600-token segments with 80-token overlap, keeping page numbers. (CPU-bound work is offloaded via `run_in_executor` so the event loop stays responsive.)
-4. **Embed** → `pipelines/embeddings.py`: each chunk is embedded (OpenAI-compatible endpoint) and upserted into ChromaDB `knowledge_base` collection with metadata `{project_id, document_id, chunk_index, page_number}`; ID = `"{document_id}_chunk_{index}"`.
+4. **Embed** → `pipelines/embeddings/`: each chunk is embedded (OpenAI-compatible endpoint) and upserted into ChromaDB `knowledge_base` collection with metadata `{project_id, document_id, chunk_index, page_number}`; ID = `"{document_id}_chunk_{index}"`.
 5. **Store chunks** → one `document_chunks` row per chunk (with `chroma_id`).
-6. **Extract entities & relationships** → `pipelines/entity_extraction.py`:
+6. **Extract entities & relationships** → `pipelines/extraction/`:
    - **spaCy NER** (`en_core_web_sm`) finds raw entities, mapped to our types (PERSON→person, ORG→organization, GPE/LOC→location, DATE/TIME→date, …).
    - **LLM** (batched ~1200-token passages, temperature 0.1) returns structured JSON: `{entities: [...], relationships: [...]}`. Output parsed defensively (strips ```json fences).
    - **Merge + dedup** by normalized name; **upsert into `entities`** (unique per project/name/type).
@@ -218,34 +218,34 @@ Live progress is streamed to the UI via **SSE** (`GET /documents/{id}/stream`) �
 
 ### Where embeddings are called — and do they create the graph?
 
-**No — embeddings do NOT create the graph.** They serve vector search only. Graph vertices/edges are created by a separate step (`pipelines/entity_extraction.py`).
+**No — embeddings do NOT create the graph.** They serve vector search only. Graph vertices/edges are created by a separate step (`pipelines/extraction/`).
 
 | Concern | Code | What it does |
 |---|---|---|
-| **Write (ingestion)** | `pipelines/embeddings.py:64` `upsert_chunks()` called from `pipelines/ingestion.py:97` | Embeds each `~600-token` chunk via `EMBEDDING_MODEL` (`qwen3-embedding:4b`) and `upsert`s into Chroma `knowledge_base` collection with `where={"project_id":...}` isolation. Returns `chroma_id = "{document_id}_chunk_{index}"` stored in `document_chunks.chroma_id`. |
-| **Read (semantic search)** | `pipelines/embeddings.py:105` `query_chunks()` called from `services/knowledge.py:34` `search()` and `services/chat.py:263` `send_message()` | Embeds the user query, runs `collection.query(..., where={"project_id": project_id}, n_results=8)` in a threadpool, enriches with `documents.filename` from Postgres. |
-| **Embedding lifecycle** | `pipelines/embeddings.py:30` `get_chroma_client()`, `pipelines/embeddings.py:9` `OpenAICompatibleEmbeddingFunction` | `PersistentClient(path=CHROMA_PATH)` single collection, cosine distance; impl is OpenAI-compatible HTTP (`POST /embeddings`) so Ollama/Groq/OpenAI are interchangeable. |
-| **Graph creation** | `pipelines/entity_extraction.py:240` `extract_entities_from_chunks()` called from `pipelines/ingestion.py:136` | `spaCy NER` + LLM (`LLM_EXTRACT_MODEL`) → merge/dedup `(project_id, name, type)` → `entities` rows + `entity_mentions` per chunk occurrence + `relationships` (or `co_occurs_with` fallback `pipelines/entity_extraction.py:213`). |
-| **Graph deletion** | `pipelines/embeddings.py:177` `delete_document_chunks()` + cascade in `services/documents.py` | Deleting a doc removes its Chroma vectors *and* its `entities`/`relationships`/`mentions` (if not shared). |
+| **Write (ingestion)** | `pipelines/embeddings/store.py` called from `pipelines/ingestion/pipeline.py` | Embeds each `~600-token` chunk via `EMBEDDING_MODEL` (`qwen3-embedding:4b`) and `upsert`s into Chroma `knowledge_base` collection with `where={"project_id":...}` isolation. Returns `chroma_id = "{document_id}_chunk_{index}"` stored in `document_chunks.chroma_id`. |
+| **Read (semantic search)** | `pipelines/embeddings/query.py` called from `services/knowledge/search.py` and `services/chat/retrieval.py` | Embeds the user query, runs `collection.query(..., where={"project_id": project_id}, n_results=8)` in a threadpool, enriches with `documents.filename` from Postgres. |
+| **Embedding lifecycle** | `pipelines/embeddings/client.py`, `embedding_function.py` | `PersistentClient(path=CHROMA_PATH)` single collection, cosine distance; impl is OpenAI-compatible HTTP (`POST /embeddings`) so Ollama/Groq/OpenAI are interchangeable. |
+| **Graph creation** | `pipelines/extraction/pipeline.py` called from `pipelines/ingestion/pipeline.py` | `spaCy NER` + LLM (`LLM_EXTRACT_MODEL`) → merge/dedup `(project_id, name, type)` → `entities` rows + `entity_mentions` per chunk occurrence + `relationships` (or `co_occurs_with` fallback in `pipelines/extraction/`). |
+| **Graph deletion** | `pipelines/embeddings/store.py` `delete_document_chunks()` + `services/documents/` | Deleting a doc removes its Chroma vectors *and* its `entities`/`relationships`/`mentions` (if not shared). |
 
-> **Mental model:** `pipelines/ingestion.py:46` is `parse → chunk → EMBED (Chroma) → STORE CHUNKS (Postgres) → EXTRACT GRAPH (Postgres) → mark processed`. Embed and graph are **parallel branches after chunking**, not sequential dependencies — if LLM extraction fails, the doc is still `processed` (`pipelines/ingestion.py:144` non-fatal) and searchable via embeddings, just with no new graph edges.
+> **Mental model:** `pipelines/ingestion/pipeline.py` is `parse → chunk → EMBED (Chroma) → STORE CHUNKS (Postgres) → EXTRACT GRAPH (Postgres) → mark processed`. Embed and graph are **parallel branches after chunking**, not sequential dependencies — if LLM extraction fails, the doc is still `processed` (non-fatal) and searchable via embeddings, just with no new graph edges.
 
 ### Do documents create the graph?
 
-**Yes — documents are the *only* source of the graph.** No docs → empty graph (`services/knowledge.py:135` `get_graph` loads all `entities`/`relationships` for the project; zero rows = empty `nx.DiGraph`). Each processed document *adds* nodes/edges via dedup/upsert:
+**Yes — documents are the *only* source of the graph.** No docs → empty graph (`services/knowledge/graph.py` `get_graph` loads all `entities`/`relationships` for the project; zero rows = empty `nx.DiGraph`). Each processed document *adds* nodes/edges via dedup/upsert:
 
 - New `name+type` → new `entities` row.
-- Existing `name+type` in same project → reused (no duplicate) — `pipelines/entity_extraction.py:298` `select(Entity).where(project_id, name.ilike, type)`.
-- Edges deduped on `(project_id, source, target, relation_type)` — `pipelines/entity_extraction.py:352`.
+- Existing `name+type` in same project → reused (no duplicate) — `pipelines/extraction/merge.py` `select(Entity).where(project_id, name.ilike, type)`.
+- Edges deduped on `(project_id, source, target, relation_type)` — `pipelines/extraction/merge.py`.
 
-Chat *reads* the graph (1-hop expansion `services/chat.py:169` `_expand_via_graph`) but never writes it.
+Chat *reads* the graph (1-hop expansion in `services/chat/retrieval.py`) but never writes it.
 
 ### How the graph is *read*
 
-- `GET /kb/graph?entity_id=X&depth=2` → NetworkX subgraph → JSON `{nodes, edges}` → **reagraph** (`GraphCanvas`, force-directed layout) in `apps/web/src/app/graph/page.tsx`, colored by entity type, with search, type filters, depth slider, and a details panel (entity info + source sections).
+- `GET /kb/graph?entity_id=X&depth=2` → NetworkX subgraph → JSON `{nodes, edges}` → **reagraph** (`GraphCanvas`, force-directed layout) in `apps/web/src/app/(app)/graph/page.tsx`, colored by entity type, with search, type filters, depth slider, and a details panel (entity info + source sections).
 - `GET /kb/entities/{id}` → entity + mentions count + incoming/outgoing relationships.
 - `GET /kb/entities/{id}/chunks` → the chunks that mention it (for citations / "source sections" panel).
-- **Chat uses graph expansion** (`services/chat.py`): retrieve top-8 chunks → find entities mentioned in them → pull **neighboring entities** via `relationships` (1 hop) → both are injected into the prompt as "Related entities" / "Connected concepts". That's the knowledge-graph value-add over plain RAG.
+- **Chat uses graph expansion** (`services/chat/retrieval.py`): retrieve top-8 chunks → find entities mentioned in them → pull **neighboring entities** via `relationships` (1 hop) → both are injected into the prompt as "Related entities" / "Connected concepts". That's the knowledge-graph value-add over plain RAG.
 
 ---
 
@@ -254,7 +254,7 @@ Chat *reads* the graph (1-hop expansion `services/chat.py:169` `_expand_via_grap
 1. **Auth**: browser → Supabase (or mock) gets a session. `middleware.ts` protects routes; `GlobalAuthMiddleware` on the backend requires a Bearer JWT on everything except whitelisted public routes (`/health`, `/auth/...`, `/docs`). In mock mode any token is accepted. SSE endpoints fall back to `?token=` query param because EventSource can't set headers.
 2. **Project context**: `core/deps.py::get_project_id` resolves the project from `?project_id=` + membership check in `project_members` (403 if not a member), else auto-detect/auto-create.
 3. **Request → router → service → DB**: routers (thin, in `apps/api/routers/`) → services (business logic, `apps/api/services/`) → SQLAlchemy models. Pydantic schemas in `schemas/` validate input/output.
-4. **Background work**: ingestion (`_start_ingestion`) and agent runs (`core/task_queue.py`) are `asyncio.create_task` with **strong references kept** in module-level sets — a documented gotcha: without the strong ref, the event loop garbage-collects the pending task mid-run ("Task was destroyed but it is pending") and uploads stay stuck at `pending` forever.
+4. **Background work**: ingestion (`_start_ingestion`) and agent runs (`core/task_queue/`) are `asyncio.create_task` with **strong references kept** in module-level sets — a documented gotcha: without the strong ref, the event loop garbage-collects the pending task mid-run ("Task was destroyed but it is pending") and uploads stay stuck at `pending` forever.
 5. **Live updates**: SSE streams for document status and agent task traces (in-memory subscriber queues, event replay for late joiners, cleanup on stream close).
 
 ---
@@ -315,15 +315,15 @@ Open `http://localhost:3000` → "Try Demo (Auto-Login)" → upload a PDF → wa
 |---|---|
 | Backend entry + middleware + routers | `apps/api/main.py`, `apps/api/core/auth_middleware.py`, `apps/api/routers/` |
 | DB models / session | `apps/api/db/models.py`, `apps/api/db/session.py`, `apps/api/init_db.py` |
-| Ingestion pipeline | `apps/api/pipelines/ingestion.py` (+ `parser.py`, `chunking.py`, `embeddings.py`, `entity_extraction.py`, `llm_client.py`) |
-| Graph traversal (NetworkX) | `apps/api/services/knowledge.py` |
-| Chat / RAG + graph expansion | `apps/api/services/chat.py`, `apps/api/routers/chat.py` |
-| Agents | `apps/api/pipelines/agent_pipeline.py`, `apps/api/core/task_queue.py`, `apps/api/services/agents.py`, `memory.py` |
-| MCP | `apps/api/routers/mcp.py`, `apps/api/services/mcp.py`, `apps/api/core/oauth.py` — **CRUD + OAuth only; no FastMCP server or MCP client exists yet** (see `docs/SPEC.md §12`) |
-| Webhooks | `apps/api/services/webhooks.py`, `apps/api/routers/webhooks.py` |
+| Ingestion pipeline | `apps/api/pipelines/ingestion/` (+ `parser.py`, `chunking.py`, `embeddings/`, `extraction/`, `llm_client.py`) |
+| Graph traversal (NetworkX) | `apps/api/services/knowledge/` |
+| Chat / RAG + graph expansion | `apps/api/services/chat/`, `apps/api/routers/chat.py` |
+| Agents | `apps/api/pipelines/agent/`, `apps/api/core/task_queue/`, `apps/api/services/agents/`, `memory/` |
+| MCP | `apps/api/routers/mcp/`, `apps/api/services/mcp.py`, `apps/api/core/oauth/` — **CRUD + OAuth only; no FastMCP server or MCP client exists yet** (see `docs/SPEC.md §12`) |
+| Webhooks | `apps/api/services/webhooks/`, `apps/api/routers/webhooks.py` |
 | Auth / project scoping | `apps/api/core/security.py`, `apps/api/core/deps.py`, `apps/api/core/config.py` |
-| Graph UI | `apps/web/src/app/graph/page.tsx` (reagraph), `apps/web/src/stores/graph.ts` |
-| Chat UI (SSE streaming) | `apps/web/src/app/chat/page.tsx` |
+| Graph UI | `apps/web/src/app/(app)/graph/page.tsx` (reagraph), `apps/web/src/stores/graph.ts` |
+| Chat UI (SSE streaming) | `apps/web/src/app/(app)/chat/page.tsx` |
 | API client / auth client | `apps/web/src/lib/api/client.ts`, `apps/web/src/lib/supabase/client.ts`, `apps/web/src/middleware.ts` |
 | Project switch / state | `apps/web/src/stores/project.ts` (Zustand + localStorage) |
 

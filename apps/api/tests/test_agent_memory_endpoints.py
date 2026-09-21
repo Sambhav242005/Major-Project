@@ -17,7 +17,7 @@ PROJECT_ID = str(uuid.uuid4())
 
 
 def _mock_user():
-    return User(id=str(uuid.uuid4()), email="test@example.com", role="authenticated")
+    return User(id=str(uuid.uuid4()), email="test@example.com")
 
 
 def _app_with_overrides():
@@ -41,10 +41,15 @@ def _app_with_overrides():
 
 @pytest.fixture(autouse=True)
 def _bypass_agent_project_guard():
-    """Bypass assert_agent_in_project — these tests verify the router
-    delegates to the memory service, not project ownership (which is
-    covered separately by IDOR tests)."""
-    with patch("routers.agents.assert_agent_in_project", new_callable=AsyncMock):
+    """Bypass project guard and external embedding service."""
+    with patch(
+        "routers.agents.memory.assert_agent_in_project",
+        new_callable=AsyncMock,
+    ), patch(
+        "routers.agents.memory.embed_text",
+        new_callable=AsyncMock,
+        return_value=[0.0, 1.0],
+    ):
         yield
 
 
@@ -63,7 +68,7 @@ async def test_store_memory_endpoint():
         "expires_at": None,
     }
 
-    with patch("routers.agents.memory_service.store_memory", new_callable=AsyncMock) as mock_store:
+    with patch("routers.agents.memory.memory_service.store_memory", new_callable=AsyncMock) as mock_store:
         mock_store.return_value = mock_memory
         client = TestClient(app)
         r = client.post(
@@ -83,7 +88,7 @@ async def test_store_memory_invalid_type_returns_400():
     """POST /agents/{id}/memory returns 400 for invalid memory_type."""
     app, mock_db = _app_with_overrides()
 
-    with patch("routers.agents.memory_service.store_memory", new_callable=AsyncMock) as mock_store:
+    with patch("routers.agents.memory.memory_service.store_memory", new_callable=AsyncMock) as mock_store:
         mock_store.side_effect = ValueError("Invalid memory_type: bad")
         client = TestClient(app)
         r = client.post(
@@ -107,7 +112,7 @@ async def test_list_memory_endpoint():
         {"id": str(uuid.uuid4()), "memory_type": "episodic", "content": {"t": 2}, "metadata": {}, "created_at": "2026-01-01T00:00:01", "expires_at": None},
     ]
 
-    with patch("routers.agents.memory_service.retrieve_memories", new_callable=AsyncMock) as mock_retrieve:
+    with patch("routers.agents.memory.memory_service.retrieve_memories", new_callable=AsyncMock) as mock_retrieve:
         mock_retrieve.return_value = memories
         client = TestClient(app)
         r = client.get(f"/agents/{APP_ID}/memory")
@@ -125,7 +130,7 @@ async def test_delete_memory_endpoint():
     app, mock_db = _app_with_overrides()
     mem_id = str(uuid.uuid4())
 
-    with patch("routers.agents.memory_service.delete_memory", new_callable=AsyncMock) as mock_delete:
+    with patch("routers.agents.memory.memory_service.delete_memory", new_callable=AsyncMock) as mock_delete:
         mock_delete.return_value = True
         client = TestClient(app)
         r = client.delete(f"/agents/{APP_ID}/memory/{mem_id}")
@@ -140,7 +145,7 @@ async def test_delete_memory_not_found_returns_404():
     app, mock_db = _app_with_overrides()
     mem_id = str(uuid.uuid4())
 
-    with patch("routers.agents.memory_service.delete_memory", new_callable=AsyncMock) as mock_delete:
+    with patch("routers.agents.memory.memory_service.delete_memory", new_callable=AsyncMock) as mock_delete:
         mock_delete.return_value = False
         client = TestClient(app)
         r = client.delete(f"/agents/{APP_ID}/memory/{mem_id}")
@@ -160,7 +165,7 @@ async def test_search_memory_endpoint():
         {"id": str(uuid.uuid4()), "memory_type": "episodic", "content": {"match": True}, "metadata": {}, "similarity": 0.95, "created_at": "2026-01-01T00:00:00"},
     ]
 
-    with patch("routers.agents.memory_service.search_memories", new_callable=AsyncMock) as mock_search:
+    with patch("routers.agents.memory.memory_service.search_memories", new_callable=AsyncMock) as mock_search:
         mock_search.return_value = results
         client = TestClient(app)
         r = client.get(f"/agents/{APP_ID}/memory/search", params={"q": "test query"})
@@ -185,7 +190,7 @@ async def test_save_checkpoint_endpoint():
         "created_at": "2026-01-01T00:00:00",
     }
 
-    with patch("routers.agents.memory_service.save_checkpoint", new_callable=AsyncMock) as mock_save:
+    with patch("routers.agents.memory.memory_service.save_checkpoint", new_callable=AsyncMock) as mock_save:
         mock_save.return_value = checkpoint
         client = TestClient(app)
         r = client.post(
@@ -213,7 +218,7 @@ async def test_get_checkpoint_endpoint():
         "created_at": "2026-01-01T00:00:00",
     }
 
-    with patch("routers.agents.memory_service.load_latest_checkpoint", new_callable=AsyncMock) as mock_load:
+    with patch("routers.agents.memory.memory_service.load_latest_checkpoint", new_callable=AsyncMock) as mock_load:
         mock_load.return_value = checkpoint
         client = TestClient(app)
         r = client.get(f"/agents/{APP_ID}/checkpoint")
@@ -228,7 +233,7 @@ async def test_get_checkpoint_none_returns_null():
     """GET /agents/{id}/checkpoint returns null when no checkpoints."""
     app, mock_db = _app_with_overrides()
 
-    with patch("routers.agents.memory_service.load_latest_checkpoint", new_callable=AsyncMock) as mock_load:
+    with patch("routers.agents.memory.memory_service.load_latest_checkpoint", new_callable=AsyncMock) as mock_load:
         mock_load.return_value = None
         client = TestClient(app)
         r = client.get(f"/agents/{APP_ID}/checkpoint")
@@ -252,7 +257,7 @@ async def test_get_context_endpoint():
         "checkpoint": None,
     }
 
-    with patch("routers.agents.memory_service.hydrate_agent_context", new_callable=AsyncMock) as mock_hydrate:
+    with patch("routers.agents.memory.memory_service.hydrate_agent_context", new_callable=AsyncMock) as mock_hydrate:
         mock_hydrate.return_value = context
         client = TestClient(app)
         r = client.get(f"/agents/{APP_ID}/context")

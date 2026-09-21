@@ -1,7 +1,7 @@
 """Webhook routes — CRUD for subscriptions, inbound endpoint, delivery log."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -63,8 +63,8 @@ async def create_subscription(
         url=url,
         secret=secret,
         active=True,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(sub)
     await db.flush()

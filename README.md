@@ -151,9 +151,9 @@ MajorProject/
 │   ├── api/                    # FastAPI backend
 │   │   ├── core/               # Config, auth, security, error handling
 │   │   ├── db/                 # SQLAlchemy models, session
-│   │   ├── pipelines/          # Ingestion, LLM, embeddings, agents
-│   │   ├── routers/            # API route handlers
-│   │   ├── services/           # Business logic
+│   │   ├── pipelines/          # Ingestion, extraction, embeddings, agents
+│   │   ├── routers/            # API route handlers and feature routers
+│   │   ├── services/           # Feature-oriented business logic
 │   │   ├── tests/              # pytest test suite
 │   │   └── main.py             # FastAPI app entry
 │   └── web/                    # Next.js frontend
@@ -291,7 +291,7 @@ cd apps/api && python -m pytest tests/ -q
 cd apps/web && npm run typecheck
 
 # If you touched retrieval/ingestion, re-check
-grep -n "chunk_index" apps/api/pipelines/embeddings.py  # should be 86,92
+grep -R -n "chunk_index" apps/api/pipelines/embeddings/
 grep -n "qwen/qwen3.8" apps/api/core/config.py docs/SPEC.md
 ```
 

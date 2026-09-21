@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -13,14 +13,14 @@ export default function SignIn() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const supabaseRef = useRef(createClient());
+  const [supabase] = useState(() => createClient());
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const { error } = await supabaseRef.current.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -35,15 +35,9 @@ export default function SignIn() {
     router.refresh();
   };
 
-  const handleMockLogin = async () => {
-    setLoading(true);
-    document.cookie = "mock-session=mock-user-001; path=/; max-age=3600; SameSite=Lax";
-    router.push("/dashboard");
-    router.refresh();
-  };
 
   const handleGoogleSignIn = async () => {
-    await supabaseRef.current.auth.signInWithOAuth({
+    await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,

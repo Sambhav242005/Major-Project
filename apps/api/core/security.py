@@ -14,16 +14,22 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 _jwks_cache: dict | None = None
+_jwks_cache_ts: float | None = None
+_JWKS_TTL_SECONDS = 3600
 
 
 async def _fetch_jwks() -> dict:
-    global _jwks_cache
-    if _jwks_cache is not None:
-        return _jwks_cache
-    async with httpx.AsyncClient() as client:
+    import time
+
+    global _jwks_cache, _jwks_cache_ts
+    if _jwks_cache is not None and _jwks_cache_ts is not None:
+        if time.monotonic() - _jwks_cache_ts < _JWKS_TTL_SECONDS:
+            return _jwks_cache
+    async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.get(settings.SUPABASE_JWKS_URL)
         resp.raise_for_status()
         _jwks_cache = resp.json()
+        _jwks_cache_ts = time.monotonic()
         return _jwks_cache
 
 

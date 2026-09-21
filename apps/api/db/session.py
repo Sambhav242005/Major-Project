@@ -10,7 +10,13 @@ _async_session = None
 def _get_engine():
     global _engine
     if _engine is None:
-        _engine = create_async_engine(settings.DATABASE_URL, echo=settings.ENVIRONMENT == "development")
+        is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+        _engine = create_async_engine(
+            settings.DATABASE_URL,
+            echo=settings.ENVIRONMENT == "development" and not is_sqlite,
+            pool_pre_ping=not is_sqlite,
+            connect_args={"check_same_thread": False} if is_sqlite else {},
+        )
     return _engine
 
 

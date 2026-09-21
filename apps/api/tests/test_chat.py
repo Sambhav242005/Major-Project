@@ -8,7 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 @pytest.mark.asyncio
 async def test_create_session_returns_dict():
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
 
     from services.chat import create_session
 
@@ -30,7 +36,13 @@ async def test_create_session_returns_dict():
 
 @pytest.mark.asyncio
 async def test_create_session_uses_default_title():
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
 
     from services.chat import create_session
 
@@ -48,14 +60,24 @@ async def test_create_session_uses_default_title():
 
 @pytest.mark.asyncio
 async def test_get_session_returns_none_for_nonexistent():
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute = AsyncMock(return_value=mock_result)
 
     from services.chat import get_session
 
-    result = await get_session(mock_db, "nonexistent", "proj-1")
+    result = await get_session(
+        mock_db,
+        "550e8400-e29b-41d4-a716-446655440002",
+        "550e8400-e29b-41d4-a716-446655440001",
+    )
 
     assert result is None
 
@@ -64,14 +86,23 @@ async def test_get_session_returns_none_for_nonexistent():
 
 @pytest.mark.asyncio
 async def test_list_sessions_returns_list():
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = []
     mock_db.execute = AsyncMock(return_value=mock_result)
 
     from services.chat import list_sessions
 
-    result = await list_sessions(mock_db, "proj-1")
+    result = await list_sessions(
+        mock_db,
+        "550e8400-e29b-41d4-a716-446655440001",
+    )
 
     assert isinstance(result, list)
 
@@ -98,11 +129,17 @@ def test_format_source_block():
 # --- Test: Send message yields events ---
 
 @pytest.mark.asyncio
-@patch("services.chat.query_chunks")
+@patch("services.chat.streaming.query_chunks")
 async def test_send_message_yields_events(mock_query_chunks):
     mock_query_chunks.return_value = []
 
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.delete = AsyncMock()
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_result.scalars.return_value.all.return_value = []
@@ -113,9 +150,10 @@ async def test_send_message_yields_events(mock_query_chunks):
     events = []
     async for event in send_message(
         db=mock_db,
-        session_id="session-1",
+        session_id="550e8400-e29b-41d4-a716-446655440002",
         message="Hello",
-        project_id="proj-1",
+        project_id="550e8400-e29b-41d4-a716-446655440001",
+        actor_id="550e8400-e29b-41d4-a716-446655440000",
     ):
         events.append(event)
 

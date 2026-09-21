@@ -1,7 +1,4 @@
-import json
-
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +7,7 @@ from core.security import get_current_user, User
 from core.errors import NotFoundError
 from core.rate_limit import limiter
 from core.security_utils import sanitize_input
+from core.sse import generator_sse_stream
 from db.session import get_db
 from services import chat as chat_service
 
@@ -79,22 +77,12 @@ async def send_message(
     safe_message = sanitize_input(body.message)
 
     # SSE streaming response
-    async def event_stream():
-        async for event in chat_service.send_message(
+    return await generator_sse_stream(
+        chat_service.send_message(
             db=db,
             session_id=session_id,
             message=safe_message,
             project_id=project_id,
             actor_id=user.id,
-        ):
-            yield f"data: {json.dumps(event)}\n\n"
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        )
     )

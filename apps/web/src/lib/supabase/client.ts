@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const MOCK_AUTH = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
 
@@ -26,7 +27,7 @@ export function createClient() {
         signOut: async () => ({ error: null }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
       },
-    } as any;
+    } as unknown as SupabaseClient;
   }
 
   return createBrowserClient(
