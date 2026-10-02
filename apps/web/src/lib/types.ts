@@ -46,6 +46,7 @@ export interface Chunk {
   chunk_index: number;
   page_number: number | null;
   text: string;
+  text_truncated: boolean;
   token_count: number | null;
 }
 
@@ -84,6 +85,7 @@ export interface EntityDetail {
 export interface EntityChunk {
   chunk_id: string;
   chunk_index: number;
+  document_id: string;
   text: string;
   page_number: number | null;
   filename: string;

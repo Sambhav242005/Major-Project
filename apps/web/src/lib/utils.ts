@@ -9,20 +9,24 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Collapse the duplicate entity-chunk rows that re-processing a document
  * stacks up (same source content, fresh row ids), without merging two
- * genuinely different sections that happen to share a filename and page.
+ * genuinely different sections.
  *
- * The key is `filename | page | chunk_index`: `chunk_index` is what makes it
- * safe. Re-processing re-chunks deterministically, so a retry reproduces the
- * same `chunk_index` for the same content (and those *do* collapse), while two
- * distinct sections on one page always differ in `chunk_index` (and do not).
- * Keying on `filename | page` alone merged those two cases together.
+ * The key is `document_id | chunk_index`. `chunk_index` is assigned by the
+ * chunker as a position within one document's ordered chunk list
+ * (`pipelines/chunking.py`), so it identifies a section *inside* a document and
+ * must be scoped by `document_id` — two documents both called `report.pdf`
+ * produce the same indices. Keying on `filename` merged them.
+ *
+ * Re-processing the same bytes re-chunks deterministically and reproduces the
+ * same index, so retries collapse. A re-upload of *revised* bytes shifts every
+ * index and legitimately surfaces as new chunks rather than being folded into
+ * the previous version.
  */
 export function dedupeEntityChunks(chunks: EntityChunk[]): EntityChunk[] {
   const seen = new Set<string>()
 
   return chunks.filter((chunk) => {
-    const indexKey = chunk.chunk_index ?? `id:${chunk.chunk_id}`
-    const key = `${chunk.filename}|${chunk.page_number ?? 0}|${indexKey}`
+    const key = `${chunk.document_id}|${chunk.chunk_index}`
     if (seen.has(key)) return false
     seen.add(key)
     return true

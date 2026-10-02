@@ -169,6 +169,7 @@ async def get_entity_chunks(
             chunks.append({
                 "chunk_id": str(chunk.id),
                 "chunk_index": chunk.chunk_index,
+                "document_id": str(chunk.document_id),
                 "text": chunk.text,
                 "page_number": chunk.page_number,
                 "filename": doc.filename if doc else "unknown",

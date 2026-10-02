@@ -182,6 +182,14 @@ cd apps/api
 python -m pytest tests/ -v
 ```
 
+### Frontend unit tests (Vitest)
+
+```bash
+cd apps/web
+npm run test          # single run
+npm run test:watch    # watch mode
+```
+
 ### Frontend (Playwright E2E)
 
 ```bash
@@ -289,6 +297,9 @@ cd apps/api && python -m pytest tests/ -q
 
 # Frontend typecheck (when node_modules present)
 cd apps/web && npm run typecheck
+
+# Frontend unit tests (pure functions / hooks; E2E stays in test:e2e)
+cd apps/web && npm run test
 
 # If you touched retrieval/ingestion, re-check
 grep -R -n "chunk_index" apps/api/pipelines/embeddings/
