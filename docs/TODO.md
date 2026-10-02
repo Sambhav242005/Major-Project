@@ -129,6 +129,12 @@ These are user-facing capabilities or integrations that are incomplete.
 - **Fix:** surface `ApiRequestError` details in chat; add SSE reconnect/backoff on the documents page.
 - **Effort:** small–medium.
 
+#### 2.22 Embedding provider portability `[HARDEN]` ✅ DONE — issue #6
+- **What was:** `OpenAICompatibleEmbeddingFunction` was the only embedding path, so Gemini's native API was unusable; `get_embedding_function()` swallowed every exception and returned `None`, letting Chroma fall back to its own default EF and silently mix vector spaces; the `knowledge_base` collection recorded nothing about which model wrote its vectors.
+- **Fix applied:** `EMBEDDING_PROVIDER` (`openai` | `gemini`) in `core/config.py` with fail-fast validation; `GeminiEmbeddingFunction` using native `:batchEmbedContents` (not `:embedContent`, which aggregates texts into one vector) with asymmetric `RETRIEVAL_DOCUMENT`/`RETRIEVAL_QUERY` task types, manual L2 normalization for truncated `gemini-embedding-001` output, and 429/5xx backoff honouring `Retry-After`; `get_embedding_function(task)` is task-scoped and never returns `None`; ingestion and search now embed explicitly so one collection serves both task types; collection carries an `embedding_fingerprint` and raises `EmbeddingSpaceMismatchError` instead of mixing spaces. Tests: `apps/api/tests/test_embedding_providers.py` (41). Docs: README provider section + re-embed procedure, `apps/api/.env.example`, SPEC §8 rows 4 and 8.
+- **Open:** legacy collections (created before fingerprints) adopt the current fingerprint on the `openai` provider for backward compatibility; switching provider on such a collection is refused and needs the documented re-embed.
+- **Effort:** medium — completed.
+
 ## 3. Research features and evaluation
 
 These items define the research contribution and the evidence needed to defend it.

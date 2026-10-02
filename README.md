@@ -141,6 +141,44 @@ EMBEDDING_BASE_URL=http://localhost:11434/v1
 # Ensure Ollama is running: ollama serve
 ```
 
+### Embedding Providers
+
+Embeddings are chosen with `EMBEDDING_PROVIDER`.
+
+```bash
+# openai (default) — any OpenAI-compatible /embeddings endpoint
+EMBEDDING_PROVIDER=openai
+EMBEDDING_BASE_URL=http://localhost:11434/v1   # or https://api.groq.com/openai/v1
+EMBEDDING_MODEL=qwen3-embedding:4b
+
+# gemini — Google Gemini's native API, no Ollama or GPU needed
+EMBEDDING_PROVIDER=gemini
+GEMINI_API_KEY=...
+EMBEDDING_MODEL=gemini-embedding-001
+# optional: truncate stored vectors (Matryoshka) to shrink the index
+EMBEDDING_OUTPUT_DIM=768
+```
+
+The Gemini provider calls `:batchEmbedContents` (not `:embedContent`, which
+aggregates several texts into one vector) and uses asymmetric retrieval task
+types: chunks are embedded as `RETRIEVAL_DOCUMENT`, search queries as
+`RETRIEVAL_QUERY`. It retries rate limits with backoff.
+
+#### Switching embedding providers
+
+Vectors from different providers or models are **not comparable**, so the
+backend refuses to mix them: the `knowledge_base` collection records which
+model produced its vectors and raises a clear error on mismatch instead of
+returning irrelevant chunks.
+
+To switch, re-embed the existing knowledge base:
+
+1. Stop the API.
+2. Delete the contents of `CHROMA_PATH` (default `./chroma_data`). Postgres
+   chunk text is untouched.
+3. Start the API and re-upload each document — or call
+   `POST /documents/{id}/retry` — so chunks are embedded with the new model.
+
 ---
 
 ## Project Structure
@@ -243,9 +281,14 @@ npx tsc --noEmit
 | `LLM_MODEL` | No | `qwen3:4b-instruct` | Base LLM model |
 | `LLM_CHAT_MODEL` | No | `qwen/qwen3.8-27b` | Chat/RAG model |
 | `LLM_EXTRACT_MODEL` | No | `qwen/qwen3.8-27b` | Entity extraction model |
-| `EMBEDDING_API_KEY` | No | — | Embeddings API key |
-| `EMBEDDING_BASE_URL` | No | `http://localhost:11434/v1` | Embeddings base URL |
+| `EMBEDDING_API_KEY` | No | — | Embeddings API key (also fallback for `GEMINI_API_KEY`) |
+| `EMBEDDING_BASE_URL` | No | `http://localhost:11434/v1` | Embeddings base URL (OpenAI-compatible provider) |
 | `EMBEDDING_MODEL` | No | `qwen3-embedding:4b` | Embeddings model |
+| `EMBEDDING_PROVIDER` | No | `openai` | `openai` (OpenAI-compatible) or `gemini` (native API) |
+| `EMBEDDING_OUTPUT_DIM` | No | — | Truncated output dimensionality, e.g. `768`; changing it requires re-embedding |
+| `EMBEDDING_BATCH_SIZE` | No | `100` | Texts per Gemini `:batchEmbedContents` request |
+| `GEMINI_API_KEY` | No | — | Gemini API key (falls back to `EMBEDDING_API_KEY`) |
+| `GEMINI_BASE_URL` | No | `https://generativelanguage.googleapis.com/v1beta` | Gemini native API base URL |
 | `CORS_ORIGINS` | No | `localhost:3000` | Allowed CORS origins (JSON array) |
 
 \* Required unless `MOCK_AUTH=true`
