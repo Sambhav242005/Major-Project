@@ -83,6 +83,7 @@ export interface EntityDetail {
 /** Entity source chunk returned by the knowledge-base API. */
 export interface EntityChunk {
   chunk_id: string;
+  chunk_index: number;
   text: string;
   page_number: number | null;
   filename: string;

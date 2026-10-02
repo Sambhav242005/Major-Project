@@ -6,8 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-async def get_document_chunks(db: AsyncSession, document_id: str) -> list[dict]:
-    """Get all chunks for a document."""
+async def get_document_chunks(
+    db: AsyncSession, document_id: str, text_preview_chars: int | None = None
+) -> list[dict]:
+    """Get all chunks for a document.
+
+    `text` is returned in full because the only caller is the document detail
+    page, which renders the whole chunk. Pass `text_preview_chars` to get a
+    truncated `text` (plus `text_truncated: true`) for list/preview payloads.
+    """
     from db.models import DocumentChunk
 
     stmt = (
@@ -17,16 +24,24 @@ async def get_document_chunks(db: AsyncSession, document_id: str) -> list[dict]:
     )
     result = await db.execute(stmt)
     chunks = result.scalars().all()
-    return [
-        {
-            "id": str(c.id),
-            "chunk_index": c.chunk_index,
-            "page_number": c.page_number,
-            "text": c.text[:200] + "..." if len(c.text) > 200 else c.text,
-            "token_count": c.token_count,
-        }
-        for c in chunks
-    ]
+
+    payload = []
+    for c in chunks:
+        truncated = text_preview_chars is not None and len(c.text) > text_preview_chars
+        text = c.text
+        if text_preview_chars is not None and truncated:
+            text = c.text[:text_preview_chars] + "..."
+        payload.append(
+            {
+                "id": str(c.id),
+                "chunk_index": c.chunk_index,
+                "page_number": c.page_number,
+                "text": text,
+                "text_truncated": truncated,
+                "token_count": c.token_count,
+            }
+        )
+    return payload
 
 
 async def get_document_entities(db: AsyncSession, document_id: str) -> list[dict]:

@@ -85,3 +85,85 @@ async def test_get_nonexistent_document_returns_none():
     result = await get_document(db=mock_db, document_id="550e8400-e29b-41d4-a716-446655440099", project_id="550e8400-e29b-41d4-a716-446655440001")
 
     assert result is None
+
+
+# --- Test: get_document_chunks returns full text (issue #29) ---
+
+def _chunk_db(chunks):
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = chunks
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value = mock_scalars
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(return_value=mock_result)
+    return mock_db
+
+
+def _chunk_stub(chunk_id, text, chunk_index=0, page_number=1, token_count=42):
+    stub = MagicMock()
+    stub.id = chunk_id
+    stub.text = text
+    stub.chunk_index = chunk_index
+    stub.page_number = page_number
+    stub.token_count = token_count
+    return stub
+
+
+DOC_ID = "550e8400-e29b-41d4-a716-4466554400aa"
+LONG_TEXT = "L" * 900
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_returns_untruncated_text():
+    """The detail page renders whole chunks — text must not be clipped."""
+    from services.documents import get_document_chunks
+
+    mock_db = _chunk_db([_chunk_stub("chunk-1", LONG_TEXT)])
+
+    result = await get_document_chunks(db=mock_db, document_id=DOC_ID)
+
+    assert result[0]["text"] == LONG_TEXT
+    assert result[0]["text_truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_short_text_untouched():
+    from services.documents import get_document_chunks
+
+    mock_db = _chunk_db([_chunk_stub("chunk-1", "short chunk")])
+
+    result = await get_document_chunks(db=mock_db, document_id=DOC_ID)
+
+    assert result[0]["text"] == "short chunk"
+    assert result[0]["text_truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_preview_opt_in():
+    """List/preview callers can still ask for a clipped payload."""
+    from services.documents import get_document_chunks
+
+    mock_db = _chunk_db([_chunk_stub("chunk-1", LONG_TEXT)])
+
+    result = await get_document_chunks(db=mock_db, document_id=DOC_ID, text_preview_chars=200)
+
+    assert result[0]["text"] == "L" * 200 + "..."
+    assert result[0]["text_truncated"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_keeps_chunk_ordering_fields():
+    from services.documents import get_document_chunks
+
+    mock_db = _chunk_db([
+        _chunk_stub("chunk-0", "a", chunk_index=0, page_number=1),
+        _chunk_stub("chunk-1", "b", chunk_index=1, page_number=1),
+    ])
+
+    result = await get_document_chunks(db=mock_db, document_id=DOC_ID)
+
+    # Both chunks on page 1 survive — distinct sections must not collapse.
+    assert [c["chunk_index"] for c in result] == [0, 1]
+    assert [c["id"] for c in result] == ["chunk-0", "chunk-1"]
