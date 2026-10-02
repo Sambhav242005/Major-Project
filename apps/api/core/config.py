@@ -1,6 +1,11 @@
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict, model_validator
 
+# Supported values for EMBEDDING_PROVIDER.
+#   openai -> any OpenAI-compatible /embeddings endpoint (Ollama, Groq, OpenAI)
+#   gemini -> Google Gemini native :batchEmbedContents endpoint
+EMBEDDING_PROVIDERS = frozenset({"openai", "gemini"})
+
 
 class Settings(BaseSettings):
     model_config = ConfigDict(
@@ -52,10 +57,23 @@ class Settings(BaseSettings):
     LLM_CHAT_MODEL: str = "qwen/qwen3.8-27b"
     LLM_EXTRACT_MODEL: str = "qwen/qwen3.8-27b"
 
-    # Embeddings (OpenAI-compatible)
+    # Embeddings
+    # EMBEDDING_PROVIDER=openai  -> any OpenAI-compatible /embeddings endpoint
+    #                               (Ollama, Groq, OpenAI, Gemini's compat layer)
+    # EMBEDDING_PROVIDER=gemini  -> Google Gemini native :batchEmbedContents
+    EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_API_KEY: str = ""
     EMBEDDING_BASE_URL: str = "http://localhost:11434/v1"
     EMBEDDING_MODEL: str = "qwen3-embedding:4b"
+    # Optional output dimensionality. Only send it when the provider/model
+    # supports it (Gemini: 768/1536/3072 via Matryoshka truncation).
+    EMBEDDING_OUTPUT_DIM: int | None = None
+    EMBEDDING_BATCH_SIZE: int = 100
+
+    # Gemini native provider (used when EMBEDDING_PROVIDER=gemini).
+    # GEMINI_API_KEY falls back to EMBEDDING_API_KEY when empty.
+    GEMINI_API_KEY: str = ""
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
 
     # Google Meet Bot agent
     MEET_EMAIL: str = ""
@@ -68,6 +86,26 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+
+    @model_validator(mode="after")
+    def _validate_embedding_settings(self):
+        provider = self.EMBEDDING_PROVIDER.strip().lower()
+        if provider not in EMBEDDING_PROVIDERS:
+            raise ValueError(
+                f"EMBEDDING_PROVIDER must be one of {sorted(EMBEDDING_PROVIDERS)}, "
+                f"got {self.EMBEDDING_PROVIDER!r}"
+            )
+        self.EMBEDDING_PROVIDER = provider
+
+        if self.EMBEDDING_BATCH_SIZE < 1:
+            raise ValueError("EMBEDDING_BATCH_SIZE must be >= 1")
+
+        if provider == "gemini" and not (self.GEMINI_API_KEY or self.EMBEDDING_API_KEY):
+            raise ValueError(
+                "EMBEDDING_PROVIDER=gemini requires GEMINI_API_KEY "
+                "(or EMBEDDING_API_KEY as a fallback)."
+            )
+        return self
 
 
 
