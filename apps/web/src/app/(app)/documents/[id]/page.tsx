@@ -25,6 +25,7 @@ interface Chunk {
   chunk_index: number;
   page_number: number | null;
   text: string;
+  text_truncated: boolean;
   token_count: number | null;
 }
 
