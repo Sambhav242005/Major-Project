@@ -3,7 +3,26 @@
 import asyncio
 from functools import partial
 
+from pipelines.embeddings.embedding_function import (
+    TASK_QUERY,
+    get_embedding_function,
+)
 from pipelines.embeddings.store import get_collection
+
+
+def _embed_and_query(
+    collection,
+    query: str,
+    project_id: str,
+    top_k: int,
+) -> dict | None:
+    """Embed the query as a RETRIEVAL_QUERY, then search. Runs in an executor."""
+    query_embeddings = get_embedding_function(TASK_QUERY)([query])
+    return collection.query(
+        query_embeddings=query_embeddings,
+        n_results=top_k,
+        where={"project_id": project_id},
+    )
 
 
 async def query_chunks(
@@ -19,10 +38,11 @@ async def query_chunks(
     results = await loop.run_in_executor(
         None,
         partial(
-            collection.query,
-            query_texts=[query],
-            n_results=top_k,
-            where={"project_id": project_id},
+            _embed_and_query,
+            collection,
+            query,
+            project_id,
+            top_k,
         ),
     )
 
