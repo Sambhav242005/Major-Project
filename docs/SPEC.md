@@ -188,11 +188,11 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 1 | "SQLite (local dev for Prisma)" + `apps/web/prisma/` structure | Prisma deleted in `8c72299`; no `schema.prisma` anywhere | **Stale docs** |
 | 2 | `DATABASE_URL` env var for frontend | No consumer in `apps/web/src` | **Stale env** |
 | 3 | "Supabase Storage" for files (`storage_path`) | `storage_path` is just a generated path string; `documents.py` has `# TODO: Upload to Supabase Storage` — files live only in request memory; retry requires re-uploading | **Not implemented** |
-| 4 | Backend LLM: OpenAI / Ollama | `apps/api/.env` uses **Groq** (OpenAI-compatible) with model `qwen/qwen3.8-27b` (`LLM_CHAT_MODEL`/`LLM_EXTRACT_MODEL`, PR #3); embeddings `qwen3-embedding:4b` | **Differs from README defaults** (code supports both; env differs) |
+| 4 | Backend LLM: OpenAI / Ollama | `apps/api/.env` uses **Groq** (OpenAI-compatible) with model `qwen/qwen3.8-27b` (`LLM_CHAT_MODEL`/`LLM_EXTRACT_MODEL`, PR #3); embeddings `qwen3-embedding:4b`; embeddings additionally support Gemini via `EMBEDDING_PROVIDER=gemini` (issue #6) | **Differs from README defaults** (code supports both; env differs) |
 | 5 | ChromaDB "on disk, no separate service" | True — `PersistentClient(path=CHROMA_PATH)` | ✅ Matches |
 | 6 | Postgres + NetworkX over Neo4j | True — ADR-0001, `services/knowledge/` | ✅ Matches |
 | 7 | Supabase Auth w/ backend JWT validation | True — ADR-0003, `core/security.py` | ✅ Matches |
-| 8 | Single Chroma collection w/ project filter | True — ADR-0002, `embeddings.py` | ✅ Matches |
+| 8 | Single Chroma collection w/ project filter | True — ADR-0002, `embeddings.py`; collection also records its `embedding_fingerprint` and rejects a provider/model switch that would mix vector spaces (issue #6) | ✅ Matches |
 | 9 | Chat streaming over SSE with citations | True — `services/chat/` + `app/(app)/chat/page.tsx` | ✅ Matches |
 | 10 | Background tasks via FastAPI BackgroundTasks (brief §2) | Actually `asyncio.create_task` + strong refs (`documents.py`, `task_queue.py`) — deliberate fix for middleware dropping BackgroundTasks | **Deviation, documented in code comments** |
 | 11 | Testing: Vitest + RTL frontend | Vitest/RTL in devDependencies only; **no frontend unit tests exist** | **Not implemented** |
