@@ -164,6 +164,12 @@ aggregates several texts into one vector) and uses asymmetric retrieval task
 types: chunks are embedded as `RETRIEVAL_DOCUMENT`, search queries as
 `RETRIEVAL_QUERY`. It retries rate limits with backoff.
 
+**`gemini-embedding-2` note:** Embeddings 2 has no `taskType` field — the API
+rejects it. For that model the provider instead prefixes the text
+(`task: search result | query: …` for queries, `title: none | text: …` for
+chunks), per Google's guidance. Embeddings 1 (`gemini-embedding-001`) sends
+`taskType` and passes text through untouched.
+
 #### Switching embedding providers
 
 Vectors from different providers or models are **not comparable**, so the
