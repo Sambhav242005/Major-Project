@@ -12,6 +12,8 @@ from typing import AsyncIterator, Callable, Awaitable
 
 from starlette.responses import StreamingResponse
 
+from core.errors import AppError
+
 logger = logging.getLogger(__name__)
 
 # --- SSE formatting ---
@@ -83,9 +85,14 @@ async def generator_sse_stream(
         try:
             async for event in generator:
                 yield format_sse(event)
-        except Exception:
+        except Exception as exc:
             logger.exception("SSE generator stream failed")
-            yield format_sse({"step": "error", "status": "error", "error": "Stream interrupted"})
+            # AppError carries an operator-written message (e.g. how to fix an
+            # embedding-space mismatch). Forward it, matching the HTTP contract
+            # in core.errors.app_error_handler; keep everything else generic so
+            # internal exception text never reaches the client.
+            message = exc.detail if isinstance(exc, AppError) else "Stream interrupted"
+            yield format_sse({"step": "error", "status": "error", "error": message})
 
     return StreamingResponse(
         _generate(),

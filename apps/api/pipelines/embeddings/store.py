@@ -5,6 +5,7 @@ import logging
 import chromadb
 
 from core.config import settings
+from core.errors import AppError
 from pipelines.embeddings.client import get_chroma_client
 from pipelines.embeddings.embedding_function import (
     TASK_DOCUMENT,
@@ -35,8 +36,18 @@ _MISMATCH_HELP = (
 )
 
 
-class EmbeddingSpaceMismatchError(RuntimeError):
-    """The configured embedding model does not match the collection's vectors."""
+class EmbeddingSpaceMismatchError(AppError):
+    """The configured embedding model does not match the collection's vectors.
+
+    A 409 rather than a 500: the configuration is internally consistent, it
+    just conflicts with the stored vector space. The detail carries the
+    remediation steps, which ``app_error_handler`` and ``generator_sse_stream``
+    both forward to the client.
+    """
+
+    status_code = 409
+    detail = "Embedding space mismatch"
+    error_code = "embedding_space_mismatch"
 
 
 def embedding_fingerprint() -> str:
@@ -66,12 +77,25 @@ def _verify_embedding_space(collection: chromadb.Collection, fingerprint: str) -
         # provenance. Adopt it for the default provider (no behaviour change for
         # existing deployments) but refuse a provider switch, which would mix
         # vector spaces.
-        if collection.count() > 0 and settings.EMBEDDING_PROVIDER != "openai":
+        count = collection.count()
+        if count > 0 and settings.EMBEDDING_PROVIDER != "openai":
             raise EmbeddingSpaceMismatchError(
                 f"Chroma collection {COLLECTION_NAME!r} holds "
-                f"{collection.count()} vectors from an unrecorded embedding model, "
+                f"{count} vectors from an unrecorded embedding model, "
                 f"but EMBEDDING_PROVIDER is {settings.EMBEDDING_PROVIDER!r} "
                 f"({settings.EMBEDDING_MODEL}). {_MISMATCH_HELP}"
+            )
+        if count > 0:
+            # We cannot recover the model that wrote these vectors, so this
+            # stamp is an assumption, not a verification. It is the right call
+            # (a mismatch here would break every existing deployment), but it
+            # means a model change shipped in the same deploy as this upgrade
+            # would go undetected. Documented in docs/TODO.md §2.22.
+            logger.warning(
+                "Chroma collection %r holds %d pre-fingerprint vectors; "
+                "assuming they were built with the current embedding config (%s). "
+                "Vector provenance is unverified for this collection.",
+                COLLECTION_NAME, count, fingerprint,
             )
         _stamp_fingerprint(collection, fingerprint)
         return

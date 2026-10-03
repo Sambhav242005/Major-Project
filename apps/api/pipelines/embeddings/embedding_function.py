@@ -32,6 +32,7 @@ import chromadb
 import httpx
 
 from core.config import EMBEDDING_PROVIDERS, settings
+from core.errors import AppError
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +49,15 @@ _GEMINI_TASK_TYPES = {
 # Gemini always returns unit-length vectors at the default dimension, and
 # gemini-embedding-2+ auto-normalizes truncated dimensions too. Older
 # gemini-embedding-001 does NOT, so we normalize those ourselves.
-_GEMINI_AUTO_NORMALIZED_MODEL = "gemini-embedding-2"
+_GEMINI_EMBEDDING_2_PREFIX = "gemini-embedding-2"
 _GEMINI_DEFAULT_DIM = 3072
+
+# Embeddings 2 dropped the `taskType` field; the documented replacement for
+# text-only tasks is a prompt prefix. Prefixes follow the asymmetric retrieval
+# examples at https://ai.google.dev/gemini-api/docs/embeddings#task-types-embeddings-2
+# `title: none` is what the docs specify when no title is available.
+_GEMINI_E2_QUERY_PREFIX = "task: search result | query: "
+_GEMINI_E2_DOCUMENT_PREFIX = "title: none | text: "
 
 _RETRY_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _MAX_ATTEMPTS = 4
@@ -58,8 +66,17 @@ _TIMEOUT_SECONDS = 60.0
 _ERROR_TEXT_LIMIT = 300
 
 
-class EmbeddingError(RuntimeError):
-    """Raised when an embedding provider call fails."""
+class EmbeddingError(AppError):
+    """Raised when an embedding provider call fails.
+
+    Inherits :class:`AppError` (not ``RuntimeError``) so FastAPI routes the
+    provider's message through ``app_error_handler`` instead of collapsing it
+    into an opaque 500 — a 400 from Gemini is operator-actionable.
+    """
+
+    status_code = 502
+    detail = "Embedding provider request failed"
+    error_code = "embedding_failed"
 
 
 def _truncate(text: str, limit: int = _ERROR_TEXT_LIMIT) -> str:
@@ -132,9 +149,19 @@ def gemini_api_key() -> str:
     return key
 
 
+def _is_embedding_2() -> bool:
+    """True for the gemini-embedding-2 family.
+
+    Embeddings 2 differs from gemini-embedding-001 in two ways this module must
+    honour: it auto-normalizes truncated dimensions (so we must not renormalize
+    them again), and it rejects ``taskType`` (prompt prefixes replace it).
+    """
+    return settings.EMBEDDING_MODEL.startswith(_GEMINI_EMBEDDING_2_PREFIX)
+
+
 def _needs_manual_normalization() -> bool:
     """gemini-embedding-001 returns unnormalized vectors below 3072 dims."""
-    if settings.EMBEDDING_MODEL.startswith(_GEMINI_AUTO_NORMALIZED_MODEL):
+    if _is_embedding_2():
         return False
     dim = settings.EMBEDDING_OUTPUT_DIM
     return dim is not None and dim < _GEMINI_DEFAULT_DIM
@@ -221,12 +248,26 @@ class GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
         base = settings.GEMINI_BASE_URL.rstrip("/")
         return f"{base}/models/{settings.EMBEDDING_MODEL}:batchEmbedContents"
 
+    def _prepare_text(self, text: str) -> str:
+        """Apply the task signal for the configured model.
+
+        gemini-embedding-001 takes it via ``taskType`` (left untouched here).
+        gemini-embedding-2 has no ``taskType`` — it wants the task in the text.
+        """
+        if not _is_embedding_2():
+            return text
+        if self.task == TASK_QUERY:
+            return f"{_GEMINI_E2_QUERY_PREFIX}{text}"
+        return f"{_GEMINI_E2_DOCUMENT_PREFIX}{text}"
+
     def _build_request(self, text: str) -> dict:
         request: dict = {
             "model": f"models/{settings.EMBEDDING_MODEL}",
-            "content": {"parts": [{"text": text}]},
+            "content": {"parts": [{"text": self._prepare_text(text)}]},
         }
-        if self.task in _GEMINI_TASK_TYPES:
+        # Sending taskType to Embeddings 2 is a hard 400; _prepare_text carries
+        # the task signal for that model instead.
+        if not _is_embedding_2() and self.task in _GEMINI_TASK_TYPES:
             request["taskType"] = self.task_type
         if settings.EMBEDDING_OUTPUT_DIM:
             request["output_dimensionality"] = settings.EMBEDDING_OUTPUT_DIM

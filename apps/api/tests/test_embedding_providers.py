@@ -7,6 +7,8 @@ import chromadb
 import pytest
 
 from core.config import Settings, settings
+from core.errors import AppError
+from core.sse import generator_sse_stream
 from pipelines.embeddings import embedding_function as ef_mod
 from pipelines.embeddings import query as query_mod
 from pipelines.embeddings import store as store_mod
@@ -124,8 +126,11 @@ def _clear_embedding_cache():
 
 # --- provider selection -----------------------------------------------------
 
-def test_default_provider_is_openai_compatible():
-    assert settings.EMBEDDING_PROVIDER == "openai"
+def test_default_provider_is_openai_compatible(monkeypatch):
+    # Pinned rather than read from settings: the repo's .env is gitignored, so
+    # asserting the ambient value would make this test fail for anyone who set
+    # EMBEDDING_PROVIDER=gemini locally (exactly what this PR tells them to do).
+    monkeypatch.setattr(settings, "EMBEDDING_PROVIDER", "openai")
     assert isinstance(get_embedding_function(), OpenAICompatibleEmbeddingFunction)
 
 
@@ -226,6 +231,53 @@ def test_gemini_uses_query_task_type_for_search(monkeypatch):
     get_embedding_function(TASK_QUERY)(["a question"])
 
     assert calls[0]["json"]["requests"][0]["taskType"] == "RETRIEVAL_QUERY"
+
+
+def test_embedding_2_omits_task_type(monkeypatch):
+    """Embeddings 2 rejects taskType outright (HTTP 400), so never send it."""
+    use_gemini(monkeypatch, model="gemini-embedding-2")
+    calls = patch_http(monkeypatch, [FakeResponse(payload=gemini_payload(1))])
+
+    get_embedding_function(TASK_QUERY)(["a question"])
+    get_embedding_function(TASK_DOCUMENT)(["some chunk"])
+
+    assert len(calls) == 2
+    for call in calls:
+        for request in call["json"]["requests"]:
+            assert "taskType" not in request
+
+
+def test_embedding_2_prefixes_query_text(monkeypatch):
+    """Embeddings 2 takes the task via prompt prefix instead of taskType."""
+    use_gemini(monkeypatch, model="gemini-embedding-2")
+    calls = patch_http(monkeypatch, [FakeResponse(payload=gemini_payload(1))])
+
+    get_embedding_function(TASK_QUERY)(["weather today"])
+
+    text = calls[0]["json"]["requests"][0]["content"]["parts"][0]["text"]
+    assert text == "task: search result | query: weather today"
+
+
+def test_embedding_2_prefixes_document_text(monkeypatch):
+    use_gemini(monkeypatch, model="gemini-embedding-2")
+    calls = patch_http(monkeypatch, [FakeResponse(payload=gemini_payload(1))])
+
+    get_embedding_function(TASK_DOCUMENT)(["some chunk"])
+
+    text = calls[0]["json"]["requests"][0]["content"]["parts"][0]["text"]
+    assert text == "title: none | text: some chunk"
+
+
+def test_embedding_001_text_is_untouched_by_prefixes(monkeypatch):
+    """001 carries the task in taskType — prefixing would corrupt its input."""
+    use_gemini(monkeypatch, model="gemini-embedding-001")
+    calls = patch_http(monkeypatch, [FakeResponse(payload=gemini_payload(1))])
+
+    get_embedding_function(TASK_QUERY)(["a question"])
+
+    request = calls[0]["json"]["requests"][0]
+    assert request["taskType"] == "RETRIEVAL_QUERY"
+    assert request["content"]["parts"][0]["text"] == "a question"
 
 
 def test_gemini_sends_output_dimensionality_when_set(monkeypatch):
@@ -358,6 +410,53 @@ def test_gemini_missing_key_raises(monkeypatch):
         get_embedding_function(TASK_DOCUMENT)(["hello"])
 
 
+# --- error contract: remediation must reach the client ----------------------
+#
+# These errors exist to tell an operator how to recover. If they are plain
+# RuntimeError, FastAPI collapses them to an opaque 500 and that text is lost.
+
+def test_embedding_error_carries_app_error_contract():
+    assert issubclass(EmbeddingError, AppError)
+    error = EmbeddingError("gemini embeddings HTTP 400: bad model")
+    assert error.status_code == 502
+    assert error.error_code == "embedding_failed"
+    assert error.detail == "gemini embeddings HTTP 400: bad model"
+
+
+def test_embedding_space_mismatch_is_a_conflict():
+    assert issubclass(store_mod.EmbeddingSpaceMismatchError, AppError)
+    error = store_mod.EmbeddingSpaceMismatchError("delete CHROMA_PATH then re-embed")
+    assert error.status_code == 409
+    assert error.error_code == "embedding_space_mismatch"
+    assert error.detail == "delete CHROMA_PATH then re-embed"
+
+
+async def _stream_error_payload(exc: Exception) -> str:
+    """Run an SSE generator that raises, and return what the client receives."""
+
+    async def boom():
+        raise exc
+        yield  # pragma: no cover — makes this an async generator
+
+    response = await generator_sse_stream(boom())
+    return "".join([chunk async for chunk in response.body_iterator])
+
+
+async def test_sse_stream_forwards_app_error_detail():
+    """generator_sse_stream must not swallow the remediation message."""
+    payload = await _stream_error_payload(
+        store_mod.EmbeddingSpaceMismatchError("delete CHROMA_PATH then re-embed")
+    )
+    assert "delete CHROMA_PATH then re-embed" in payload
+
+
+async def test_sse_stream_keeps_internal_errors_generic():
+    """Only AppError detail is forwarded — never arbitrary exception text."""
+    payload = await _stream_error_payload(RuntimeError("secret connection string"))
+    assert "secret connection string" not in payload
+    assert "Stream interrupted" in payload
+
+
 # --- OpenAI-compatible path (unchanged behaviour) ---------------------------
 
 def test_openai_compatible_request_shape(monkeypatch):
@@ -446,6 +545,7 @@ def test_legacy_empty_collection_adopts_fingerprint(monkeypatch, chroma_collecti
 
 def test_legacy_populated_collection_adopts_fingerprint_for_openai(monkeypatch, chroma_collection):
     """Existing deployments must keep working after the upgrade."""
+    monkeypatch.setattr(settings, "EMBEDDING_PROVIDER", "openai")
     client, _ = chroma_collection
     legacy = client.get_or_create_collection(
         name=store_mod.COLLECTION_NAME, metadata={"hnsw:space": "cosine"},
