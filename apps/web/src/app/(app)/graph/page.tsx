@@ -10,6 +10,7 @@ import { useProjectStore } from "@/stores/project";
 import type { EntityChunk, EntityDetail } from "@/lib/types";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { GraphCanvas, GraphSearch, GraphTypeFilter, GraphControls, EntityDetailPanel, GraphLegend } from "@/components/features/graph";
+import { dedupeEntityChunks } from "@/lib/utils";
 
 const ENTITY_COLORS: Record<string, string> = {
   PERSON: "#f59e0b",
@@ -180,14 +181,7 @@ export default function GraphPage() {
           }),
         ]);
         setSelectedEntity(entityRes.entity);
-        const seen = new Set<string>();
-        const uniqueChunks = (chunksRes.chunks || []).filter((c) => {
-          const key = `${c.filename}|${c.page_number ?? 0}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        setEntityChunks(uniqueChunks);
+        setEntityChunks(dedupeEntityChunks(chunksRes.chunks || []));
       } catch (e) {
         console.error("Failed to fetch entity:", e);
         setSelectedEntity(null);

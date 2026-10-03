@@ -147,7 +147,11 @@ async def get_entity_chunks(
     project_id: str,
 ) -> list[dict]:
     """Get chunks that mention a specific entity."""
-    stmt = select(EntityMention).where(EntityMention.entity_id == _uuid_val(entity_id))
+    stmt = (
+        select(EntityMention)
+        .where(EntityMention.entity_id == _uuid_val(entity_id))
+        .order_by(EntityMention.id)
+    )
     result = await db.execute(stmt)
     mentions = result.scalars().all()
 
@@ -164,6 +168,8 @@ async def get_entity_chunks(
 
             chunks.append({
                 "chunk_id": str(chunk.id),
+                "chunk_index": chunk.chunk_index,
+                "document_id": str(chunk.document_id),
                 "text": chunk.text,
                 "page_number": chunk.page_number,
                 "filename": doc.filename if doc else "unknown",

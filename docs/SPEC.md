@@ -195,7 +195,7 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 8 | Single Chroma collection w/ project filter | True — ADR-0002, `embeddings.py`; collection also records its `embedding_fingerprint` and rejects a provider/model switch that would mix vector spaces (issue #6) | ✅ Matches |
 | 9 | Chat streaming over SSE with citations | True — `services/chat/` + `app/(app)/chat/page.tsx` | ✅ Matches |
 | 10 | Background tasks via FastAPI BackgroundTasks (brief §2) | Actually `asyncio.create_task` + strong refs (`documents.py`, `task_queue.py`) — deliberate fix for middleware dropping BackgroundTasks | **Deviation, documented in code comments** |
-| 11 | Testing: Vitest + RTL frontend | Vitest/RTL in devDependencies only; **no frontend unit tests exist** | **Not implemented** |
+| 11 | Testing: Vitest + RTL frontend | Vitest/RTL in devDependencies; `npm run test` wired up with `vitest.config.ts` (#29) and unit tests started in `src/lib/utils.test.ts` — still no RTL component tests | **Partial (#29)** |
 | 12 | Alembic migrations path | Present (`migrations/001_initial_schema.py`) but dev uses `init_db.py` `create_all` | ✅ Present / dev shortcut |
 | 13 | Frontend graph lib "React Flow" (brief) | Actually **reagraph** | **Deviation** |
 | 14 | LLM model `llama3.1` / `gpt-4o-mini` (README) | Configurable via `LLM_CHAT_MODEL` / `LLM_EXTRACT_MODEL` (default `qwen/qwen3.8-27b`); PR #3 fixed hardcode `llama-3.3-70b-versatile` | ✅ Fixed (PR #3) / README still stale |
@@ -203,6 +203,8 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 16 | Backend `MOCK_AUTH` fails fast in prod | True — `config.py` model validator | ✅ Matches |
 | 17 | Frontend build fails with mock auth in prod | Partially — `next.config.ts` behavior; middleware would use mock in prod if env set | **Mostly matches** |
 | 18 | `profiles` row per user | True — `core/deps.py` upsert | ✅ Matches |
+| 19 | `GET /{id}/chunks` returns preview text | Returns **full** `text` plus `text_truncated` (#29); `services/documents/content.py` takes an optional `text_preview_chars` to opt into clipping for list/preview payloads | **Fixed (#29)** |
+| 20 | Graph entity-chunk dedup keyed on `filename\|page` | Keyed on `document_id\|chunk_index` in `dedupeEntityChunks` (#29). `chunk_index` is a position within one document's chunk list (`pipelines/chunking.py`), so it must be scoped by `document_id`; `filename` collided across same-named uploads | **Fixed (#29)** |
 
 **Stale-doc cleanup TODO:** `README.md` Prisma/model fixes done (this sync); `apps/web/.env.example` + `.gitignore` Prisma `DATABASE_URL` removed; `root akgb.db` verified absent (gitignored `*.db`, no committed file).
 
