@@ -63,6 +63,13 @@ _RETRY_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _MAX_ATTEMPTS = 4
 _RETRY_BASE_DELAY_SECONDS = 1.0
 _TIMEOUT_SECONDS = 60.0
+# Total wall-clock budget for one _post_json call, retries and backoff
+# included. _post_json blocks inside run_in_executor with no asyncio timeout
+# to interrupt it, so without a budget a hanging 5xx could stall a large
+# ingest for ~4 attempts x 60s + backoff ~= 4.5 min. One call now never
+# outlives a single request's timeout; 429 retries still fit, because those
+# answers come back fast and 1s/2s/4s backoff is well inside the budget.
+_RETRY_BUDGET_SECONDS = _TIMEOUT_SECONDS
 _ERROR_TEXT_LIMIT = 300
 
 
@@ -84,36 +91,63 @@ def _truncate(text: str, limit: int = _ERROR_TEXT_LIMIT) -> str:
     return text if len(text) <= limit else f"{text[:limit]}..."
 
 
-def _sleep_before_retry(attempt: int, provider: str, retry_after: str | None) -> None:
-    """Back off before retrying. Honours ``Retry-After`` when the API sends it."""
+def _sleep_before_retry(attempt: int, provider: str, retry_after: str | None, deadline: float) -> bool:
+    """Back off before retrying. Honours ``Retry-After`` when the API sends it.
+
+    Returns ``False`` when the delay would run past ``deadline`` — the caller
+    must give up rather than sleep beyond its wall-clock budget.
+    """
     delay = min(_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1)), 30.0)
     if retry_after:
         try:
             delay = max(delay, float(retry_after))
         except ValueError:
             pass
+    if time.monotonic() + delay > deadline:
+        logger.warning(
+            "Embedding provider %s would back off %.1fs past the %.0fs retry budget, giving up",
+            provider, delay, _RETRY_BUDGET_SECONDS,
+        )
+        return False
     logger.warning(
         "Embedding provider %s rate-limited/erroring, retrying in %.1fs (attempt %d/%d)",
         provider, delay, attempt, _MAX_ATTEMPTS,
     )
     time.sleep(delay)
+    return True
 
 
 def _post_json(url: str, headers: dict[str, str], payload: dict, provider: str) -> dict:
-    """POST JSON with bounded retries on rate limits and transient 5xx."""
+    """POST JSON with bounded retries on rate limits and transient 5xx.
+
+    Total elapsed time — every attempt's timeout plus every backoff — is
+    capped at ``_RETRY_BUDGET_SECONDS``, because this blocks a worker thread
+    with no asyncio timeout to interrupt it.
+    """
     request_headers = {"Content-Type": "application/json", **headers}
     last_error: Exception | None = None
+    deadline = time.monotonic() + _RETRY_BUDGET_SECONDS
+    attempts = 0
+    budget_exhausted = False
 
     for attempt in range(1, _MAX_ATTEMPTS + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            # Budget spent; retrying again would stall the caller further.
+            budget_exhausted = True
+            break
+        attempts = attempt
         try:
-            with httpx.Client(timeout=_TIMEOUT_SECONDS) as client:
+            with httpx.Client(timeout=min(_TIMEOUT_SECONDS, remaining)) as client:
                 resp = client.post(url, headers=request_headers, json=payload)
         except httpx.HTTPError as exc:
             last_error = exc
             if attempt == _MAX_ATTEMPTS:
                 break
             logger.warning("Embedding provider %s request failed: %s", provider, exc)
-            _sleep_before_retry(attempt, provider, None)
+            if not _sleep_before_retry(attempt, provider, None, deadline):
+                budget_exhausted = True
+                break
             continue
 
         if resp.status_code == 200:
@@ -131,10 +165,19 @@ def _post_json(url: str, headers: dict[str, str], payload: dict, provider: str) 
                 f"{provider} embeddings failed after {_MAX_ATTEMPTS} attempts ({detail})"
             ) from last_error
 
-        _sleep_before_retry(attempt, provider, resp.headers.get("Retry-After"))
+        if not _sleep_before_retry(attempt, provider, resp.headers.get("Retry-After"), deadline):
+            raise EmbeddingError(
+                f"{provider} embeddings {detail}; retry budget of "
+                f"{_RETRY_BUDGET_SECONDS:.0f}s exhausted, giving up"
+            ) from last_error
 
+    if budget_exhausted:
+        raise EmbeddingError(
+            f"{provider} embeddings failed after {attempts} attempts; "
+            f"retry budget of {_RETRY_BUDGET_SECONDS:.0f}s exhausted: {last_error}"
+        ) from last_error
     raise EmbeddingError(
-        f"{provider} embeddings failed after {_MAX_ATTEMPTS} attempts: {last_error}"
+        f"{provider} embeddings failed after {attempts} attempts: {last_error}"
     ) from last_error
 
 

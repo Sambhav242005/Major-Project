@@ -162,7 +162,8 @@ EMBEDDING_OUTPUT_DIM=768
 The Gemini provider calls `:batchEmbedContents` (not `:embedContent`, which
 aggregates several texts into one vector) and uses asymmetric retrieval task
 types: chunks are embedded as `RETRIEVAL_DOCUMENT`, search queries as
-`RETRIEVAL_QUERY`. It retries rate limits with backoff.
+`RETRIEVAL_QUERY`. It retries rate limits with backoff, within a 60s total
+time budget per call.
 
 **`gemini-embedding-2` note:** Embeddings 2 has no `taskType` field — the API
 rejects it. For that model the provider instead prefixes the text
