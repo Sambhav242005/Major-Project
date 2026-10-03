@@ -55,18 +55,34 @@ class FakeClient:
         return False
 
     def post(self, url, headers=None, json=None):
-        self.calls.append({"url": url, "headers": headers or {}, "json": json})
+        self.calls.append({
+            "url": url,
+            "headers": headers or {},
+            "json": json,
+            "timeout": self.timeout,
+        })
         if len(self._responses) > 1:
             return self._responses.pop(0)
         return self._responses[0]
 
 
 class SleepRecorder:
+    """Stands in for the ``time`` module: sleeps advance a fake clock.
+
+    ``_post_json`` computes a wall-clock deadline with ``time.monotonic()``,
+    so the fake clock must move when we sleep or the budget never expires.
+    """
+
     def __init__(self):
         self.calls: list[float] = []
+        self.now = 0.0
 
     def sleep(self, seconds):
         self.calls.append(seconds)
+        self.now += seconds
+
+    def monotonic(self):
+        return self.now
 
 
 class StubEmbeddingFunction(chromadb.EmbeddingFunction):
@@ -400,6 +416,47 @@ def test_gemini_does_not_retry_client_errors(monkeypatch):
         get_embedding_function(TASK_DOCUMENT)(["hello"])
 
     assert sleeper.calls == []
+
+
+def test_retry_budget_stops_long_retry_after(monkeypatch):
+    """A Retry-After past the budget must not be slept through."""
+    use_gemini(monkeypatch)
+    sleeper = patch_sleep(monkeypatch)
+    patch_http(monkeypatch, [FakeResponse(status_code=429, text="quota", headers={"Retry-After": "300"})])
+
+    with pytest.raises(EmbeddingError, match="retry budget of 60s exhausted"):
+        get_embedding_function(TASK_DOCUMENT)(["hello"])
+
+    assert sleeper.calls == []
+
+
+def test_retry_budget_bounds_persistent_5xx(monkeypatch):
+    """Total elapsed time is capped even when every attempt answers quickly."""
+    use_gemini(monkeypatch)
+    monkeypatch.setattr(ef_mod, "_RETRY_BUDGET_SECONDS", 5.0)
+    sleeper = patch_sleep(monkeypatch)
+    patch_http(monkeypatch, [FakeResponse(status_code=503, text="unavailable")])
+
+    with pytest.raises(EmbeddingError, match="retry budget of 5s exhausted"):
+        get_embedding_function(TASK_DOCUMENT)(["hello"])
+
+    # 1s + 2s slept; the next 4s backoff would cross the 5s budget and is refused.
+    assert sleeper.calls == [1.0, 2.0]
+
+
+def test_request_timeout_shrinks_with_remaining_budget(monkeypatch):
+    """Each attempt's httpx timeout is capped by what is left of the budget."""
+    use_gemini(monkeypatch)
+    patch_sleep(monkeypatch)
+    calls = patch_http(monkeypatch, [
+        FakeResponse(status_code=429, text="quota"),
+        FakeResponse(payload=gemini_payload(1)),
+    ])
+
+    get_embedding_function(TASK_DOCUMENT)(["hello"])
+
+    assert calls[0]["timeout"] == 60
+    assert calls[1]["timeout"] == 59  # 1s of backoff spent from the 60s budget
 
 
 def test_gemini_missing_key_raises(monkeypatch):
