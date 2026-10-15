@@ -37,3 +37,25 @@ async def test_write_audit_log_adds_entry():
     assert log.resource_type == "project"
     assert log.resource_id == resource_id
     assert log.meta == {"name": "Test Project"}
+
+
+@pytest.mark.asyncio
+async def test_serialized_ids_persist_on_sqlite():
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+    from sqlalchemy import select
+    from db.session import Base
+    engine = create_async_engine('sqlite+aiosqlite:///:memory:')
+    project_id, actor_id, resource_id = uuid4(), uuid4(), uuid4()
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with async_sessionmaker(engine)() as db:
+            await write_audit_log(db, str(project_id), str(actor_id), 'chat.message_sent',
+                                  'chat_session', str(resource_id))
+            await db.commit()
+            log = (await db.execute(select(AuditLog))).scalar_one()
+            assert (log.project_id, log.actor_id, log.resource_id) == (project_id, actor_id, resource_id)
+            await write_audit_log(db, str(project_id), None, 'system.review')
+            await db.commit()
+    finally:
+        await engine.dispose()
