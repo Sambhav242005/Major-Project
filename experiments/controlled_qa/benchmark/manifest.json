@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "seed": 26014,
+  "per_category": 4,
+  "limit_families": 0,
+  "mode": "ollama",
+  "model": "qwen2.5:1.5b",
+  "created_utc": "2026-10-14T16:15:51.143840+00:00",
+  "families": 24,
+  "documents": 96,
+  "questions": 120,
+  "assertions": 272,
+  "splits": {
+    "dev": {
+      "families": 6,
+      "documents": 24,
+      "questions": 30
+    },
+    "test": {
+      "families": 18,
+      "documents": 72,
+      "questions": 90
+    }
+  },
+  "word_count_min": 78,
+  "word_count_max": 230,
+  "human_review_status": "first_pass_accepted",
+  "benchmark_type": "controlled synthetic; not public-data or natural-document validation",
+  "ingest_only": "raw/<split>/*.txt; never ingest private/",
+  "generator_script_sha256": "e40c3bf02e8eaa50f631264c78c469395ba605e604f5f797dfa29380a0ed5d03",
+  "human_review": {
+    "source_and_gold_reviewers": 1,
+    "accepted_families": 24,
+    "accepted_questions": 120,
+    "accepted_assertions": 272,
+    "accepted_candidate_pairs": 212,
+    "independent_second_human": false,
+    "generated_answer_human_review": "not completed",
+    "private_worksheets": "not published"
+  }
+}

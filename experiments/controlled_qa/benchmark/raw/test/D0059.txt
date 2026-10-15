@@ -1,0 +1,13 @@
+Document ID: D0059
+Change note
+Project: Aster-495062
+Scope: global
+Approval status: approved
+Published: 2026-10-05
+Valid from: 2026-10-01
+Valid through: open
+
+
+Both registers have equal approval authority for the same scope and period. No precedence rule or correction is recorded.
+
+Change notes are a crucial tool for managing and documenting changes in a business's operations. These notes are used to record and document any modifications or updates made to processes, policies, or procedures. Change notes are essential for maintaining the accuracy and consistency of the business's operations. They provide a clear record of what changes have been made, who made them, and why. This information is invaluable for future reference and for ensuring that the changes have been implemented correctly. Change notes also serve as a communication tool, allowing team members to understand the rationale behind changes and to provide feedback on the implementation process. By regularly reviewing these notes, stakeholders can ensure that the changes have been implemented effectively and that the business's operations are running smoothly.

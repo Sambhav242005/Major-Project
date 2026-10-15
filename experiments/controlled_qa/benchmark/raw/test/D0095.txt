@@ -1,0 +1,12 @@
+Document ID: D0095
+Change note
+Project: Aster-430920
+Scope: global
+Approval status: approved
+Published: 2026-10-05
+Valid from: 2026-10-01
+Valid through: open
+
+The launch date for Aster-430920 is 2026-10-17.
+
+Meeting records are a vital component of operational documentation, capturing the discussions and decisions made during meetings. These records are essential for accountability and transparency, as they provide a record of the decisions made and the rationale behind them. To ensure the quality of meeting records, it is important to follow specific procedures for documenting and reviewing meetings. This includes setting clear guidelines for note-taking, ensuring that all participants are included, and conducting periodic reviews to update and maintain the record.

@@ -1,0 +1,13 @@
+Document ID: D0043
+Change note
+Project: Aster-669203
+Scope: global
+Approval status: approved
+Published: 2026-10-05
+Valid from: 2026-10-01
+Valid through: open
+
+
+Governance rule: draft proposals do not replace an approved register. A change requires explicit approval.
+
+Collaboration is key in the creation and maintenance of these documents. Each document is a collaborative effort, involving multiple stakeholders from different departments or teams. The process of creating and reviewing these documents requires input from various perspectives, ensuring that all viewpoints are considered and addressed.

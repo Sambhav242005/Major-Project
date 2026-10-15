@@ -1,0 +1,12 @@
+Document ID: D0094
+Meeting record
+Project: Aster-430920
+Scope: global
+Approval status: approved
+Published: 2026-10-05
+Valid from: 2026-10-01
+Valid through: open
+
+The retention period for Aster-430920 is 60 days.
+
+Operational registers are crucial documents that track the progress and outcomes of operational activities. They serve as a reference for future reference and as a tool for identifying trends and patterns. To ensure the accuracy and completeness of operational registers, it is imperative to follow specific procedures for documenting and reviewing activities. This includes setting clear guidelines for data entry, ensuring consistency in formatting, and conducting periodic reviews to update and maintain the register.

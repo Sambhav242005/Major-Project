@@ -1,0 +1,5 @@
+# Keep benchmark bytes and original result traces stable across platforms.
+benchmark/** -text whitespace=cr-at-eol
+frozen/** -text whitespace=cr-at-eol
+*.py text eol=lf
+*.md text eol=lf

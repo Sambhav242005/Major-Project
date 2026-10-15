@@ -1,0 +1,17 @@
+Document ID: D0075
+Change note
+Project: Aster-928666
+Scope: EU
+Approval status: approved
+Published: 2026-10-05
+Valid from: 2026-10-01
+Valid through: open
+
+The responsible owner for Aster-928666 in EU is Mira-63308.
+The retention period for Aster-928666 in EU is 60 days.
+The launch date for Aster-928666 in EU is 2026-10-19.
+The timeout for Aster-928666 in EU is 40 seconds.
+The budget for Aster-928666 in EU is INR 840000.
+This is a copy of D0073, not a separate approval.
+
+Collaboration is key in the creation and maintenance of these documents. Each document is a collaborative effort, involving multiple stakeholders from different departments or teams. The process of creating and reviewing these documents requires input from various perspectives, ensuring that all viewpoints are considered and addressed.

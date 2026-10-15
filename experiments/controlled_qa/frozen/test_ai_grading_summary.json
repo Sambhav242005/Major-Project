@@ -1,0 +1,44 @@
+{
+  "method": "AI-assisted local same-model judge; anonymous configuration labels; no human agreement estimate",
+  "results": {
+    "A_vector": {
+      "reviewed_answers": 90,
+      "AI_judged_correct": 69,
+      "AI_judged_accuracy": 0.7666666666666667,
+      "atomic_claims": 90,
+      "supported_applicable_claims": 72,
+      "AI_atomic_factual_precision": 0.8,
+      "citation_links": 94,
+      "supporting_links": 73,
+      "AI_citation_precision": 0.776595744680851,
+      "AI_citation_coverage": 0.5777777777777777,
+      "unaccounted_citations": 6
+    },
+    "B_graph": {
+      "reviewed_answers": 90,
+      "AI_judged_correct": 65,
+      "AI_judged_accuracy": 0.7222222222222222,
+      "atomic_claims": 92,
+      "supported_applicable_claims": 68,
+      "AI_atomic_factual_precision": 0.7391304347826086,
+      "citation_links": 88,
+      "supporting_links": 57,
+      "AI_citation_precision": 0.6477272727272727,
+      "AI_citation_coverage": 0.45652173913043476,
+      "unaccounted_citations": 4
+    },
+    "C_verified": {
+      "reviewed_answers": 90,
+      "AI_judged_correct": 58,
+      "AI_judged_accuracy": 0.6444444444444445,
+      "atomic_claims": 66,
+      "supported_applicable_claims": 60,
+      "AI_atomic_factual_precision": 0.9090909090909091,
+      "citation_links": 54,
+      "supporting_links": 51,
+      "AI_citation_precision": 0.9444444444444444,
+      "AI_citation_coverage": 0.696969696969697,
+      "unaccounted_citations": 0
+    }
+  }
+}
