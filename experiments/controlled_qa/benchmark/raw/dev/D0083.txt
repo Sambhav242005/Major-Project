@@ -1,0 +1,12 @@
+Document ID: D0083
+Change note
+Project: Aster-620786
+Scope: global
+Approval status: approved
+Published: 2026-10-05
+Valid from: 2026-10-01
+Valid through: open
+
+The launch date for Aster-620786 is 2026-10-19.
+
+Change notes are a vital tool for managing changes within an organization. These notes document any changes made to processes, procedures, or systems, providing a clear record of the changes and their impact. The review of change notes involves a detailed examination of the notes to ensure that all changes have been accurately documented, that the changes have been implemented correctly, and that the impact of the changes has been fully understood. This process is crucial for maintaining the quality of the organization's processes and systems. The review should be conducted by a designated reviewer who is familiar with the organization's policies and procedures. The findings of the review are documented in a report, which is then used to make necessary corrections and improvements. This cycle of review, correction, and improvement is a continuous process that ensures the change notes remain up-to-date and effective.

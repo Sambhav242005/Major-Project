@@ -97,3 +97,8 @@ chat_out.txt
 .windsurf/
 research/
 search-run/
+
+# Private manuscripts, reference PDFs, local models and execution workspaces.
+# The selected reproducibility supplement lives in experiments/controlled_qa/.
+/Assets/
+/output/

@@ -1,0 +1,766 @@
+[
+  {
+    "question_id": "F001-Q1",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Mira-83726"
+    ],
+    "predicted_values": [
+      "Mira-83726"
+    ],
+    "answer": "The responsible owner for Aster-543783 as of 2026-10-14 is Mira-83726 [3].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.674510699998791,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2278,
+    "completion_tokens": 76
+  },
+  {
+    "question_id": "F001-Q2",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "45"
+    ],
+    "predicted_values": [
+      "45 days"
+    ],
+    "answer": "The retention period for Aster-543783 is 45 days [6].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.3731675000017276,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2331,
+    "completion_tokens": 62
+  },
+  {
+    "question_id": "F001-Q3",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "insufficient",
+    "expected_values": [
+      "2026-10-10"
+    ],
+    "predicted_values": [],
+    "answer": "The launch date for Aster-543783 is not provided in the given sources [1, 7].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 0.0,
+    "prompt_evidence_coverage": 0.0,
+    "gold_document_citation_precision_proxy": 0.0,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 2.1438592999984394,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2311,
+    "completion_tokens": 53
+  },
+  {
+    "question_id": "F001-Q4",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Cedar-65266"
+    ],
+    "predicted_values": [
+      "Mira-83726"
+    ],
+    "answer": "The responsible owner of Aster-543783 is Mira-83726 [1].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": true,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 0.5,
+    "prompt_evidence_coverage": 0.5,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 0.5,
+    "wall_seconds": 1.5445264999998471,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2257,
+    "completion_tokens": 63
+  },
+  {
+    "question_id": "F001-Q5",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Harbor-33529"
+    ],
+    "predicted_values": [
+      "Mira-83726 works at the global office"
+    ],
+    "answer": "The responsible owner of Aster-543783 is Mira-83726, and based on the provided documents, Mira-83726 works at the global office. This can be inferred from the fact that the scope of the project Aster-543783 is global in all the documents mentioning this project [1, 3, 6, 7].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": true,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 0.3333333333333333,
+    "prompt_evidence_coverage": 0.3333333333333333,
+    "gold_document_citation_precision_proxy": 0.25,
+    "evidence_group_citation_coverage": 0.3333333333333333,
+    "wall_seconds": 3.462831599999845,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2260,
+    "completion_tokens": 138
+  },
+  {
+    "question_id": "F005-Q1",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Mira-31059"
+    ],
+    "predicted_values": [
+      "The responsible owner for Aster-293895 is Tara-39489 [1]"
+    ],
+    "answer": "The responsible owner for Aster-293895 as of 2026-10-14 is Tara-39489.",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": true,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 0.0,
+    "prompt_evidence_coverage": 0.0,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 3.1185413999992306,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2278,
+    "completion_tokens": 94
+  },
+  {
+    "question_id": "F005-Q2",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "30"
+    ],
+    "predicted_values": [
+      "30 days [1], [5]"
+    ],
+    "answer": "The retention period for Aster-293895 as of 2026-10-14 is 30 days. This information is consistent across both the operational register [1] and the change note [5] for the project.",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": true,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 0.0,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 2.8897948000012548,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2369,
+    "completion_tokens": 104
+  },
+  {
+    "question_id": "F005-Q3",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "2026-10-20"
+    ],
+    "predicted_values": [
+      "2026-10-20 [1]"
+    ],
+    "answer": "The launch date for Aster-293895 as of 2026-10-14 is 2026-10-20 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 0.0,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 3.057864200001859,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2349,
+    "completion_tokens": 91
+  },
+  {
+    "question_id": "F005-Q4",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "120"
+    ],
+    "predicted_values": [
+      "120 seconds [1]"
+    ],
+    "answer": "The timeout for Aster-293895 is 120 seconds as of 2026-09-15 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.8042131000020163,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2312,
+    "completion_tokens": 78
+  },
+  {
+    "question_id": "F005-Q5",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "650000"
+    ],
+    "predicted_values": [
+      "INR 550000"
+    ],
+    "answer": "The budget for Aster-293895 as of 2026-09-15 is INR 550000 [1, 7]. However, the budget information provided in Document D0017 [1] is for the period from 2026-09-01 to 2026-09-30, and Document D0018 [7] provides a different retention period and launch date, which might indicate a change in the project timeline or budget. For the exact budget on 2026-09-15, more specific information would be needed.",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": true,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 0.5,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 4.851195800001733,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2270,
+    "completion_tokens": 191
+  },
+  {
+    "question_id": "F009-Q1",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": "disputed",
+    "expected_values": [
+      "Mira-34663"
+    ],
+    "predicted_values": [
+      "[1] Mira-34663",
+      "[5] Tara-28336"
+    ],
+    "answer": "The responsible owner for Aster-923501 as of 2026-10-14 is disputed. According to [1], the responsible owner is Mira-34663. However, [5] indicates that the responsible owner is Tara-28336. This discrepancy suggests a change in ownership that may not have been fully communicated or recorded.",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 4.203755399999864,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2272,
+    "completion_tokens": 146
+  },
+  {
+    "question_id": "F009-Q2",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "90"
+    ],
+    "predicted_values": [
+      "[1] states that the retention period for Aster-923501 is 90 days."
+    ],
+    "answer": "The retention period for Aster-923501 is 90 days [1].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": true,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.820856599999388,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2369,
+    "completion_tokens": 80
+  },
+  {
+    "question_id": "F009-Q3",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "2026-10-10"
+    ],
+    "predicted_values": [
+      "2026-10-10"
+    ],
+    "answer": "The launch date for Aster-923501 as of 2026-10-14 is 2026-10-10 [1, 2].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.9651868999990256,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2311,
+    "completion_tokens": 87
+  },
+  {
+    "question_id": "F009-Q4",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "40"
+    ],
+    "predicted_values": [
+      "40 seconds [1]"
+    ],
+    "answer": "The timeout for Aster-923501 as of 2026-10-14 is 40 seconds [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.410246299999926,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2312,
+    "completion_tokens": 76
+  },
+  {
+    "question_id": "F009-Q5",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "690000"
+    ],
+    "predicted_values": [
+      "INR 690000"
+    ],
+    "answer": "The budget for Aster-923501 as of 2026-10-14 is INR 690000 [1, 6].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.8534787999997206,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2318,
+    "completion_tokens": 83
+  },
+  {
+    "question_id": "F013-Q1",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Mira-70335",
+      "Tara-11851"
+    ],
+    "predicted_values": [
+      "Tara-11851 [1]"
+    ],
+    "answer": "The responsible owner for Aster-311139 as of 2026-10-14 is Tara-11851 [1].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.5,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 0.5,
+    "wall_seconds": 2.5894912000003387,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2267,
+    "completion_tokens": 85
+  },
+  {
+    "question_id": "F013-Q2",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "45",
+      "60"
+    ],
+    "predicted_values": [
+      "60 days"
+    ],
+    "answer": "The retention period for Aster-311139 is 60 days as of 2026-10-14 [1].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.5,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 0.5,
+    "wall_seconds": 1.9593738000003214,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2368,
+    "completion_tokens": 75
+  },
+  {
+    "question_id": "F013-Q3",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "2026-10-28",
+      "2026-11-15"
+    ],
+    "predicted_values": [
+      "2026-10-28 [1]"
+    ],
+    "answer": "The launch date for Aster-311139 is 2026-10-28 [1].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.5,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 0.5,
+    "wall_seconds": 2.594913599999927,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2348,
+    "completion_tokens": 78
+  },
+  {
+    "question_id": "F013-Q4",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "20",
+      "40"
+    ],
+    "predicted_values": [
+      "20 seconds [1]"
+    ],
+    "answer": "The timeout for Aster-311139 is 20 seconds as of 2026-10-14 [1].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.5,
+    "retrieval_evidence_coverage": 0.5,
+    "prompt_evidence_coverage": 0.5,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 0.5,
+    "wall_seconds": 1.921992899999168,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2312,
+    "completion_tokens": 76
+  },
+  {
+    "question_id": "F013-Q5",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "840000",
+      "940000"
+    ],
+    "predicted_values": [
+      "INR 940000 [3]"
+    ],
+    "answer": "The budget for Aster-311139 as of 2026-10-14 is INR 940000 [3].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.5,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 0.5,
+    "wall_seconds": 2.1154841000006854,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2269,
+    "completion_tokens": 87
+  },
+  {
+    "question_id": "F017-Q1",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Mira-17195"
+    ],
+    "predicted_values": [
+      "Mira-17195 [1, 2]"
+    ],
+    "answer": "The responsible owner for Aster-516813 in EU as of 2026-10-14 is Mira-17195 [1, 2].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 3.127281099999891,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2243,
+    "completion_tokens": 98
+  },
+  {
+    "question_id": "F017-Q2",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "105"
+    ],
+    "predicted_values": [
+      "105 days [1]"
+    ],
+    "answer": "The retention period for Aster-516813 in US is 105 days as of 2026-10-14 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 0.0,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 2.107592399999703,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2333,
+    "completion_tokens": 81
+  },
+  {
+    "question_id": "F017-Q3",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "2026-10-21"
+    ],
+    "predicted_values": [
+      "2026-10-21 [1, 2]"
+    ],
+    "answer": "The launch date for Aster-516813 in EU is 2026-10-21.",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 2.093919000000824,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2330,
+    "completion_tokens": 84
+  },
+  {
+    "question_id": "F017-Q4",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "60"
+    ],
+    "predicted_values": [
+      "60 seconds"
+    ],
+    "answer": "The timeout for Aster-516813 in EU is 60 seconds as of 2026-10-14, as stated in the operational register [1], service memo [2], and change note [3].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.294624799998928,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2287,
+    "completion_tokens": 92
+  },
+  {
+    "question_id": "F017-Q5",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "600000"
+    ],
+    "predicted_values": [
+      "INR 600000 [1]"
+    ],
+    "answer": "The budget for Aster-516813 in US as of 2026-10-14 is INR 600000 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 2.169208000001163,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2271,
+    "completion_tokens": 89
+  },
+  {
+    "question_id": "F021-Q1",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The provided documents do not contain information about the external auditor for Aster-620786. The documents only provide details such as the responsible owner, budget, and other operational parameters.",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 1.659637599999769,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2248,
+    "completion_tokens": 66
+  },
+  {
+    "question_id": "F021-Q2",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The provided documents do not contain any information about the support telephone number for Aster-620786 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": 0.0,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 1.3245258999995713,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2266,
+    "completion_tokens": 53
+  },
+  {
+    "question_id": "F021-Q3",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The provided documents do not contain information about the signed contract date for Aster-620786. The documents only provide details such as the responsible owner, retention period, launch date, timeout, and budget, but not the signed contract date.",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 2.51333639999757,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2266,
+    "completion_tokens": 78
+  },
+  {
+    "question_id": "F021-Q4",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The provided documents do not contain information about an annual licence fee for project Aster-620786. The documents only mention the budget, which is INR 540000, but this does not specify if it is an annual licence fee or another type of cost [3].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": 0.0,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 2.2430878999985,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2300,
+    "completion_tokens": 90
+  },
+  {
+    "question_id": "F021-Q5",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The provided documents do not contain information about the backup region for Aster-620786 [1, 3, 7].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": 0.0,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 1.6577897000006487,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 2259,
+    "completion_tokens": 57
+  }
+]

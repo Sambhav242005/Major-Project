@@ -1,0 +1,763 @@
+[
+  {
+    "question_id": "F001-Q1",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Mira-83726"
+    ],
+    "predicted_values": [
+      "mira-83726"
+    ],
+    "answer": "The requested responsible owner is mira-83726 [3].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 6.878698499998791,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3251,
+    "completion_tokens": 275
+  },
+  {
+    "question_id": "F001-Q2",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "45"
+    ],
+    "predicted_values": [
+      "45"
+    ],
+    "answer": "The requested retention period is 45 [6].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 5.117578100001992,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3285,
+    "completion_tokens": 219
+  },
+  {
+    "question_id": "F001-Q3",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "insufficient",
+    "expected_values": [
+      "2026-10-10"
+    ],
+    "predicted_values": [],
+    "answer": "The retrieved sources provide insufficient evidence to answer this question: For Aster-543783, what is the launch date as of 2026-10-14?",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 0.0,
+    "prompt_evidence_coverage": 0.0,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 4.05766709999989,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3284,
+    "completion_tokens": 174
+  },
+  {
+    "question_id": "F001-Q4",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Cedar-65266"
+    ],
+    "predicted_values": [
+      "mira-83726"
+    ],
+    "answer": "The responsible owner for Aster-543783 is Mira-83726 [1].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": true,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 0.5,
+    "prompt_evidence_coverage": 0.5,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 0.5,
+    "wall_seconds": 4.890625899997758,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3220,
+    "completion_tokens": 213
+  },
+  {
+    "question_id": "F001-Q5",
+    "family_id": "F001",
+    "category": "distributed",
+    "expected_status": "answerable",
+    "predicted_status": "insufficient",
+    "expected_values": [
+      "Harbor-33529"
+    ],
+    "predicted_values": [],
+    "answer": "The retrieved sources provide insufficient evidence to answer this question: At which office does the team of the responsible owner of Aster-543783 work?",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.0,
+    "retrieval_evidence_coverage": 0.3333333333333333,
+    "prompt_evidence_coverage": 0.3333333333333333,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 5.253217400000722,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3252,
+    "completion_tokens": 231
+  },
+  {
+    "question_id": "F005-Q1",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": null,
+    "expected_values": [
+      "Mira-31059"
+    ],
+    "predicted_values": [],
+    "answer": "",
+    "error": "VerificationFailure: positive_answer_without_evidence",
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0,
+    "retrieval_evidence_coverage": 0.0,
+    "prompt_evidence_coverage": 0.0,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 6.718489999999292,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 479,
+    "completion_tokens": 215
+  },
+  {
+    "question_id": "F005-Q2",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "30"
+    ],
+    "predicted_values": [
+      "30"
+    ],
+    "answer": "The requested retention period is 30 [8].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 5.493348299998615,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3374,
+    "completion_tokens": 239
+  },
+  {
+    "question_id": "F005-Q3",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "2026-10-20"
+    ],
+    "predicted_values": [
+      "2026-10-20"
+    ],
+    "answer": "The requested launch date is 2026-10-20 [6].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 5.963314399999945,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3379,
+    "completion_tokens": 265
+  },
+  {
+    "question_id": "F005-Q4",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "120"
+    ],
+    "predicted_values": [
+      "120"
+    ],
+    "answer": "The requested timeout is 120 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 4.936276500000531,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3328,
+    "completion_tokens": 217
+  },
+  {
+    "question_id": "F005-Q5",
+    "family_id": "F005",
+    "category": "temporal",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "650000"
+    ],
+    "predicted_values": [
+      "650000"
+    ],
+    "answer": "The requested budget is 650000 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 6.415339299999687,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3296,
+    "completion_tokens": 265
+  },
+  {
+    "question_id": "F009-Q1",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": null,
+    "expected_values": [
+      "Mira-34663"
+    ],
+    "predicted_values": [],
+    "answer": "",
+    "error": "VerificationFailure: citation_without_quoted_evidence",
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 8.233003200000894,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 1204,
+    "completion_tokens": 250
+  },
+  {
+    "question_id": "F009-Q2",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": "disputed",
+    "expected_values": [
+      "90"
+    ],
+    "predicted_values": [
+      "90",
+      "105"
+    ],
+    "answer": "The retention period for Aster-923501 is disputed, with values of 90 days [1, 2] and 105 days [4].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 0.6666666666666666,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 7.827592699999514,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3854,
+    "completion_tokens": 317
+  },
+  {
+    "question_id": "F009-Q3",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": null,
+    "expected_values": [
+      "2026-10-10"
+    ],
+    "predicted_values": [],
+    "answer": "",
+    "error": "VerificationFailure: positive_answer_without_evidence",
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": 0.0,
+    "wall_seconds": 7.4784888999984105,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 1196,
+    "completion_tokens": 213
+  },
+  {
+    "question_id": "F009-Q4",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "40"
+    ],
+    "predicted_values": [
+      "40"
+    ],
+    "answer": "The timeout for Aster-923501 as of 2026-10-14 is 40 seconds [1, 2].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 7.865587000002051,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3801,
+    "completion_tokens": 291
+  },
+  {
+    "question_id": "F009-Q5",
+    "family_id": "F009",
+    "category": "draft_conflict",
+    "expected_status": "answerable",
+    "predicted_status": "disputed",
+    "expected_values": [
+      "690000"
+    ],
+    "predicted_values": [
+      "690000",
+      "790000"
+    ],
+    "answer": "The budget for Aster-923501 as of 2026-10-14 is disputed, with values of INR 690000 and INR 790000. Both the operational register [1] and the service memo [6] support INR 690000, while the meeting record [2] supports INR 790000.",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 0.6666666666666666,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 12.422206999999617,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3834,
+    "completion_tokens": 436
+  },
+  {
+    "question_id": "F013-Q1",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "disputed",
+    "expected_values": [
+      "Mira-70335",
+      "Tara-11851"
+    ],
+    "predicted_values": [
+      "mira-70335",
+      "tara-11851"
+    ],
+    "answer": "The applicable approved sources disagree: mira-70335 [1]; tara-11851 [8]. No single value is selected.",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 8.944866900001216,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3520,
+    "completion_tokens": 310
+  },
+  {
+    "question_id": "F013-Q2",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "disputed",
+    "expected_values": [
+      "45",
+      "60"
+    ],
+    "predicted_values": [
+      "45",
+      "60"
+    ],
+    "answer": "The applicable approved sources disagree: 45 [1]; 60 [8]. No single value is selected.",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 7.732088200000362,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3610,
+    "completion_tokens": 265
+  },
+  {
+    "question_id": "F013-Q3",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "disputed",
+    "expected_values": [
+      "2026-10-28",
+      "2026-11-15"
+    ],
+    "predicted_values": [
+      "2026-10-28",
+      "2026-11-15"
+    ],
+    "answer": "The applicable approved sources disagree: 2026-10-28 [1]; 2026-11-15 [4]. No single value is selected.",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 8.676958600002763,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3615,
+    "completion_tokens": 302
+  },
+  {
+    "question_id": "F013-Q4",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "20",
+      "40"
+    ],
+    "predicted_values": [
+      "20"
+    ],
+    "answer": "The requested timeout is 20 [1].",
+    "error": null,
+    "structured_correct": false,
+    "status_correct": false,
+    "required_value_completeness": 0.5,
+    "retrieval_evidence_coverage": 0.5,
+    "prompt_evidence_coverage": 0.5,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 0.5,
+    "wall_seconds": 6.732452300000659,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3317,
+    "completion_tokens": 228
+  },
+  {
+    "question_id": "F013-Q5",
+    "family_id": "F013",
+    "category": "unresolved",
+    "expected_status": "disputed",
+    "predicted_status": "disputed",
+    "expected_values": [
+      "840000",
+      "940000"
+    ],
+    "predicted_values": [
+      "840000",
+      "940000"
+    ],
+    "answer": "The applicable approved sources disagree: 840000 [1]; 940000 [3]. No single value is selected.",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 9.815776999999798,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3523,
+    "completion_tokens": 323
+  },
+  {
+    "question_id": "F017-Q1",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "Mira-17195"
+    ],
+    "predicted_values": [
+      "mira-17195"
+    ],
+    "answer": "The requested responsible owner is mira-17195 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 9.69242259999919,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3709,
+    "completion_tokens": 326
+  },
+  {
+    "question_id": "F017-Q2",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "105"
+    ],
+    "predicted_values": [
+      "105"
+    ],
+    "answer": "The requested retention period is 105 [2].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 7.99125919999824,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3337,
+    "completion_tokens": 261
+  },
+  {
+    "question_id": "F017-Q3",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "2026-10-21"
+    ],
+    "predicted_values": [
+      "2026-10-21"
+    ],
+    "answer": "The requested launch date is 2026-10-21 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 9.200308000001314,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3797,
+    "completion_tokens": 303
+  },
+  {
+    "question_id": "F017-Q4",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "60"
+    ],
+    "predicted_values": [
+      "60"
+    ],
+    "answer": "The requested timeout is 60 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 11.35841580000124,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3807,
+    "completion_tokens": 396
+  },
+  {
+    "question_id": "F017-Q5",
+    "family_id": "F017",
+    "category": "scope_duplicate",
+    "expected_status": "answerable",
+    "predicted_status": "answerable",
+    "expected_values": [
+      "600000"
+    ],
+    "predicted_values": [
+      "600000"
+    ],
+    "answer": "The requested budget is 600000 [1].",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": 1.0,
+    "retrieval_evidence_coverage": 1.0,
+    "prompt_evidence_coverage": 1.0,
+    "gold_document_citation_precision_proxy": 1.0,
+    "evidence_group_citation_coverage": 1.0,
+    "wall_seconds": 6.328391399998509,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3296,
+    "completion_tokens": 245
+  },
+  {
+    "question_id": "F021-Q1",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The retrieved sources provide insufficient evidence to answer this question: For Aster-620786, what is the external auditor?",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 6.387277599997105,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3227,
+    "completion_tokens": 252
+  },
+  {
+    "question_id": "F021-Q2",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The retrieved sources provide insufficient evidence to answer this question: For Aster-620786, what is the support telephone number?",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 4.316805399999794,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3210,
+    "completion_tokens": 157
+  },
+  {
+    "question_id": "F021-Q3",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The retrieved sources provide insufficient evidence to answer this question: For Aster-620786, what is the signed contract date?",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 5.607156899999609,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3216,
+    "completion_tokens": 218
+  },
+  {
+    "question_id": "F021-Q4",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The retrieved sources provide insufficient evidence to answer this question: For Aster-620786, what is the annual licence fee in INR?",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 6.166973399998824,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3283,
+    "completion_tokens": 244
+  },
+  {
+    "question_id": "F021-Q5",
+    "family_id": "F021",
+    "category": "insufficient",
+    "expected_status": "insufficient",
+    "predicted_status": "insufficient",
+    "expected_values": [],
+    "predicted_values": [],
+    "answer": "The retrieved sources provide insufficient evidence to answer this question: For Aster-620786, what is the backup region?",
+    "error": null,
+    "structured_correct": true,
+    "status_correct": true,
+    "required_value_completeness": null,
+    "retrieval_evidence_coverage": null,
+    "prompt_evidence_coverage": null,
+    "gold_document_citation_precision_proxy": null,
+    "evidence_group_citation_coverage": null,
+    "wall_seconds": 3.7380173000001378,
+    "invalid_citation_count": 0,
+    "prompt_tokens": 3202,
+    "completion_tokens": 134
+  }
+]

@@ -1,0 +1,214 @@
+{
+  "A_vector": {
+    "n": 30,
+    "expected_n": 30,
+    "errors": 0,
+    "correct": 17,
+    "structured_accuracy": 0.5666666666666667,
+    "family_bootstrap_95ci": [
+      0.3,
+      0.8333333333333334
+    ],
+    "status_accuracy": 0.7666666666666667,
+    "by_category": {
+      "distributed": {
+        "n": 5,
+        "correct": 2,
+        "accuracy": 0.4
+      },
+      "draft_conflict": {
+        "n": 5,
+        "correct": 3,
+        "accuracy": 0.6
+      },
+      "insufficient": {
+        "n": 5,
+        "correct": 5,
+        "accuracy": 1
+      },
+      "scope_duplicate": {
+        "n": 5,
+        "correct": 5,
+        "accuracy": 1
+      },
+      "temporal": {
+        "n": 5,
+        "correct": 2,
+        "accuracy": 0.4
+      },
+      "unresolved": {
+        "n": 5,
+        "correct": 0,
+        "accuracy": 0
+      }
+    },
+    "required_value_completeness": 0.62,
+    "retrieval_evidence_coverage": 0.8533333333333333,
+    "prompt_evidence_coverage": 0.8533333333333333,
+    "citation_document_overlap_proxy": 0.6826923076923077,
+    "evidence_group_citation_coverage": 0.6133333333333333,
+    "disputed_question_confusion": {
+      "tp": 0,
+      "fp": 1,
+      "fn": 5,
+      "tn": 24
+    },
+    "disputed_question_precision": 0.0,
+    "disputed_question_recall": 0.0,
+    "disputed_question_f1": 0.0,
+    "unnecessary_abstention_rate": 0.05,
+    "appropriate_uncertainty_status_rate": 0.5,
+    "median_wall_seconds": 2.461791349998748,
+    "p95_wall_seconds": 4.203755399999864,
+    "mean_wall_seconds": 2.551542909999989,
+    "mean_prompt_tokens": 2298.8,
+    "mean_completion_tokens": 87.03333333333333,
+    "invalid_citations": 0
+  },
+  "B_graph": {
+    "n": 30,
+    "expected_n": 30,
+    "errors": 0,
+    "correct": 17,
+    "structured_accuracy": 0.5666666666666667,
+    "family_bootstrap_95ci": [
+      0.3,
+      0.8
+    ],
+    "status_accuracy": 0.7666666666666667,
+    "by_category": {
+      "distributed": {
+        "n": 5,
+        "correct": 2,
+        "accuracy": 0.4
+      },
+      "draft_conflict": {
+        "n": 5,
+        "correct": 3,
+        "accuracy": 0.6
+      },
+      "insufficient": {
+        "n": 5,
+        "correct": 5,
+        "accuracy": 1
+      },
+      "scope_duplicate": {
+        "n": 5,
+        "correct": 4,
+        "accuracy": 0.8
+      },
+      "temporal": {
+        "n": 5,
+        "correct": 3,
+        "accuracy": 0.6
+      },
+      "unresolved": {
+        "n": 5,
+        "correct": 0,
+        "accuracy": 0
+      }
+    },
+    "required_value_completeness": 0.58,
+    "retrieval_evidence_coverage": 0.8533333333333333,
+    "prompt_evidence_coverage": 0.8533333333333333,
+    "citation_document_overlap_proxy": 0.6794871794871795,
+    "evidence_group_citation_coverage": 0.68,
+    "disputed_question_confusion": {
+      "tp": 0,
+      "fp": 0,
+      "fn": 5,
+      "tn": 25
+    },
+    "disputed_question_precision": null,
+    "disputed_question_recall": 0.0,
+    "disputed_question_f1": 0.0,
+    "unnecessary_abstention_rate": 0.1,
+    "appropriate_uncertainty_status_rate": 0.5,
+    "median_wall_seconds": 2.178930449999825,
+    "p95_wall_seconds": 2.7718896999995195,
+    "mean_wall_seconds": 2.199264676666583,
+    "mean_prompt_tokens": 2593.8333333333335,
+    "mean_completion_tokens": 84.53333333333333,
+    "invalid_citations": 0
+  },
+  "C_verified": {
+    "n": 30,
+    "expected_n": 30,
+    "errors": 3,
+    "correct": 21,
+    "structured_accuracy": 0.7,
+    "family_bootstrap_95ci": [
+      0.43333333333333335,
+      0.9333333333333333
+    ],
+    "status_accuracy": 0.7333333333333333,
+    "by_category": {
+      "distributed": {
+        "n": 5,
+        "correct": 2,
+        "accuracy": 0.4
+      },
+      "draft_conflict": {
+        "n": 5,
+        "correct": 1,
+        "accuracy": 0.2
+      },
+      "insufficient": {
+        "n": 5,
+        "correct": 5,
+        "accuracy": 1
+      },
+      "scope_duplicate": {
+        "n": 5,
+        "correct": 5,
+        "accuracy": 1
+      },
+      "temporal": {
+        "n": 5,
+        "correct": 4,
+        "accuracy": 0.8
+      },
+      "unresolved": {
+        "n": 5,
+        "correct": 4,
+        "accuracy": 0.8
+      }
+    },
+    "required_value_completeness": 0.74,
+    "retrieval_evidence_coverage": 0.8533333333333333,
+    "prompt_evidence_coverage": 0.8533333333333333,
+    "citation_document_overlap_proxy": 0.9666666666666667,
+    "evidence_group_citation_coverage": 0.76,
+    "disputed_question_confusion": {
+      "tp": 4,
+      "fp": 2,
+      "fn": 1,
+      "tn": 23
+    },
+    "disputed_question_precision": 0.6666666666666666,
+    "disputed_question_recall": 0.8,
+    "disputed_question_f1": 0.7272727272727273,
+    "unnecessary_abstention_rate": 0.1,
+    "appropriate_uncertainty_status_rate": 0.9,
+    "median_wall_seconds": 6.725471149999976,
+    "p95_wall_seconds": 11.35841580000124,
+    "mean_wall_seconds": 7.074686829999882,
+    "mean_prompt_tokens": 3190.2,
+    "mean_completion_tokens": 259.46666666666664,
+    "invalid_citations": 0,
+    "delta_vs_A_vector": {
+      "difference": 0.13333333333333333,
+      "family_bootstrap_95ci": [
+        -0.13333333333333333,
+        0.4666666666666667
+      ]
+    },
+    "delta_vs_B_graph": {
+      "difference": 0.13333333333333333,
+      "family_bootstrap_95ci": [
+        -0.13333333333333333,
+        0.43333333333333335
+      ]
+    }
+  }
+}

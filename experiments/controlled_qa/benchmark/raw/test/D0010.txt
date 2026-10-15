@@ -1,0 +1,13 @@
+Document ID: D0010
+Meeting record
+Project: Aster-456579
+Scope: global
+Approval status: approved
+Published: 2026-10-05
+Valid from: 2026-10-01
+Valid through: open
+
+The retention period for Aster-456579 is 90 days.
+The budget for Aster-456579 is INR 520000.
+
+Operational registers, meeting records, change notes, and service memos are all critical tools for documenting and tracking the progress of projects and initiatives. They provide a clear and organized way to capture information, track changes, and ensure that all parties involved are informed and aligned on the goals and objectives of the project.

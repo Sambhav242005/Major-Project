@@ -4,6 +4,11 @@ A full-stack web application that transforms documents into a navigable knowledg
 
 **Semester project** — Built with Next.js, FastAPI, Supabase, and ChromaDB.
 
+The [controlled QA experiment](experiments/controlled_qa/README.md) provides the
+research-only verifier, synthetic benchmark, original execution traces and an
+offline scoring replay. It documents the negative results and evaluation limits;
+it does not enable graph repair or change the production chat route.
+
 ---
 
 ## Tech Stack

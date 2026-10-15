@@ -1,0 +1,23 @@
+{
+  "frozen_before_test_inference": true,
+  "development_iterations": 4,
+  "development_policy": "A/B schema improved on development; C applicability, citation mapping and literal scalar parsing revised on development only; archived preliminary runs retained.",
+  "primary_metric": "Normalized required-value set plus answerability status, over all 90 held-out questions; errors are incorrect.",
+  "normalization": "case folding, whitespace, bracket-citation removal, numeric unit suffixes, INR prefix and milliseconds-to-seconds conversion; ISO dates remain exact.",
+  "secondary_grading": "Local same-model AI judge; random anonymous X/Y/Z configuration labels per question. No human answer grades or judge agreement estimate.",
+  "citation_grading": "Actual bracket references only. All atomic factual claims form coverage denominator; unaccounted actually-used citations enter precision denominator as unsupported.",
+  "retrieval_measure": "Macro evidence-group coverage over questions with gold supporting groups; insufficient cases not applicable. C prompt coverage is the verifier subset, while its B candidate saw the initial context.",
+  "conflict_measure": "Unresolved-question status P/R/F1 across 90 questions, not 212-pair detection.",
+  "uncertainty": "10000 paired family bootstrap draws, seed 26014, 18 test families.",
+  "cost_policy": "A then B then C in serial. C reuses B candidate; its logical latency and tokens include B plus verification. Cache and order effects limit runtime comparison.",
+  "not_evaluated": [
+    "independent human answer/citation grading",
+    "persistent repair",
+    "pair-level contradiction detector",
+    "ablation or budget-matched extra-call control",
+    "natural documents",
+    "multiple model seeds",
+    "model fine-tuning",
+    "frontend and HTTP authentication"
+  ]
+}

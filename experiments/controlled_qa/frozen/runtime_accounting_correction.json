@@ -1,0 +1,22 @@
+{
+  "corrected_utc": "2026-10-15T01:09:20.670491+00:00",
+  "reason": "Failed C records omitted the reused B candidate token usage and counted initial retrieval overhead twice. Correct full-pipeline costs from retained records.",
+  "affected_failed_rows": 16,
+  "raw_answers_changed": false,
+  "values_statuses_and_accuracy_unchanged": true,
+  "raw_C_sha256": "3f4d22185883b230f0dc431b572e9aa0a7fdd51a67a3712945a0e86015befaaa",
+  "raw_B_sha256": "70ca67fdb3140fd7eba3aafdd79af8473e97e699527dcb82915ce38f0486f12b",
+  "before": {
+    "mean_prompt_tokens": 3194.688888888889,
+    "mean_completion_tokens": 239.3111111111111,
+    "median_wall_seconds": 6.205434250001417,
+    "mean_wall_seconds": 6.398700676666785
+  },
+  "after": {
+    "mean_prompt_tokens": 3654.588888888889,
+    "mean_completion_tokens": 254.88888888888889,
+    "median_wall_seconds": 6.182325699999637,
+    "mean_wall_seconds": 6.389330092222352
+  },
+  "method": "C token totals equal its B candidate usage plus review usage for every question. Failed-row logical times remove the duplicated retrieval overhead. All original raw records and pre-correction derived results are retained."
+}

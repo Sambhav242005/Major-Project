@@ -1,0 +1,17 @@
+Document ID: D0031
+Change note
+Project: Aster-828806
+Scope: global
+Approval status: approved
+Published: 2026-10-12
+Valid from: 2026-09-01
+Valid through: 2026-09-30
+
+The responsible owner for Aster-828806 is Tara-74890.
+The retention period for Aster-828806 is 60 days.
+The launch date for Aster-828806 is 2026-11-15.
+The timeout for Aster-828806 is 40 seconds.
+The budget for Aster-828806 is INR 660000.
+This retrospective records the previous period. Publication time does not change its validity period.
+
+Meeting records are a vital component of operational documentation, capturing the discussions and decisions made during meetings. These records are essential for accountability and transparency, as they provide a record of the decisions made and the rationale behind them. To ensure the quality of meeting records, it is important to follow specific procedures for documenting and reviewing meetings. This includes setting clear guidelines for note-taking, ensuring that all participants are included, and conducting periodic reviews to update and maintain the record.

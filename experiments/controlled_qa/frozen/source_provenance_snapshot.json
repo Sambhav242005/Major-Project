@@ -1,0 +1,17 @@
+{
+  "base_git_commit": "1d025b964e19b8fb0f99f5315edf34e3b189d0f2",
+  "feature_branch": "feat/research-benchmark",
+  "main_pushed": false,
+  "unchanged_component_snapshot": {
+    "apps/api/pipelines/parser.py": "885f3c5deddfe121882fe52c45fc72d0125cd3e8520f68de019b111f60b41bf3",
+    "apps/api/pipelines/chunking.py": "850a9ed53e23d7f6287babed205e9bab2cc564f7bf3f5a054b6e40dd15ebe725",
+    "apps/api/pipelines/embeddings/query.py": "2df75c2bd7e012a3960185c4471b4d870b1a75a653f11aef2bcc27953768f661",
+    "apps/api/pipelines/embeddings/embedding_function.py": "9e20480d7f7e5fcf601bb71e9c2780c41462ad96419b7f66b237d7193e20900d",
+    "apps/api/pipelines/embeddings/store.py": "0b25339b79be527a5e38b180496f241e8fb59d16ce19bac29daeddaaae94e3b7",
+    "apps/api/pipelines/extraction/llm_extract.py": "de880ac09ae4fb8e45841ea10b98a462fb459aaa8c04e743a5f18246922122d0",
+    "apps/api/pipelines/extraction/ner.py": "6f1ae2d00caf1e15f5b2c886cc53f442337a3a02c7ed7083192a1246caf1fcb1",
+    "apps/api/pipelines/llm_client.py": "a36d3a87f040e2990e68f65a032a78d8d1673bd13884426005147b4845263c39",
+    "apps/api/services/chat/streaming.py": "42b8041b8d78178302244e0c45075487f29691a775f37162ab2abaf5a32df82d"
+  },
+  "note": "Post-run provenance snapshot. Frozen inference/evaluation hashes remain in experiment_freeze.json."
+}

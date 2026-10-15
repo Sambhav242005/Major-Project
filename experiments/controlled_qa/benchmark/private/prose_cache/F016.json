@@ -1,0 +1,19 @@
+{
+  "prose": {
+    "p0": "General documentation and review procedures are essential for maintaining operational efficiency and ensuring the quality of services provided. These procedures are designed to streamline the process of documenting and reviewing operational activities, meeting records, changes, and service memos. By following these procedures, organizations can enhance their ability to manage and improve their processes, leading to better decision-making and improved service delivery.",
+    "p1": "Operational registers are crucial documents that track the progress and outcomes of operational activities. They serve as a reference for future reference and as a tool for identifying trends and patterns. To ensure the accuracy and completeness of operational registers, it is imperative to follow specific procedures for documenting and reviewing activities. This includes setting clear guidelines for data entry, ensuring consistency in formatting, and conducting periodic reviews to update and maintain the register.",
+    "p2": "Meeting records are a vital component of operational documentation, capturing the discussions and decisions made during meetings. These records are essential for accountability and transparency, as they provide a record of the decisions made and the rationale behind them. To ensure the quality of meeting records, it is important to follow specific procedures for documenting and reviewing meetings. This includes setting clear guidelines for note-taking, ensuring that all participants are included, and conducting periodic reviews to update and maintain the record.",
+    "p3": "Change notes are documents that outline the changes made to operational processes, systems, or procedures. They are crucial for maintaining the quality and efficiency of services provided. To ensure the accuracy and completeness of change notes, it is important to follow specific procedures for documenting and reviewing changes. This includes setting clear guidelines for documenting changes, ensuring that all changes are properly documented, and conducting periodic reviews to update and maintain the notes."
+  },
+  "timing": {
+    "total_duration": 2124421300,
+    "load_duration": 26426700,
+    "prompt_eval_count": 112,
+    "eval_count": 353,
+    "eval_duration": 2071518000,
+    "wall_seconds": 2.15
+  },
+  "model": "qwen2.5:1.5b",
+  "prompt_sha256": "585a26a4377e402b2fe59ecdf7344b65aa00b331cd07994970e3db8b5ee8eb38",
+  "prompt": "Write four background paragraphs, each eighty words, about general documentation and review procedures. Do not include digits or concrete names or facts. Use keys p0,p1,p2,p3. JSON only. The paragraphs will introduce an operational register, meeting record, change note and service memo respectively. Emphasize routine coordination. Expand every paragraph to at least sixty words. Do not include any digits in the paragraph text."
+}

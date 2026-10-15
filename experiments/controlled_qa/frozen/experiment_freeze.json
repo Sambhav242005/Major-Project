@@ -1,0 +1,41 @@
+{
+  "frozen_utc": "2026-10-14T18:17:34.755139+00:00",
+  "dataset_content_digest": "f41cb72a7b96b76b7b2ac9e0b8bfa5f5efdee4c799d6d96dc8b7ee04dd46e777",
+  "top_k": 8,
+  "source_character_limit": 800,
+  "chunk_tokens": 600,
+  "overlap_tokens": 80,
+  "model": "akgb-qwen2.5-7b",
+  "embedding": "nomic-embed-text:v1.5",
+  "temperature": 0,
+  "seed": 26014,
+  "context_tokens": 8192,
+  "max_output_tokens": 1800,
+  "comparison": "A vector; B existing graph descriptions; C reuses B candidate and adds one verification call",
+  "no_training": true,
+  "no_persistent_graph_repair": true,
+  "review": "one human source/gold reviewer plus non-blind AI source sample; generated answer grading is AI-assisted",
+  "code_sha256": {
+    "apps\\api\\scripts\\application_benchmark.py": "556e4873b65ccc77f393299e82a6182a05f792e74adaf5c7c94e3ec0f521a5f7",
+    "apps\\api\\services\\chat\\evidence_gate.py": "06196c57deb867a8924ab434b3f94a2a5504db6b0862198c1b01cf911b91f12d",
+    "apps\\api\\scripts\\research_benchmark.py": "99d85c952fa1ecbf115eb14fd3a46f12f3cdee880bcccdb87028bfe27d903ed9",
+    "apps\\api\\scripts\\grade_application.py": "cd9053e6e56f869d63afed879d2d32862283dde10035761d41c35d85eed25e22",
+    "apps\\api\\services\\audit.py": "5c27902f283b24283663aa09e05a952bde28c0b87736cdd10d886d5a4e60e49e",
+    "apps\\api\\services\\chat\\prompt.py": "9316e9089e0280202fddf9a64dc5b1e818d1ec5364dd0fa5485ac91be1792646",
+    "apps\\api\\services\\chat\\retrieval.py": "fa68dc2602ce46acf94362583b496dff94a81929ee60ddfa67eb78fcfadf616a",
+    "apps\\api\\pipelines\\extraction\\pipeline.py": "73480db44b3df22b56617c2b1054d1ead9d5c2047304f496880ce979e0dcf432"
+  },
+  "settings": {
+    "database": "sqlite+aiosqlite:///${REPO}/output/research_benchmark/application/evaluation.sqlite",
+    "chroma_path": "${REPO}/output/research_benchmark/application/chroma",
+    "llm_endpoint": "http://127.0.0.1:11434/v1"
+  },
+  "versions": {
+    "chromadb": "1.5.9",
+    "SQLAlchemy": "2.1.4",
+    "spacy": "3.8.7",
+    "httpx": "0.28.1",
+    "tiktoken": "0.14.0",
+    "pydantic-settings": "2.16.0"
+  }
+}

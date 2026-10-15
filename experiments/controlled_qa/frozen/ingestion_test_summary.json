@@ -1,0 +1,10 @@
+{
+  "documents": 72,
+  "processed": 72,
+  "chunks": 72,
+  "documents_with_mentions": 72,
+  "documents_with_relationships": 67,
+  "total_wall_seconds": 713.988127400009,
+  "model": "akgb-qwen2.5-7b",
+  "embedding": "nomic-embed-text:v1.5"
+}
