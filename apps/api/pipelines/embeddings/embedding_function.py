@@ -348,7 +348,61 @@ class GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
         return vectors
 
 
+class LocalMiniLMEmbeddingFunction(chromadb.EmbeddingFunction):
+    """Explicit CPU provider using Chroma's bundled ONNX integration.
+
+    This is opt-in, never a fallback for a failed remote embedding request.
+    The first call downloads model files into the runtime user's cache.
+    """
+
+    def __init__(self, task: str = TASK_DOCUMENT) -> None:
+        if task not in EMBEDDING_TASKS:
+            raise ValueError(f"Unknown embedding task {task!r}")
+        from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
+
+        self._embed = ONNXMiniLM_L6_V2(preferred_providers=["CPUExecutionProvider"])
+        self._tokenizer = None
+
+    def name(self) -> str:
+        return "local-minilm-l6-v2"
+
+    def __call__(self, input: chromadb.Documents) -> chromadb.Embeddings:
+        texts = list(input)
+        _reject_empty(texts, "local")
+        if self._tokenizer is None:
+            from tokenizers import Tokenizer
+
+            # Initialize the model/cache before reading its tokenizer. Use a
+            # separate tokenizer so Chroma's shared truncation/padding stays put.
+            self._embed(["initialize"])
+            self._tokenizer = Tokenizer.from_str(self._embed.tokenizer.to_str())
+            self._tokenizer.no_truncation()
+            self._tokenizer.no_padding()
+
+        windows = []
+        groups = []
+        # MiniLM accepts 256 tokens including CLS/SEP. Preserve all parts of the
+        # application's longer chunks rather than silently embedding the prefix.
+        for text in texts:
+            ids = self._tokenizer.encode(text, add_special_tokens=False).ids
+            start = len(windows)
+            for offset in range(0, len(ids), 254):
+                windows.append(self._tokenizer.decode(ids[offset:offset + 254]))
+            if start == len(windows):
+                windows.append(text)
+            groups.append((start, len(windows)))
+        vectors = self._embed(windows)
+        return [
+            _l2_normalize([
+                sum(float(vector[index]) for vector in vectors[start:end]) / (end - start)
+                for index in range(len(vectors[start]))
+            ])
+            for start, end in groups
+        ]
+
+
 _PROVIDER_CLASSES = {
+    "local": LocalMiniLMEmbeddingFunction,
     "gemini": GeminiEmbeddingFunction,
     "openai": OpenAICompatibleEmbeddingFunction,
 }

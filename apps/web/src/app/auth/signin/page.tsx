@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { LOCAL_AUTH } from "@/lib/auth/local";
 
 const MOCK_AUTH = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
 
@@ -55,7 +56,7 @@ export default function SignIn() {
           Sign in to access your knowledge base
         </p>
 
-        {MOCK_AUTH && (
+        {MOCK_AUTH && !LOCAL_AUTH && (
           <form action="/auth/demo-login" method="post">
             <button
               type="submit"
@@ -113,7 +114,7 @@ export default function SignIn() {
           </button>
         </form>
 
-        <div className="my-6 flex items-center gap-3">
+        {!LOCAL_AUTH && <><div className="my-6 flex items-center gap-3">
           <div className="flex-1 h-px bg-app-surface" />
           <span className="text-xs text-app-muted">or</span>
           <div className="flex-1 h-px bg-app-surface" />
@@ -132,6 +133,8 @@ export default function SignIn() {
             Sign up
           </Link>
         </p>
+        </>}
+        {LOCAL_AUTH && <p className="mt-6 text-center text-sm text-app-muted">Contact the project administrator for an account.</p>}
       </div>
     </div>
   );

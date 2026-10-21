@@ -28,6 +28,21 @@ REPO = HERE.parents[1]
 DATA = HERE / "benchmark"
 FROZEN = HERE / "frozen"
 NAMES = ("A_vector", "B_graph", "C_verified")
+# These deployment adapters changed after the study. Fresh inference must still
+# use their original bytes, rather than silently accepting deployment changes.
+RUNTIME_SNAPSHOT_FILES = (
+    "apps/api/pipelines/llm_client.py",
+    "apps/api/pipelines/embeddings/embedding_function.py",
+    "apps/api/services/chat/streaming.py",
+)
+RUNTIME_SNAPSHOT = HERE / "runtime_snapshot"
+# The manifest also hashes its original tooling/documentation. Retain those
+# versions while this inspectable audit tool evolves; never rewrite that manifest.
+PUBLICATION_SNAPSHOT_FILES = RUNTIME_SNAPSHOT_FILES + (
+    "experiments/controlled_qa/README.md",
+    "experiments/controlled_qa/reproduce.py",
+    "experiments/controlled_qa/test_reproduce.py",
+)
 
 
 def read(path):
@@ -65,7 +80,7 @@ def audit():
     manifest = read(HERE / "publication_manifest.json")
     failures = []
     for name, expected in manifest["files"].items():
-        path = REPO / name
+        path = (RUNTIME_SNAPSHOT if name in PUBLICATION_SNAPSHOT_FILES else REPO) / name
         if not path.is_file() or sha(path, expected["newline_canonicalized"]) != expected["published_sha256"]:
             failures.append(name)
     if failures:
@@ -236,6 +251,15 @@ def replay(destination, source=FROZEN):
 def prepare_inference():
     """Stage the original runner's paths in a clean checkout; do not run a model."""
     audit()
+    manifest = read(HERE / "publication_manifest.json")
+    for name in RUNTIME_SNAPSHOT_FILES:
+        expected = manifest["files"][name]
+        path = REPO / name
+        if not path.is_file() or sha(path, expected["newline_canonicalized"]) != expected["published_sha256"]:
+            raise ValueError(
+                "Fresh inference requires the frozen runtime: restore " + name
+                + " from experiments/controlled_qa/runtime_snapshot in a separate clean checkout."
+            )
     target = REPO / "output/research_benchmark"
     if target.exists():
         raise ValueError("Inference staging requires a clean checkout without output/research_benchmark. Existing research files are protected.")

@@ -1,0 +1,24 @@
+{
+    auto_https disable_redirects
+    skip_install_trust
+    admin off
+    default_sni {$LAN_IP:192.168.1.100}
+}
+
+https://{$LAN_IP:192.168.1.100} {
+    tls internal
+    @outside_lan not remote_ip 192.168.1.0/24 127.0.0.1 ::1
+    respond @outside_lan "LAN access only" 403
+    handle_path /api/* {
+        reverse_proxy api:8000 {
+            header_up -X-AKGB-Proxy-Secret
+            header_up X-AKGB-Client-IP {remote_host}
+        }
+    }
+    handle {
+        reverse_proxy web:3000 {
+            header_up -X-AKGB-Proxy-Secret
+            header_up X-AKGB-Client-IP {remote_host}
+        }
+    }
+}

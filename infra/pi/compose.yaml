@@ -1,0 +1,104 @@
+name: akgb
+
+# Run from this directory with a private .env. Existing host services are not
+# referenced, stopped or reconfigured by this isolated Compose project.
+services:
+  postgres:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: akgb
+      POSTGRES_USER: akgb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private database password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U akgb -d akgb']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  api:
+    image: akgb-api:staging
+    build:
+      context: ../../apps/api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: production
+      PYTHONPATH: /app
+      MOCK_AUTH: 'false'
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      LOCAL_AUTH_SECRET: ${LOCAL_AUTH_SECRET:?Generate a private local signing secret}
+      AUTH_PROXY_SECRET: ${AUTH_PROXY_SECRET:?Generate a separate private auth proxy secret}
+      PORT: '8000'
+      DATABASE_URL: postgresql+asyncpg://akgb:${POSTGRES_PASSWORD:?Set a URL-safe database password}@postgres:5432/akgb
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-}
+      CORS_ORIGINS: '["${APP_URL:?Set the final frontend HTTPS origin}"]'
+      CHROMA_PATH: /data/chroma
+      MEET_AUDIO_DIR: /data/meet_recordings
+      LLM_PROVIDER: ${LLM_PROVIDER:-chatgpt}
+      CHATGPT_CREDENTIALS_PATH: /data/chatgpt/credentials.json
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_CHAT_MODEL:?Choose an available chat model}
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL}
+      LLM_EXTRACT_MODEL: ${LLM_EXTRACT_MODEL:?Choose an extraction model}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai/}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      GEMINI_API_KEY: ${EMBEDDING_API_KEY:-}
+    volumes:
+      - api_data:/data
+    # Loopback-only: public access requires an explicitly reviewed proxy route.
+    ports:
+      - '127.0.0.1:${API_PORT:-18000}:8000'
+    logging: *logging
+
+  web:
+    build:
+      context: ../../apps/web
+      args:
+        NEXT_PUBLIC_API_URL: ${API_URL:?Set the final backend HTTPS origin}
+        NEXT_PUBLIC_APP_URL: ${APP_URL}
+        NEXT_PUBLIC_AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      AUTH_PROXY_SECRET: ${AUTH_PROXY_SECRET:?Generate a separate private auth proxy secret}
+    restart: unless-stopped
+    logging: *logging
+
+  gateway:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+      - api
+    # LAN-only binding. No existing host Caddy/tunnel configuration is used.
+    ports:
+      - '${LAN_IP:-192.168.1.100}:${WEB_PORT:-13000}:443'
+    environment:
+      LAN_IP: ${LAN_IP:-192.168.1.100}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - gateway_data:/data
+      - gateway_config:/config
+    logging: *logging
+
+volumes:
+  postgres_data:
+  api_data:
+  gateway_data:
+  gateway_config:

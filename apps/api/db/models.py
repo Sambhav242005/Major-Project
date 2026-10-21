@@ -4,8 +4,10 @@ Actual model definitions are split under db/model_defs by domain.
 """
 
 from db.model_defs import *
+from db.local_auth import LocalAccount
 
 __all__ = [
+    "LocalAccount",
     "Agent",
     "AgentCheckpoint",
     "AgentMemory",

@@ -1,0 +1,64 @@
+# Local credentials and configuration (including nested copies).
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*credentials*.json
+**/*service-account*.json
+
+# Repository, dependencies and developer-only state.
+.git
+**/.git
+.github
+.omx
+.codex
+.venv
+venv
+ENV
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+dist
+build
+*.egg-info
+
+# Private fixtures, experiments, source papers and generated deliverables.
+tests
+scripts/*
+!scripts/chatgpt_login.py
+!scripts/create_local_user.py
+output
+research
+Assets
+docs
+private
+**/private
+**/fixtures
+**/*.pdf
+**/*.docx
+**/*.zip
+
+# Runtime databases, vector stores, logs and meeting recordings.
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite3
+**/*.sqlite-*
+**/*.sqlite3-*
+**/*.log
+chroma_data
+chroma
+data
+meet_recordings
+
+# Tooling not required by the runtime image.
+docker-compose.yml
+uv.lock
+.gitignore
+.DS_Store
+Thumbs.db

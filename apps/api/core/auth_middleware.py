@@ -66,22 +66,10 @@ class GlobalAuthMiddleware(BaseHTTPMiddleware):
 
         # Real auth mode — validate JWT
         try:
-            from core.security import _get_signing_key
-            from jose import jwt, JWTError
+            from core.security import decode_access_token
+            from jose import JWTError
 
-            signing_key = await _get_signing_key(token)
-            payload = jwt.decode(
-                token,
-                signing_key,
-                algorithms=["RS256"],
-                audience="authenticated",
-            )
-
-            if not payload.get("sub"):
-                return JSONResponse(
-                    status_code=401,
-                    content={"detail": "Invalid token: missing sub claim"},
-                )
+            payload = await decode_access_token(token)
 
             request.state.user_id = payload["sub"]
             request.state.user_email = payload.get("email")

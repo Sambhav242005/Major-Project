@@ -20,8 +20,11 @@ _NS = _uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 
 
 def _user_uuid(user_id: str) -> _uuid.UUID:
-    """Deterministic UUID from any string user ID."""
-    return _uuid.uuid5(_NS, user_id)
+    """Preserve auth UUIDs; derive stable IDs for non-UUID mock subjects."""
+    try:
+        return _uuid.UUID(user_id)
+    except ValueError:
+        return _uuid.uuid5(_NS, user_id)
 
 
 async def _ensure_user_and_project(db: AsyncSession, user: User) -> _uuid.UUID:
