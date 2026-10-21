@@ -5,12 +5,38 @@ from contextlib import redirect_stdout
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 import reproduce
 
 
 class ReproductionTests(unittest.TestCase):
+    def test_tampered_runtime_snapshot_fails_original_manifest_audit(self):
+        for name in reproduce.PUBLICATION_SNAPSHOT_FILES:
+            with self.subTest(source=name), tempfile.TemporaryDirectory() as temp:
+                snapshot = Path(temp)
+                for original_name in reproduce.PUBLICATION_SNAPSHOT_FILES:
+                    target = snapshot / original_name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes((reproduce.RUNTIME_SNAPSHOT / original_name).read_bytes())
+                with (snapshot / name).open("ab") as stream:
+                    stream.write(b"\n# changed after publication\n")
+                with patch.object(reproduce, "RUNTIME_SNAPSHOT", snapshot):
+                    with self.assertRaisesRegex(ValueError, "Publication integrity check failed: " + name):
+                        reproduce.audit()
+
+    def test_fresh_inference_refuses_changed_live_runtime(self):
+        original_sha = reproduce.sha
+        changed = reproduce.REPO / reproduce.RUNTIME_SNAPSHOT_FILES[0]
+
+        def changed_live_hash(path, canonical=False):
+            return "0" * 64 if path == changed else original_sha(path, canonical)
+
+        with patch.object(reproduce, "sha", side_effect=changed_live_hash):
+            with self.assertRaisesRegex(ValueError, "Fresh inference requires the frozen runtime"):
+                reproduce.prepare_inference()
+
     def test_benchmark_rebuild_matches_without_network_or_review_claim(self):
         with tempfile.TemporaryDirectory() as temp:
             destination = Path(temp) / "rebuilt"

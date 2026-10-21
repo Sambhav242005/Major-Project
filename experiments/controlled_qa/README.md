@@ -71,6 +71,18 @@ dataset summary; these transformations and original export hashes are disclosed.
 Hashes bind retained artifacts, but do not independently establish execution
 dates, review independence or the scientific validity of annotations.
 
+Deployment later changed `apps/api/pipelines/llm_client.py` and
+`apps/api/pipelines/embeddings/embedding_function.py`. Their exact original bytes
+from commit `c725d63` are retained under `runtime_snapshot/`, with the same
+repository-relative paths. Because the manifest also hashes the original
+`experiments/controlled_qa/README.md`, `reproduce.py` and `test_reproduce.py`, their
+exact published versions are archived there too. Audit checks **only these five
+explicit snapshot paths** against the unchanged publication-manifest hashes;
+every other path retains its original check. Current audit/replay tooling and
+documentation evolve separately from those archived published versions. Frozen
+traces, metrics and manifest hashes are unchanged. Offline replay uses the
+original traces and scorer, not the deployed model adapters.
+
 ## Retained results and new diagnostics
 
 Normalized accuracy requires an exact normalized set of requested values **and**
@@ -153,6 +165,13 @@ digests with `frozen/model_manifest.json` before claiming a matched reproduction
 Use a separate clean checkout without an existing `output/research_benchmark/`.
 The original runner deliberately uses that isolated path and never the live app
 database. This preparation command refuses to overwrite existing research files:
+
+For fresh inference, use a separate checkout at frozen-runtime revision `c725d63`
+(for example, `git worktree add --detach ../akgb-frozen-runtime c725d63`). Do not
+overwrite the deployed application's files. The current preparation command
+refuses changed live adapters rather than silently recording deployment code as
+the original experimental runtime. The snapshots preserve inspectable source;
+they do not automatically replace imports in the production application.
 
 ```sh
 python experiments/controlled_qa/reproduce.py prepare-inference
