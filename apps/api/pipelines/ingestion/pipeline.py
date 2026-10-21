@@ -144,11 +144,19 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
     except Exception as e:
         logger.exception(f"Ingestion failed for document {document_id}")
         try:
+            # A flush error leaves SQLAlchemy's transaction unusable until
+            # rollback. Recover it before persisting the terminal failure.
+            await db.rollback()
             await update_document_status(
                 db, document_id, "failed",
                 error_message=str(e)[:500]
             )
             await db.commit()
+            _notify(document_id, {
+                "stage": "failed", "status": "failed",
+                "error_message": str(e)[:500],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
 
             try:
                 from services.webhooks import fire_event
