@@ -3,6 +3,7 @@ FROM python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    HOME=/data \
     PIP_NO_CACHE_DIR=1 \
     ENVIRONMENT=production \
     MOCK_AUTH=false \
@@ -36,6 +37,8 @@ COPY routers ./routers
 COPY schemas ./schemas
 COPY services ./services
 COPY migrations ./migrations
+COPY scripts/chatgpt_login.py ./scripts/chatgpt_login.py
+COPY scripts/create_local_user.py ./scripts/create_local_user.py
 COPY main.py alembic.ini ./
 
 RUN groupadd --gid 10001 app \
@@ -55,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 # Do not silently host an ephemeral SQLite database in production. PostgreSQL
 # migrations are an operator-reviewed step, never run automatically here.
-CMD ["sh", "-c", ": \"${DATABASE_URL:?Set DATABASE_URL to an external postgresql+asyncpg URL}\"; case \"$DATABASE_URL\" in postgresql+asyncpg://*) ;; *) echo 'DATABASE_URL must use postgresql+asyncpg' >&2; exit 1 ;; esac; : \"${SUPABASE_URL:?Set the real Supabase project URL}\"; : \"${SUPABASE_ANON_KEY:?Set the real Supabase anon key}\"; mkdir -p \"$CHROMA_PATH\" \"$MEET_AUDIO_DIR\" && test -w \"$CHROMA_PATH\" && test -w \"$MEET_AUDIO_DIR\" || { echo 'Runtime data directories must be writable by UID 10001' >&2; exit 1; }; exec uvicorn main:app --host 0.0.0.0 --port \"${PORT:-8000}\""]
+CMD ["sh", "-c", ": \"${DATABASE_URL:?Set DATABASE_URL to a postgresql+asyncpg URL}\"; case \"$DATABASE_URL\" in postgresql+asyncpg://*) ;; *) echo 'DATABASE_URL must use postgresql+asyncpg' >&2; exit 1 ;; esac; if [ \"${AUTH_PROVIDER:-supabase}\" = supabase ]; then : \"${SUPABASE_URL:?Set the real Supabase project URL}\"; : \"${SUPABASE_ANON_KEY:?Set the real Supabase anon key}\"; fi; mkdir -p \"$CHROMA_PATH\" \"$MEET_AUDIO_DIR\" && test -w \"$CHROMA_PATH\" && test -w \"$MEET_AUDIO_DIR\" || { echo 'Runtime data directories must be writable by UID 10001' >&2; exit 1; }; exec uvicorn main:app --host 0.0.0.0 --port \"${PORT:-8000}\""]

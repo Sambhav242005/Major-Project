@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.deps import _user_uuid
 from core.security import User
 from db.models import Document
 
@@ -36,7 +37,7 @@ async def upload_document(
     doc = Document(
         id=doc_id,
         project_id=uuid.UUID(project_id),
-        uploaded_by=uuid.UUID(user.id),
+        uploaded_by=_user_uuid(user.id),
         filename=filename,
         file_type=file_type,
         storage_path=storage_path,

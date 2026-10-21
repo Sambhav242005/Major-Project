@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.deps import _user_uuid
 from core.security import User
 from db.models import Agent
 from pipelines.agent_pipeline import AGENT_TYPES, get_agent_type_info
@@ -68,7 +69,7 @@ async def create_agent(
     agent = Agent(
         id=uuid.uuid4(),
         project_id=uuid.UUID(project_id),
-        owner_id=uuid.UUID(user.id),
+        owner_id=_user_uuid(user.id),
         name=name,
         type=agent_type,
         config={**type_info, **config},

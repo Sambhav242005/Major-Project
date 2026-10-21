@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_project_id
+from core.config import settings
 from core.security import get_current_user, User
 from db.session import get_db
 
@@ -41,7 +42,7 @@ async def analyze_meeting_audio(
         raise HTTPException(status_code=400, detail="Audio exceeds 50MB limit")
 
     # Save to a temp file for the transcription pipeline
-    tmp_dir = Path(__file__).resolve().parent.parent / "meet_recordings"
+    tmp_dir = Path(settings.MEET_AUDIO_DIR)
     tmp_dir.mkdir(parents=True, exist_ok=True)
     suffix = Path(file.filename or "meeting.webm").suffix or ".webm"
     audio_path = tmp_dir / f"client_{user.id.replace('-', '')[:8]}_{int(__import__('time').time())}{suffix}"

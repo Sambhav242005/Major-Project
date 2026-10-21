@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { LOCAL_AUTH } from "@/lib/auth/local";
 
 export default function SignUp() {
   const [email, setEmail] = useState("");
@@ -36,6 +37,16 @@ export default function SignUp() {
     router.push("/dashboard");
     router.refresh();
   };
+
+  if (LOCAL_AUTH) return (
+    <div className="min-h-screen flex items-center justify-center bg-app-bg">
+      <div className="max-w-md px-6 text-center text-app-text">
+        <h1 className="font-display text-3xl font-semibold mb-4">Project accounts</h1>
+        <p className="text-app-muted mb-6">Contact the project administrator to create your account.</p>
+        <Link href="/auth/signin" className="text-amber-400 hover:underline">Sign in</Link>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-app-bg">

@@ -4,7 +4,7 @@ from pydantic import ConfigDict, model_validator
 # Supported values for EMBEDDING_PROVIDER.
 #   openai -> any OpenAI-compatible /embeddings endpoint (Ollama, Groq, OpenAI)
 #   gemini -> Google Gemini native :batchEmbedContents endpoint
-EMBEDDING_PROVIDERS = frozenset({"openai", "gemini"})
+EMBEDDING_PROVIDERS = frozenset({"openai", "gemini", "local"})
 
 
 class Settings(BaseSettings):
@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_JWKS_URL: str = ""
+    AUTH_PROVIDER: str = "supabase"
+    LOCAL_AUTH_SECRET: str = ""
+    LOCAL_AUTH_TOKEN_TTL_SECONDS: int = 3600
 
     # Mock auth for development (bypasses Supabase)
     MOCK_AUTH: bool = False
@@ -44,12 +47,21 @@ class Settings(BaseSettings):
                 "MOCK_AUTH=true is not allowed in production. "
                 "Set MOCK_AUTH=false and configure real Supabase credentials."
             )
+        self.AUTH_PROVIDER = self.AUTH_PROVIDER.strip().lower()
+        if self.AUTH_PROVIDER not in {"supabase", "local"}:
+            raise ValueError("AUTH_PROVIDER must be supabase or local")
+        if self.AUTH_PROVIDER == "local" and len(self.LOCAL_AUTH_SECRET) < 32:
+            raise ValueError("Local authentication requires LOCAL_AUTH_SECRET of at least 32 characters")
+        if not 60 <= self.LOCAL_AUTH_TOKEN_TTL_SECONDS <= 86400:
+            raise ValueError("LOCAL_AUTH_TOKEN_TTL_SECONDS must be between 60 and 86400")
         return self
 
     # ChromaDB
     CHROMA_PATH: str = "./chroma_data"
 
     # Text Generation (OpenAI-compatible)
+    LLM_PROVIDER: str = "openai"
+    CHATGPT_CREDENTIALS_PATH: str = ""
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "http://localhost:11434/v1"
     LLM_MODEL: str = "qwen3:4b-instruct"
@@ -96,6 +108,15 @@ class Settings(BaseSettings):
                 f"got {self.EMBEDDING_PROVIDER!r}"
             )
         self.EMBEDDING_PROVIDER = provider
+
+        self.LLM_PROVIDER = self.LLM_PROVIDER.strip().lower()
+        if self.LLM_PROVIDER not in {"openai", "chatgpt"}:
+            raise ValueError("LLM_PROVIDER must be openai or chatgpt")
+        if provider == "local":
+            if self.EMBEDDING_MODEL != "all-MiniLM-L6-v2":
+                raise ValueError("Local embeddings require EMBEDDING_MODEL=all-MiniLM-L6-v2")
+            if self.EMBEDDING_OUTPUT_DIM not in (None, 384):
+                raise ValueError("Local MiniLM embeddings have 384 dimensions")
 
         if self.EMBEDDING_BATCH_SIZE < 1:
             raise ValueError("EMBEDDING_BATCH_SIZE must be >= 1")

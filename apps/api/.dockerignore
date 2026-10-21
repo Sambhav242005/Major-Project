@@ -29,7 +29,9 @@ build
 
 # Private fixtures, experiments, source papers and generated deliverables.
 tests
-scripts
+scripts/*
+!scripts/chatgpt_login.py
+!scripts/create_local_user.py
 output
 research
 Assets

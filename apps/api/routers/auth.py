@@ -1,11 +1,42 @@
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import get_current_user, User
 from core.config import settings
 from core.rate_limit import limiter
+from db.session import get_db
 
 router = APIRouter()
+
+
+class LocalLogin(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+@router.post("/local-login")
+@limiter.limit("10/minute")
+async def local_login(request: Request, response: Response, credentials: LocalLogin, db: AsyncSession = Depends(get_db)):
+    if settings.AUTH_PROVIDER != "local":
+        raise HTTPException(status_code=403, detail="Local authentication is disabled")
+    from core.local_auth import authenticate, create_access_token
+
+    account = await authenticate(db, credentials.email, credentials.password)
+    if account is None:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token, expires_at = create_access_token(account.id, account.email)
+    user = {"id": str(account.id), "email": account.email}
+    response.headers["Cache-Control"] = "no-store"
+    return {"user": user, "session": {"access_token": token, "user": user, "expires_at": expires_at,
+                                      "expires_in": settings.LOCAL_AUTH_TOKEN_TTL_SECONDS, "token_type": "bearer"}}
+
+
+@router.post("/local-signup")
+@router.post("/signup")
+async def local_signup():
+    raise HTTPException(status_code=403, detail="Public registration is disabled. Ask the administrator to create an account.")
 
 
 @router.get("/me")

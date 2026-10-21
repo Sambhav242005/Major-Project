@@ -6,17 +6,9 @@
  * are always attached and errors are normalized.
  */
 
-// Read the env var WITHOUT a bare `process.env` access: Next inlines
-// NEXT_PUBLIC_* at build time, but if that inlining doesn't happen (or the
-// var is unset), a raw `process.env.X` throws ReferenceError in the browser
-// (process is not defined) and silently turns API_BASE into a relative URL,
-// which 404s against the Next origin. `typeof process` is safe everywhere.
-function readEnv(name: string): string | undefined {
-  if (typeof process === "undefined") return undefined;
-  return (process.env as Record<string, string | undefined>)[name];
-}
-
-export const API_BASE = readEnv("NEXT_PUBLIC_API_URL") || "http://localhost:8000";
+// Keep this access static so Next embeds the public URL into browser bundles.
+// Changing it in a deployed container requires rebuilding the frontend image.
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export type ApiError = {
   status: number;

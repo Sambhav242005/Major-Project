@@ -9,6 +9,7 @@ if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_MOCK_AUTH =
 }
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   transpilePackages: ["shared-types"],
 };
 

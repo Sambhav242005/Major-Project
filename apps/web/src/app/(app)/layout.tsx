@@ -6,15 +6,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { useProject } from "@/hooks/useProject";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, token, loading: authLoading } = useAuth();
+  const { user, token, loading: authLoading, authError } = useAuth();
   const { loadProjects, loaded: projectsLoaded } = useProject();
   const router = useRouter();
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!authLoading && !authError && !user) {
       router.replace("/auth/signin");
     }
-  }, [authLoading, user, router]);
+  }, [authLoading, authError, user, router]);
 
   useEffect(() => {
     if (token && !projectsLoaded) {
@@ -29,6 +29,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+
+  if (authError) return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-app-bg text-app-text">
+      <p role="alert">{authError}</p>
+      <button onClick={() => window.location.reload()} className="rounded-lg border border-app-border-strong px-4 py-2">Try again</button>
+    </div>
+  );
 
   if (!user) return null;
 

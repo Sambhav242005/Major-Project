@@ -1,5 +1,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { LOCAL_AUTH } from "@/lib/auth/local";
+import { createLocalClient } from "@/lib/auth/local-client";
 
 const MOCK_AUTH = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
 
@@ -16,6 +18,7 @@ const MOCK_SESSION = {
 };
 
 export function createClient() {
+  if (LOCAL_AUTH) return createLocalClient();
   if (MOCK_AUTH) {
     // Return a mock Supabase client that always returns mock data
     return {

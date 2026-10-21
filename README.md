@@ -274,6 +274,135 @@ npx tsc --noEmit
 
 ## Deployment
 
+### Raspberry Pi 5 (isolated deployment)
+
+The configuration in `infra/pi/compose.yaml` prepares a separate `akgb` Docker
+Compose project: Next.js, one FastAPI worker, PostgreSQL 16 and persistent API
+data. Local accounts and application tables live in the dedicated Pi database;
+Supabase is optional. The template selects personal ChatGPT-plan OAuth for generation and
+CPU MiniLM for embeddings. No MCP server
+is required for these model calls. This is preparation, not a verified live
+deployment; ARM64 image builds and end-to-end checks remain release gates.
+
+1. Confirm the Pi runs a 64-bit OS and has Docker/Compose, sufficient disk and
+   free memory. Put the reviewed application checkout under a dedicated directory
+   on `/home`, keeping reports, manuscripts, references, local `.env` files and
+   research workspaces out of the deployment transfer. Do not replace existing
+   Caddy, tunnel, database or application services.
+2. Copy `infra/pi/.env.example` to a private `infra/pi/.env`. Keep
+   `AUTH_PROVIDER=local`; generate an independent `LOCAL_AUTH_SECRET` with
+   `openssl rand -hex 32`. Local accounts use salted password hashes and signed,
+   expiring access tokens; public signup is disabled. Supabase variables can stay
+   empty. Keep `MOCK_AUTH=false` in production.
+3. Authorize a fresh AKGB ChatGPT registration using the included OAuth tool.
+   This is a personal/self-hosted integration, subject to account eligibility,
+   granted permissions and plan limits. Do not expose the owner's inference
+   connection through unrestricted public signup. A public/shared service needs
+   an appropriate per-user authorization design or a provider API account.
+   Application login and ChatGPT inference authorization are separate.
+   Never copy Codex login tokens into application configuration.
+   Build the API image first with
+   `docker build -t akgb-api:staging apps/api` from the repository root. In a
+   visible SSH session with `ssh -L 54147:127.0.0.1:54147 pi`, run:
+
+   ```bash
+   docker run --rm --network host --mount type=volume,src=akgb_api_data,dst=/data \
+     akgb-api:staging python scripts/chatgpt_login.py \
+     --directory /data/chatgpt --account credentials --port 54147 --no-browser
+   ```
+
+   Open the printed authorization URL in the browser on the computer running
+   SSH, sign in yourself, and approve only the intended permissions. The callback
+   travels over SSH to a temporary loopback listener on the Pi. Tokens stay in
+   the named API volume as UID 10001, with private permissions and serialized
+   refresh. Stop if registration, scope, signature or identity validation fails.
+   The tool requires Unix private-file storage and does not store credentials
+   on Windows. It supports separate records through `--account`; this deployment
+   uses only the explicitly selected `credentials.json` account.
+   Choose an available model from the authenticated account's `/v1/models`
+   catalog for `LLM_CHAT_MODEL` and `LLM_EXTRACT_MODEL`; verify a completed
+   Responses request before release. Generation parameters unsupported by the
+   plan route are omitted; these are deployment settings, not a rerun of the
+   frozen research experiment.
+   `EMBEDDING_PROVIDER=local`, `EMBEDDING_MODEL=all-MiniLM-L6-v2` runs on CPU,
+   downloads weights on first use and returns 384-dimensional vectors. Long
+   chunks are split into MiniLM token windows and pooled, preserving all windows.
+   Benchmark its latency and retrieval on the Pi; it is a different embedding
+   space from the original research model. Start with a fresh index.
+4. Generate the database password with `openssl rand -hex 32`; place it in `.env`
+   as `POSTGRES_PASSWORD`. Use a hex password because it is embedded in a database
+   URL. The LAN defaults are `APP_URL=https://192.168.1.100:13000` and
+   `API_URL=https://192.168.1.100:13000/api`, without trailing slashes.
+   Protect the file with `chmod 600 .env`. Never publish `docker compose config`
+   output: it expands credentials. Validate using `docker compose config --quiet`.
+5. From `infra/pi`, build with `docker compose build`. ARM64 dependency support is
+   established only when this succeeds on the Pi. Build with the real public
+   URLs: `NEXT_PUBLIC_*` changes require rebuilding the web image. Check free disk
+   during the build; Docker's default image storage may be on the smaller root
+   filesystem even when the checkout is on `/home`. Do not relocate Docker's
+   global storage or prune other projects without separate approval.
+6. After approval to start the new AKGB services, run `docker compose up -d postgres`.
+   Against this **empty, dedicated** database run
+   `docker compose run --rm --no-deps api alembic upgrade head`.
+   Use Alembic alone: do not also apply `infra/schema.sql` or stamp that older
+   bootstrap schema as current. Check the migration version with
+   `docker compose run --rm --no-deps api alembic current`.
+7. Start the application with `docker compose up -d api web gateway`. The new
+   gateway binds **192.168.1.100:13000** for LAN HTTPS; its Caddyfile permits
+   `192.168.1.0/24` and rejects other client addresses. The API's diagnostic port
+   remains **127.0.0.1:18000**. PostgreSQL and the web container have no published
+   ports. Check `docker compose ps` and API `/health`.
+   The named API volume must permit UID 10001 to write `/data/chroma` and
+   `/data/meet_recordings`; verify actual ownership rather than bypassing the
+   non-root runtime. Never run multiple API workers sharing this embedded Chroma
+   directory.
+   Create an actual account with
+   `docker compose exec -it api python scripts/create_local_user.py --email YOUR_EMAIL`.
+   The CLI prompts privately for the password and confirmation. No account or
+   password is shipped in the repository.
+8. The independent gateway uses a local certificate authority. Copy only its
+   **public** root certificate with
+   `docker compose cp gateway:/data/caddy/pki/authorities/local/root.crt ./akgb-lan-root.crt`.
+   Transfer it over SSH and explicitly trust it on each intended LAN client;
+   never export `root.key`. Verify with
+   `curl --cacert akgb-lan-root.crt https://192.168.1.100:13000/api/health`.
+   Do not use `curl -k` as proof of valid HTTPS. Existing host Caddy, DNS, routing
+   and port forwarding remain unchanged and operator-managed. Review the LAN
+   subnet restriction before using another subnet or preparing public access.
+9. Verify real signup/sign-in, default-project creation, document upload and
+   processing, graph retrieval, streamed answers with citations, and agent
+   execution. Test a second account for isolation. Verify embedding and chat
+   calls separately: `/health` proves only HTTP liveness. Check persistence after
+   recreating just the AKGB containers. Existing installations using UUID5-derived
+   profile IDs require an explicit data migration before this identity fix;
+   this procedure targets a new database.
+10. Back up the application database using `pg_dump` and the API volume while
+    application writes are stopped; preserve the private configuration separately
+    with restricted access. Prove restoration before calling the deployment
+    complete. To roll back, restore a compatible image/configuration and database
+    backup together. Do not use `docker compose down -v`: it deletes AKGB data.
+
+The isolated stack does not complete durable raw-upload storage, restart-safe
+background jobs, real MCP transport, meeting-to-KB ingestion or the research-only
+verification policy. Uploaded meeting analysis now honors the configured audio
+directory; live transcription still requires a separate integration check.
+
+Moving the database to hosted Supabase later is a separate choice from changing
+the login provider. Restore PostgreSQL data into a dedicated compatible schema,
+set `DATABASE_URL` to its asyncpg connection and verify schema/access policies.
+To adopt Supabase Auth, set `AUTH_PROVIDER=supabase`, configure URL/anon/JWKS,
+and rebuild the frontend with the matching public provider. Existing local
+accounts do not automatically become Supabase users: explicitly preserve/remap
+their profile UUIDs and memberships. Do not auto-link accounts by email or apply
+the old bootstrap SQL over the migrated application tables.
+
+References: [Next.js standalone output](https://nextjs.org/docs/15/app/api-reference/config/next-config-js/output),
+[Supabase signing keys](https://supabase.com/docs/guides/auth/signing-keys),
+[Chroma process constraints](https://cookbook.chromadb.dev/core/system_constraints/),
+and [ChatGPT plan usage](https://developers.openai.com/siwc/token-sharing-open-source).
+
+### Alternative cloud staging
+
 No cloud deployment exists as of 21 October 2026. The following is a staging
 plan. The backend Dockerfile and Railway configuration have been statically
 checked, but the image has not been built or run; a passing application CI
@@ -350,6 +479,11 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ENVIRONMENT` | No | `development` | `development` or `production` (dev forces `sqlite+aiosqlite:///./akgb.db`) |
+| `AUTH_PROVIDER` | No | `supabase` | `local` for administrator-created Pi accounts; `supabase` for managed Auth |
+| `LOCAL_AUTH_SECRET` | Local auth | — | Independent signing secret of at least 32 random characters; backend only |
+| `LOCAL_AUTH_TOKEN_TTL_SECONDS` | No | `3600` | Local-session lifetime; 60–86400 seconds |
+| `LLM_PROVIDER` | No | `openai` | Existing compatible API or `chatgpt` personal OAuth Responses route |
+| `CHATGPT_CREDENTIALS_PATH` | ChatGPT auth | — | Private Unix credential record; never a Codex credential file |
 | `SUPABASE_URL` | Yes* | — | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Yes* | — | Supabase anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes* | — | Supabase service role key |
@@ -365,7 +499,7 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | `EMBEDDING_API_KEY` | No | — | Embeddings API key (also fallback for `GEMINI_API_KEY`) |
 | `EMBEDDING_BASE_URL` | No | `http://localhost:11434/v1` | Embeddings base URL (OpenAI-compatible provider) |
 | `EMBEDDING_MODEL` | No | `qwen3-embedding:4b` | Embeddings model |
-| `EMBEDDING_PROVIDER` | No | `openai` | `openai` (OpenAI-compatible) or `gemini` (native API) |
+| `EMBEDDING_PROVIDER` | No | `openai` | `openai`, `gemini`, or explicit `local` CPU MiniLM |
 | `EMBEDDING_OUTPUT_DIM` | No | — | Truncated output dimensionality, e.g. `768`; changing it requires re-embedding |
 | `EMBEDDING_BATCH_SIZE` | No | `100` | Texts per Gemini `:batchEmbedContents` request |
 | `GEMINI_API_KEY` | No | — | Gemini API key (falls back to `EMBEDDING_API_KEY`) |
