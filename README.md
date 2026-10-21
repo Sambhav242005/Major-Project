@@ -232,6 +232,21 @@ cd apps/api
 python -m pytest tests/ -v
 ```
 
+Two legacy scripts, `test_integration.py` and
+`test_integration_quick.py`, require a separately managed local server. The
+push/PR workflow in `.github/workflows/ci.yml` excludes those scripts and runs
+the other tests from a temporary directory with isolated SQLite/Chroma paths
+and mock authentication. This prevents loading the checkout's real `.env` or
+modifying its local database. Do not interpret these checks as live provider,
+Supabase, or browser end-to-end validation.
+
+CI has separate backend, frontend and offline research jobs. It runs Python
+compilation, pytest, ESLint, TypeScript, Vitest, a production Next.js build,
+and the frozen research integrity/reproduction checks. JUnit and build
+diagnostics are uploaded as workflow artifacts. Production compilation uses
+public placeholders with mock authentication disabled; there is no deployment
+job. See the workflow for the exact isolated commands.
+
 ### Frontend unit tests (Vitest)
 
 ```bash
@@ -259,18 +274,72 @@ npx tsc --noEmit
 
 ## Deployment
 
-### Frontend (Vercel)
+No cloud deployment exists as of 21 October 2026. The following is a staging
+plan. The backend Dockerfile and Railway configuration have been statically
+checked, but the image has not been built or run; a passing application CI
+run does not validate the container or establish a live release.
 
-1. Push to GitHub
-2. Import repo in [vercel.com](https://vercel.com)
-3. Set environment variables in Vercel dashboard
-4. Deploy
+### Backend (Railway staging)
 
-### Backend (Railway / Fly.io / Render)
+1. Review and merge the release PR through the repository's branch workflow.
+   Create a Railway service with **Root Directory `/apps/api`** and,
+   independently, **Config File `/apps/api/railway.json`**. Its Dockerfile uses
+   the API directory as the build context and listens on Railway's `PORT`.
+2. Create the actual Supabase staging project. Review `infra/schema.sql`
+   against the ORM and migrations before applying schema changes; do not
+   blindly apply both full schema and migration history. Record the schema
+   version and verify authenticated CRUD against staging. The image does not
+   run migrations automatically.
+3. Set `ENVIRONMENT=production`, `MOCK_AUTH=false`, an external
+   `DATABASE_URL=postgresql+asyncpg://...`, and real Supabase URL/anon/JWKS
+   settings. Keep service-role and provider credentials backend-only. Configure
+   reachable chat/extraction and embedding endpoints with compatible model
+   IDs; container `localhost` is not the developer's Ollama installation.
+4. Attach a persistent volume at `/data`, retaining `CHROMA_PATH=/data/chroma`
+   and `MEET_AUDIO_DIR=/data/meet_recordings`. **Resolve and test volume write
+   access before release:** the image runs as UID/GID 10001, whereas Railway
+   volume mounts are root-owned by default. Image-directory ownership does not
+   change a mounted volume's ownership. The startup check fails if the runtime
+   data paths are not writable. Do not silently switch to root or ephemeral
+   vector storage to bypass this gate. Use one replica for this local-Chroma
+   topology and verify persistence across a redeploy.
+5. Build and smoke-test the image, then deploy staging and record its URL.
+   `/health` is HTTP liveness only; separately test database writes, real JWT
+   authentication, embedding calls and chat generation. The image includes OCR
+   and uploaded-audio dependencies; it does not provide the desktop Chrome and
+   host-audio environment required by the headed Google Meet bot. Uploaded
+   meeting analysis is also unsupported in this image until its hard-coded
+   `/app/meet_recordings` write path is changed to honor `MEET_AUDIO_DIR` and
+   tested with the non-root runtime; installing ffmpeg alone does not fix it.
 
-1. Ensure `DATABASE_URL` points to a hosted PostgreSQL (e.g., Supabase, Neon, Railway)
-2. Set all environment variables
-3. Deploy with: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+Railway's [monorepo settings](https://docs.railway.com/deployments/monorepo),
+[config reference](https://docs.railway.com/config-as-code/reference),
+[volumes](https://docs.railway.com/volumes) and
+[health checks](https://docs.railway.com/deployments/healthchecks) describe the
+provider-side configuration and its limits.
+
+### Frontend (Vercel staging) and release checks
+
+1. Import the reviewed repository branch into Vercel with Root Directory
+   `apps/web` and Next.js defaults. Before building, set the real
+   `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`, and
+   `NEXT_PUBLIC_MOCK_AUTH=false`. Public values are compiled into browser
+   bundles; changing them requires a rebuild. Never put backend secrets in
+   `NEXT_PUBLIC_*` variables.
+2. Configure the backend `CORS_ORIGINS` as a JSON array containing the exact
+   frontend HTTPS origin. Configure Supabase's site/redirect allowlist for the
+   chosen frontend URL. Record both actual service URLs after deployment.
+3. Verify sign-in and project isolation, upload a known document, wait for
+   processing, inspect its graph and citations, and execute an agent task.
+   Confirm persistence after redeployment and retain smoke-test evidence.
+4. Reconcile Jira, replace the proposed deployment diagram with the actual
+   topology, and complete peer review and handover. Durable raw-upload storage,
+   real MCP transport, OAuth hardening and meeting-to-KB ingestion remain
+   separate implementation gaps; hosting does not complete them.
+
+See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
+[environment-variable guidance](https://vercel.com/docs/environment-variables).
 
 ---
 
@@ -313,6 +382,7 @@ npx tsc --noEmit
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes* | — | Supabase anon key |
 | `NEXT_PUBLIC_MOCK_AUTH` | No | `false` | Enable demo auto-login |
 | `NEXT_PUBLIC_APP_URL` | No | `localhost:3000` | App base URL |
+| `NEXT_PUBLIC_API_URL` | Yes for hosting | `http://localhost:8000` | Public backend API URL; set before building |
 
 \* Required unless `NEXT_PUBLIC_MOCK_AUTH=true`
 
