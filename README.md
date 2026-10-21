@@ -274,6 +274,10 @@ npx tsc --noEmit
 
 ## Deployment
 
+The [PR #34 review change map](docs/SPEC.md#81-pr-34-review-changes-by-file)
+documents the affected files, reasons for each fix and validation results.
+Pending live deployment checks remain tracked in [TODO](docs/TODO.md).
+
 ### Raspberry Pi 5 (isolated deployment)
 
 The configuration in `infra/pi/compose.yaml` prepares a separate `akgb` Docker

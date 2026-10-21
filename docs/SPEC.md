@@ -213,6 +213,39 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 
 **Stale-doc cleanup TODO:** `README.md` Prisma/model fixes done (this sync); `apps/web/.env.example` + `.gitignore` Prisma `DATABASE_URL` removed; `root akgb.db` verified absent (gitignored `*.db`, no committed file).
 
+### 8.1 PR #34 review changes by file
+
+Commit `7afd8f2` fixes the deployment issues found during review. Commit
+`c197365` incorporates the already-merged `develop` parent without changing the
+reviewed application tree. The following map records the review changes, in
+addition to the original local-authentication and Pi-deployment implementation.
+
+| Files (repository-relative) | Change and reason |
+|---|---|
+| `apps/api/core/config.py`, `apps/api/.env.example` | Add optional `AUTH_PROXY_SECRET`; reject configured values shorter than 32 characters. This is separate from the local JWT signing secret. |
+| `apps/api/core/rate_limit.py`, `apps/api/routers/auth.py` | Give local login its own IP key function. Accept a normalized forwarded IP only with the server proxy secret; otherwise use the socket IP. Retain the ten-attempts-per-minute limit while separating LAN clients. |
+| `apps/web/src/app/auth/local-login/route.ts`, `apps/web/.env.example` | Forward the gateway client IP with the web server's runtime secret. Ignore any incoming claimed proxy secret; never expose the configured secret in the login response or public environment variables. Document internal API routing and the server-only secret. |
+| `infra/pi/Caddyfile`, `infra/pi/compose.yaml`, `infra/pi/.env.example` | Overwrite incoming client-IP headers and strip incoming proxy secrets at both gateway upstreams. Pass an independent required secret only to the private web/API containers. Keep the web container unpublished. |
+| `apps/web/src/app/auth/signout/route.ts` | Build the sign-in redirect from `NEXT_PUBLIC_APP_URL`, so standalone deployment logout returns to the public HTTPS origin instead of the container address. |
+| `apps/api/services/chat/streaming.py` | Roll back a failed generation turn, emit a terminal application `error`, and return. Do not save an assistant answer, attach success citations, emit `done`, write a success audit or fire `chat.completed` after incomplete generation. |
+| `apps/api/core/security_headers.py` | Derive API CSP connection sources from `'self'` and `CORS_ORIGINS` instead of a fixed localhost address. This is the API response policy, not the frontend document policy. |
+| `apps/api/tests/test_local_auth.py`, `apps/web/src/lib/auth/local.test.ts` | Cover independent client login buckets, forged/invalid forwarded IP rejection, server-secret forwarding, secret non-disclosure and public-origin logout. Preserve existing cookie and outage tests. |
+| `apps/api/tests/test_chatgpt_responses.py`, `apps/api/tests/test_chat.py` | Exercise partial generation followed by failure, incompleteness or missing completion through the application chat service. Assert rollback and absence of successful persistence/events; make the successful chat test deterministic without a live provider. |
+| `apps/api/tests/test_app_inprocess.py` | Check that API CSP includes the configured LAN origin and no longer includes the hardcoded localhost address. |
+| `experiments/controlled_qa/runtime_snapshot/apps/api/services/chat/streaming.py` | Archive the exact pre-change chat source; verify its bytes against the unchanged published hash before adding it. |
+| `experiments/controlled_qa/reproduce.py`, `experiments/controlled_qa/test_reproduce.py`, `experiments/controlled_qa/README.md` | Include the chat snapshot in the six explicitly archived publication paths. Reject fresh inference against changed live chat code and check every changed runtime source. Frozen traces, scores and publication manifest remain unchanged. |
+| `README.md`, `docs/SPEC.md`, `docs/TODO.md` | Document new environment settings, proxy trust boundaries, deployment steps, resolved findings and pending live verification. This file contains the detailed change map. |
+
+Validation of the reviewed application tree: **415 backend tests passed**, with
+one Unix-permissions test skipped on Windows; **21 frontend tests**, TypeScript,
+lint and the local-auth production build passed. The **185-file publication
+integrity audit**, five offline reproduction tests and seven benchmark-generator
+tests passed. GitHub backend, frontend and research checks also passed on
+`c197365`. Documentation publication does not complete live deployment checks:
+configure the proxy secret and verify real generation, embeddings, account
+isolation, login limits, logout, persistence and restore on the Pi. Services
+remain operator-managed.
+
 ---
 
 ## 9. API Surface (Routers)

@@ -18,9 +18,11 @@ ChatGPT authorization and completed generation, MiniLM runtime/latency, document
 processing, two-account isolation, independent client login limits, public-origin
 sign-out, persistence and backup restoration. These live checks remain pending.
 Existing UUID5-based profile data requires an explicit migration before this
-identity change; the documented deployment targets a fresh database. Keep the
-draft PR open until these live checks pass; its post-stack target is `develop`
-because PR #33 has already merged there.
+identity change; the documented deployment targets a fresh database. The code is
+being published to `main`; this does not mark the live deployment checks complete.
+See [SPEC §8.1](SPEC.md#81-pr-34-review-changes-by-file) for the review's file-by-file
+change map and recorded validation results. PR #33's already-reviewed deployment
+and CI parent is included because `main` was behind `develop`.
 
 | Priority | Area | Summary | Status / dependency |
 |---|---|---|---|
