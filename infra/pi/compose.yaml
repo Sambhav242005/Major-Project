@@ -33,6 +33,7 @@ services:
         condition: service_healthy
     environment:
       ENVIRONMENT: production
+      PYTHONPATH: /app
       MOCK_AUTH: 'false'
       AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
       LOCAL_AUTH_SECRET: ${LOCAL_AUTH_SECRET:?Generate a private local signing secret}
