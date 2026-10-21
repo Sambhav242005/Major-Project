@@ -3,7 +3,7 @@
 import json
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -107,6 +107,47 @@ async def test_nonstream_request_discards_partial_failure(setup_client, monkeypa
         monkeypatch.setattr(llm_client, "_get_client", lambda: client)
         with pytest.raises(RuntimeError, match="response.failed"):
             await llm_client.chat_completion([{"role": "user", "content": "Hi"}])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("terminal", ["response.failed", "response.incomplete", None])
+async def test_application_chat_failure_never_emits_completion(setup_client, monkeypatch, terminal):
+    from services.chat import streaming
+    from services import webhooks
+
+    monkeypatch.setattr(streaming, "query_chunks", AsyncMock(return_value=[]))
+    monkeypatch.setattr(streaming, "_get_entity_context", AsyncMock(return_value=[]))
+    monkeypatch.setattr(streaming, "_expand_via_graph", AsyncMock(return_value=[]))
+    audit = AsyncMock()
+    webhook = AsyncMock()
+    monkeypatch.setattr(streaming, "write_audit_log", audit)
+    monkeypatch.setattr(webhooks, "fire_event", webhook)
+    db = MagicMock()
+    db.flush = AsyncMock()
+    db.rollback = AsyncMock()
+    db.commit = AsyncMock()
+    history = MagicMock()
+    history.scalars.return_value.all.return_value = []
+    db.execute = AsyncMock(return_value=history)
+    provider_events = [{"type": "response.output_text.delta", "delta": "partial answer"}]
+    if terminal:
+        provider_events.append({"type": terminal})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, text=sse(*provider_events))
+    )) as client:
+        monkeypatch.setattr(llm_client, "_get_client", lambda: client)
+        events = [event async for event in streaming.send_message(
+            db, "550e8400-e29b-41d4-a716-446655440002", "Hello",
+            "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440000",
+        )]
+    assert [event["type"] for event in events] == ["chunk", "error"]
+    assert events[0]["content"] == "partial answer"
+    assert "could not be completed" in events[-1]["error"]
+    assert [call.args[0].role for call in db.add.call_args_list] == ["user"]
+    db.rollback.assert_awaited_once()
+    db.commit.assert_not_awaited()
+    audit.assert_not_awaited()
+    webhook.assert_not_awaited()
 
 
 @pytest.mark.asyncio

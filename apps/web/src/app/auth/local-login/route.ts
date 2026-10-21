@@ -13,8 +13,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    // The private gateway overwrites this IP header. Never relay a browser's
+    // claimed proxy secret; only the server runtime can authenticate the hop.
+    const clientIp = request.headers.get("x-akgb-client-ip");
+    if (process.env.AUTH_PROXY_SECRET && clientIp) {
+      headers["X-AKGB-Client-IP"] = clientIp;
+      headers["X-AKGB-Proxy-Secret"] = process.env.AUTH_PROXY_SECRET;
+    }
     const upstream = await fetch(internalApiUrl("/auth/local-login"), {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers,
       body: JSON.stringify({ email: credentials.email, password: credentials.password }),
       cache: "no-store", signal: AbortSignal.timeout(10000),
     });

@@ -4,6 +4,24 @@ This file separates repository problems, product features, research work, harden
 
 ## Index
 
+PR #34 review: the isolated Pi stack, local accounts, ChatGPT OAuth, CPU MiniLM,
+schema revision 008 and ingestion failure recovery have offline coverage. Login
+limits now separate LAN clients through an authenticated private web proxy;
+sign-out uses the public app origin, and failed generation terminates with an
+error without saving or announcing a completed answer. API CSP follows configured
+origins. Exact frozen research artifacts remain independently auditable.
+
+Before release, the operator must configure a separate `AUTH_PROXY_SECRET` in
+`infra/pi/.env`, rebuild the web image and recreate only the AKGB containers;
+the agent does not manage services. Verify real account provisioning/sign-in,
+ChatGPT authorization and completed generation, MiniLM runtime/latency, document
+processing, two-account isolation, independent client login limits, public-origin
+sign-out, persistence and backup restoration. These live checks remain pending.
+Existing UUID5-based profile data requires an explicit migration before this
+identity change; the documented deployment targets a fresh database. Keep the
+draft PR open until these live checks pass; its post-stack target is `develop`
+because PR #33 has already merged there.
+
 | Priority | Area | Summary | Status / dependency |
 |---|---|---|---|
 | P0 | Problem | Uploaded files are processed but not durably stored. | Must fix before a complete upload → preview → delete demo. |
@@ -108,10 +126,9 @@ These are user-facing capabilities or integrations that are incomplete.
 - **Fix:** wire structlog + a middleware that stamps `request_id` onto logs (brief §12 asks for this); or drop the dep.
 - **Effort:** small–medium.
 
-#### 2.18 CSP hardcodes `localhost:8000` `[HARDEN]`
-- **What:** `core/security_headers.py` sets `connect-src 'self' http://localhost:8000` — breaks a deployed backend origin until edited.
-- **Fix:** derive from settings (`CORS_ORIGINS` / an API URL setting).
-- **Effort:** tiny.
+#### 2.18 API CSP configured origins `[HARDEN]` — fixed in PR #34 review
+- **What changed:** API response `connect-src` now includes `'self'` and configured `CORS_ORIGINS`, with a LAN-origin regression test.
+- **Scope:** this header belongs to API responses; frontend document CSP remains a separate deployment concern.
 
 #### 2.19 Frontend unit tests `[MISSING]`
 - **What:** brief requires Vitest + React Testing Library; `vitest`, `@testing-library/react`, `@testing-library/jest-dom` sit in devDependencies with a `vitest.config.ts` — **zero test files** (`apps/web/src` has none).

@@ -150,19 +150,20 @@ Project 1──* WebhookSubscription 1──* WebhookDelivery
 
 ## 6. Where User Data & Auth Actually Live
 
-**There is no bespoke user table with credentials.** Identity and credentials are handled by **Supabase Auth** (production) or **mock auth** (development). The app's own DB only keeps a `profiles` row per user for app-level attributes.
+Identity uses the configured `AUTH_PROVIDER`: **Supabase Auth** remains the default, while **local** accounts support an independent Pi deployment. Mock auth is development-only. Local administrator-created accounts store salted PBKDF2 hashes in `local_accounts` (migration 007), reference `profiles.id`, and use signed, expiring HS256 sessions with an enabled-account check on every authenticated request. Public local registration is disabled. The frontend keeps the session in a secure HttpOnly cookie and obtains API-verified session state through its server routes; service outages preserve the cookie.
 
 | What | Where it lives | Details |
 |---|---|---|
 | User credentials (email/password, Google OAuth) | **Supabase Auth service** (cloud) | Frontend `@supabase/ssr`; never stored in the app DB |
+| Local credentials and session | `local_accounts` in the app DB; `akgb-session` HttpOnly cookie | Administrator-created password hash; backend signs and verifies local sessions, including active-account checks |
 | Session tokens | Browser cookies (`sb-access-token`, `sb-refresh-token`) / JWT in memory | `apps/web/src/middleware.ts` refreshes via `@supabase/ssr`; backend `core/security.py` validates |
 | Mock dev session | Hardcoded demo user | `a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11` / mock@example.com — in `supabase/client.ts`, `core/auth_middleware.py`, `core/security.py`, `routers/auth.py` (mock-login sets the cookies) |
-| App-side profile row | `profiles` table (app DB) | created on first request via `core/deps.py::_ensure_user_and_project` (deterministic UUID from user id, namespace `a1b2c3d4-e5f6-7890-abcd-ef1234567890`) |
+| App-side profile row | `profiles` table (app DB) | `core/deps.py::_user_uuid` preserves UUID auth subjects; UUID5 is only for non-UUID subjects. Existing UUID5-derived installations need an explicit migration before upgrading; the Pi runbook targets a new database. No email-based identity linking. |
 | Project membership / roles | `project_members` table (app DB) | checked on every request (`get_project_id`, 403 if not a member) |
 | MCP OAuth tokens | `mcp_auth_tokens` table (app DB) | tokens exchanged via `core/oauth/`, persisted across restarts |
 | Audit trail | `audit_log` table (app DB) | every mutating action |
 
-So: **credentials → Supabase (or mock); app identity, roles, and everything else → the app's own database via SQLAlchemy.** The backend is the only place that validates tokens; the frontend's job is just to obtain and carry the session.
+Supabase credentials stay with Supabase; local password hashes live in the app database. App identity, roles, and domain data use SQLAlchemy. The backend validates sessions for either provider. The LAN gateway overwrites client-IP headers and removes incoming proxy secrets; the private web server authenticates its login hop with a separate `AUTH_PROXY_SECRET`, so login limits remain per client. Unsigned or malformed client-IP claims fall back to the socket-IP bucket.
 
 ---
 
@@ -170,7 +171,7 @@ So: **credentials → Supabase (or mock); app identity, roles, and everything el
 
 `apps/web/.env` / `.env.local` exist for **four reasons** — three real, one stale:
 
-1. **Supabase keys (real):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — required by `src/lib/supabase/client.ts`, `server.ts`, and `middleware.ts` to talk to Supabase Auth. These are `NEXT_PUBLIC_*` because the browser needs them (safe — they're public keys). Without them the frontend **cannot build** in real-auth mode.
+1. **Supabase keys (real):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` are required for the default Supabase provider. They are public client configuration. The alternative `NEXT_PUBLIC_AUTH_PROVIDER=local` needs no Supabase keys; server-only `API_INTERNAL_URL` and `AUTH_PROXY_SECRET` configure its private login/session proxy. The proxy secret is never a `NEXT_PUBLIC_*` value.
 2. **Mock auth flag (real):** `NEXT_PUBLIC_MOCK_AUTH="true"` switches the whole auth layer to demo mode (`client.ts` returns a fake Supabase client, `middleware.ts` checks the `mock-session` cookie, `auth/demo-login/route.ts` signs in). Build fails if it's `true` in production.
 3. **App URL (real, minor):** `NEXT_PUBLIC_APP_URL` — base URL used by the frontend.
 4. **Prisma `DATABASE_URL` (stale):** documented for the Prisma setup that was deleted in `8c72299` (§5). Currently **read by nothing** — grep the codebase: no `process.env.DATABASE_URL` consumer exists in `apps/web/src`. The backend's `DATABASE_URL` (in `apps/api/.env`) is the one that matters.
@@ -205,6 +206,10 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 18 | `profiles` row per user | True — `core/deps.py` upsert | ✅ Matches |
 | 19 | `GET /{id}/chunks` returns preview text | Returns **full** `text` plus `text_truncated` (#29); `services/documents/content.py` takes an optional `text_preview_chars` to opt into clipping for list/preview payloads | **Fixed (#29)** |
 | 20 | Graph entity-chunk dedup keyed on `filename\|page` | Keyed on `document_id\|chunk_index` in `dedupeEntityChunks` (#29). `chunk_index` is a position within one document's chunk list (`pipelines/chunking.py`), so it must be scoped by `document_id`; `filename` collided across same-named uploads | **Fixed (#29)** |
+| 21 | Pi LAN deployment without Supabase | `infra/pi` packages PostgreSQL, one API worker, standalone Next.js and isolated LAN HTTPS. Local accounts, migration 008 (`section_index`), failed-flush recovery, and terminal document failure events are implemented. Public routing remains operator-managed. | **Implemented; real generation, embedding, account-isolation and restore smoke checks remain pending** |
+| 22 | Personal ChatGPT OAuth and CPU embeddings | Fresh PKCE registration with ID-token validation, protected Unix credentials and serialized rotation; inference uses Responses with explicit completion checks. Local MiniLM pools all token windows into 384 dimensions. A changed vector space requires a fresh index; frozen research sources and artifact hashes are preserved. | **Offline-tested; selected-account model access and Pi runtime remain unverified** |
+| 23 | Completed chat means completed generation | Provider failure, incomplete response or interrupted stream produces a terminal `error`, rolls back the failed turn, and skips assistant persistence, citations, `done` and `chat.completed`. Successful streams retain normal completion behavior. | **Fixed in PR #34 review** |
+| 24 | Deployment origins and browser auth routes | API CSP connection sources follow `CORS_ORIGINS`; standalone sign-out redirects to `NEXT_PUBLIC_APP_URL`. The API's CSP does not configure the frontend's document policy. | **Fixed in PR #34 review** |
 
 **Stale-doc cleanup TODO:** `README.md` Prisma/model fixes done (this sync); `apps/web/.env.example` + `.gitignore` Prisma `DATABASE_URL` removed; `root akgb.db` verified absent (gitignored `*.db`, no committed file).
 

@@ -130,8 +130,12 @@ def test_format_source_block():
 
 @pytest.mark.asyncio
 @patch("services.chat.streaming.query_chunks")
-async def test_send_message_yields_events(mock_query_chunks):
+async def test_send_message_yields_events(mock_query_chunks, monkeypatch):
     mock_query_chunks.return_value = []
+    async def successful_stream(**kwargs):
+        yield "A complete answer"
+    monkeypatch.setattr("pipelines.llm_client.chat_completion_stream", successful_stream)
+    monkeypatch.setattr("services.webhooks.fire_event", AsyncMock())
 
     mock_db = MagicMock()
     mock_db.execute = AsyncMock()
@@ -160,3 +164,7 @@ async def test_send_message_yields_events(mock_query_chunks):
     # Should have at least user message saved, citations, done
     assert any(e["type"] == "done" for e in events)
     assert any(e["type"] == "citations" for e in events)
+    assert not any(e["type"] == "error" for e in events)
+    from db.models import ChatMessage
+    saved_messages = [call.args[0] for call in mock_db.add.call_args_list if isinstance(call.args[0], ChatMessage)]
+    assert [(item.role, item.content) for item in saved_messages] == [("user", "Hello"), ("assistant", "A complete answer")]

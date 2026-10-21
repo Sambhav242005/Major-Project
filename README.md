@@ -331,7 +331,16 @@ deployment; ARM64 image builds and end-to-end checks remain release gates.
    space from the original research model. Start with a fresh index.
 4. Generate the database password with `openssl rand -hex 32`; place it in `.env`
    as `POSTGRES_PASSWORD`. Use a hex password because it is embedded in a database
-   URL. The LAN defaults are `APP_URL=https://192.168.1.100:13000` and
+   URL. Generate another independent `openssl rand -hex 32` value as
+   `AUTH_PROXY_SECRET`, separate from `LOCAL_AUTH_SECRET`. Compose passes it only
+   to the API and web servers. Caddy overwrites `X-AKGB-Client-IP` with the socket
+   IP and strips incoming `X-AKGB-Proxy-Secret`; the web login proxy adds its own
+   secret. The API then enforces ten login attempts per minute per LAN client,
+   rather than one shared bucket for the web container. Keep the web container
+   private behind this gateway; deployments without this trusted hop retain the
+   socket-IP limit. Rebuild the web image and have the operator recreate the AKGB
+   containers after configuring this new secret; do not alter other services.
+   The LAN defaults are `APP_URL=https://192.168.1.100:13000` and
    `API_URL=https://192.168.1.100:13000/api`, without trailing slashes.
    Protect the file with `chmod 600 .env`. Never publish `docker compose config`
    output: it expands credentials. Validate using `docker compose config --quiet`.
@@ -481,13 +490,14 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | `ENVIRONMENT` | No | `development` | `development` or `production` (dev forces `sqlite+aiosqlite:///./akgb.db`) |
 | `AUTH_PROVIDER` | No | `supabase` | `local` for administrator-created Pi accounts; `supabase` for managed Auth |
 | `LOCAL_AUTH_SECRET` | Local auth | — | Independent signing secret of at least 32 random characters; backend only |
+| `AUTH_PROXY_SECRET` | Pi stack | — | Separate secret of at least 32 random characters, shared only with the web server to authenticate forwarded login client IPs; optional outside this proxy topology |
 | `LOCAL_AUTH_TOKEN_TTL_SECONDS` | No | `3600` | Local-session lifetime; 60–86400 seconds |
 | `LLM_PROVIDER` | No | `openai` | Existing compatible API or `chatgpt` personal OAuth Responses route |
 | `CHATGPT_CREDENTIALS_PATH` | ChatGPT auth | — | Private Unix credential record; never a Codex credential file |
 | `SUPABASE_URL` | Yes* | — | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Yes* | — | Supabase anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes* | — | Supabase service role key |
-| `SUPABASE_JWKS_URL` | Yes* | — | JWKS endpoint for JWT validation |
+| `SUPABASE_JWKS_URL` | No | Derived from `SUPABASE_URL` | Optional JWKS endpoint override for JWT validation |
 | `MOCK_AUTH` | No | `false` | Bypass Supabase auth (dev only, fail-fast in prod) |
 | `DATABASE_URL` | Yes | `postgresql+asyncpg://…` (prod) | PostgreSQL (prod); dev forced to SQLite `akgb.db` |
 | `CHROMA_PATH` | No | `./chroma_data` | ChromaDB storage path |
@@ -506,7 +516,7 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | `GEMINI_BASE_URL` | No | `https://generativelanguage.googleapis.com/v1beta` | Gemini native API base URL |
 | `CORS_ORIGINS` | No | `localhost:3000` | Allowed CORS origins (JSON array) |
 
-\* Required unless `MOCK_AUTH=true`
+\* Required for the Supabase deployment path when `AUTH_PROVIDER=supabase` and `MOCK_AUTH=false`; local accounts do not require a Supabase account.
 
 ### Frontend (`apps/web/.env.local`)
 
@@ -515,10 +525,13 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes* | — | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes* | — | Supabase anon key |
 | `NEXT_PUBLIC_MOCK_AUTH` | No | `false` | Enable demo auto-login |
+| `NEXT_PUBLIC_AUTH_PROVIDER` | No | `supabase` | Build-time choice: `local` administrator-created accounts or `supabase` |
+| `API_INTERNAL_URL` | No | `NEXT_PUBLIC_API_URL`, then `http://localhost:8000` | Server-only API address for local login and session verification; Pi uses `http://api:8000` |
+| `AUTH_PROXY_SECRET` | Pi stack | — | Server-only counterpart to the API secret; never use a `NEXT_PUBLIC_` prefix or expose the web server outside the trusted gateway |
 | `NEXT_PUBLIC_APP_URL` | No | `localhost:3000` | App base URL |
 | `NEXT_PUBLIC_API_URL` | Yes for hosting | `http://localhost:8000` | Public backend API URL; set before building |
 
-\* Required unless `NEXT_PUBLIC_MOCK_AUTH=true`
+\* Required when using Supabase auth with `NEXT_PUBLIC_MOCK_AUTH=false`; not required when `NEXT_PUBLIC_AUTH_PROVIDER=local`.
 
 ---
 

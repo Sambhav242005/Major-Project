@@ -37,6 +37,7 @@ services:
       MOCK_AUTH: 'false'
       AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
       LOCAL_AUTH_SECRET: ${LOCAL_AUTH_SECRET:?Generate a private local signing secret}
+      AUTH_PROXY_SECRET: ${AUTH_PROXY_SECRET:?Generate a separate private auth proxy secret}
       PORT: '8000'
       DATABASE_URL: postgresql+asyncpg://akgb:${POSTGRES_PASSWORD:?Set a URL-safe database password}@postgres:5432/akgb
       SUPABASE_URL: ${SUPABASE_URL:-}
@@ -75,6 +76,7 @@ services:
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
     environment:
       API_INTERNAL_URL: http://api:8000
+      AUTH_PROXY_SECRET: ${AUTH_PROXY_SECRET:?Generate a separate private auth proxy secret}
     restart: unless-stopped
     logging: *logging
 

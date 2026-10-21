@@ -31,6 +31,13 @@ def test_public_health_has_security_headers(client):
     assert "permissions-policy" in response.headers
 
 
+def test_csp_uses_configured_lan_origins(client, monkeypatch):
+    monkeypatch.setattr(settings, "CORS_ORIGINS", ["https://192.168.1.100:13000"])
+    policy = client.get("/health").headers["content-security-policy"]
+    assert "connect-src 'self' https://192.168.1.100:13000;" in policy
+    assert "http://localhost:8000" not in policy
+
+
 @pytest.mark.parametrize(
     "path", ["/documents", "/chat/sessions", "/agents", "/mcp/connections"]
 )

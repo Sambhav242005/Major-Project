@@ -71,12 +71,13 @@ dataset summary; these transformations and original export hashes are disclosed.
 Hashes bind retained artifacts, but do not independently establish execution
 dates, review independence or the scientific validity of annotations.
 
-Deployment later changed `apps/api/pipelines/llm_client.py` and
-`apps/api/pipelines/embeddings/embedding_function.py`. Their exact original bytes
+Deployment and its review later changed `apps/api/pipelines/llm_client.py`,
+`apps/api/pipelines/embeddings/embedding_function.py` and
+`apps/api/services/chat/streaming.py`. Their exact original bytes
 from commit `c725d63` are retained under `runtime_snapshot/`, with the same
 repository-relative paths. Because the manifest also hashes the original
 `experiments/controlled_qa/README.md`, `reproduce.py` and `test_reproduce.py`, their
-exact published versions are archived there too. Audit checks **only these five
+exact published versions are archived there too. Audit checks **only these six
 explicit snapshot paths** against the unchanged publication-manifest hashes;
 every other path retains its original check. Current audit/replay tooling and
 documentation evolve separately from those archived published versions. Frozen

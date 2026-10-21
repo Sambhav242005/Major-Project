@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     SUPABASE_JWKS_URL: str = ""
     AUTH_PROVIDER: str = "supabase"
     LOCAL_AUTH_SECRET: str = ""
+    AUTH_PROXY_SECRET: str = ""
     LOCAL_AUTH_TOKEN_TTL_SECONDS: int = 3600
 
     # Mock auth for development (bypasses Supabase)
@@ -52,6 +53,8 @@ class Settings(BaseSettings):
             raise ValueError("AUTH_PROVIDER must be supabase or local")
         if self.AUTH_PROVIDER == "local" and len(self.LOCAL_AUTH_SECRET) < 32:
             raise ValueError("Local authentication requires LOCAL_AUTH_SECRET of at least 32 characters")
+        if self.AUTH_PROXY_SECRET and len(self.AUTH_PROXY_SECRET) < 32:
+            raise ValueError("AUTH_PROXY_SECRET must contain at least 32 characters when configured")
         if not 60 <= self.LOCAL_AUTH_TOKEN_TTL_SECONDS <= 86400:
             raise ValueError("LOCAL_AUTH_TOKEN_TTL_SECONDS must be between 60 and 86400")
         return self

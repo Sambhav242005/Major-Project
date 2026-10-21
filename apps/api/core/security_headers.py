@@ -3,6 +3,8 @@
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from core.config import settings
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Adds security headers to all responses."""
@@ -33,9 +35,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
             )
         else:
+            connect_sources = " ".join(["'self'", *settings.CORS_ORIGINS])
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data:; connect-src 'self' http://localhost:8000;"
+                f"img-src 'self' data:; connect-src {connect_sources};"
             )
 
         return response

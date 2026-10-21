@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import get_current_user, User
 from core.config import settings
-from core.rate_limit import limiter
+from core.rate_limit import limiter, local_login_rate_limit_key
 from db.session import get_db
 
 router = APIRouter()
@@ -17,7 +17,7 @@ class LocalLogin(BaseModel):
 
 
 @router.post("/local-login")
-@limiter.limit("10/minute")
+@limiter.limit("10/minute", key_func=local_login_rate_limit_key)
 async def local_login(request: Request, response: Response, credentials: LocalLogin, db: AsyncSession = Depends(get_db)):
     if settings.AUTH_PROVIDER != "local":
         raise HTTPException(status_code=403, detail="Local authentication is disabled")

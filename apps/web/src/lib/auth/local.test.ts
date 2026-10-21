@@ -30,6 +30,25 @@ describe("local session verification", () => {
 });
 
 describe("local login cookie boundary", () => {
+  it("authenticates the gateway client IP with a server-only proxy secret", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "local");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.example.com");
+    vi.stubEnv("AUTH_PROXY_SECRET", "private-server-proxy-secret");
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ session: { access_token: "token", expires_in: 600 } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST } = await import("@/app/auth/local-login/route");
+    const response = await POST(new NextRequest("https://app.example.com/auth/local-login", {
+      method: "POST",
+      headers: { origin: "https://app.example.com", "X-AKGB-Client-IP": "192.168.1.10", "X-AKGB-Proxy-Secret": "browser-forgery" },
+      body: JSON.stringify({ email: "member@example.com", password: "password" }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      headers: expect.objectContaining({ "X-AKGB-Client-IP": "192.168.1.10", "X-AKGB-Proxy-Secret": "private-server-proxy-secret" }),
+    }));
+    expect(await response.text()).not.toContain("private-server-proxy-secret");
+    expect(response.headers.get("set-cookie")).not.toContain("private-server-proxy-secret");
+  });
+
   it("rejects cross-origin login before calling the backend", async () => {
     vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "local");
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.example.com");
@@ -82,6 +101,18 @@ describe("local login cookie boundary", () => {
     }));
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("https://app.example.com/auth/signin");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+
+  it("redirects logout to the public LAN origin behind the standalone container", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "local");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://192.168.1.100:13000");
+    const { POST } = await import("@/app/auth/signout/route");
+    const response = await POST(new NextRequest("https://0.0.0.0:3000/auth/signout", {
+      method: "POST", headers: { origin: "https://192.168.1.100:13000" },
+    }));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://192.168.1.100:13000/auth/signin");
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 

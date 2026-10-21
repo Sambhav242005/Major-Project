@@ -32,6 +32,7 @@ async def send_message(
     - {"type": "chunk", "content": "..."} — incremental text
     - {"type": "citations", "citations": [...]} — source citations
     - {"type": "done"} — stream complete
+    - {"type": "error", "error": "..."} — terminal failure; no completion follows
     """
     # Sanitize input
     message = sanitize_for_llm(message)
@@ -121,11 +122,13 @@ async def send_message(
             full_response += chunk
             yield {"type": "chunk", "content": chunk}
 
-    except Exception as e:
-        logger.exception(f"Chat streaming failed: {e}")
-        error_msg = "I encountered an error processing your question. Please try again."
-        full_response = error_msg
-        yield {"type": "chunk", "content": error_msg}
+    except Exception:
+        logger.exception("Chat streaming failed")
+        # The response may already contain partial text. Tell the client to
+        # discard it and never persist or announce it as a completed answer.
+        await db.rollback()
+        yield {"type": "error", "error": "The answer could not be completed. Please try again."}
+        return
 
     # Step 8: Send citations
     yield {"type": "citations", "citations": citations}

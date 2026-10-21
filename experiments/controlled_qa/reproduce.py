@@ -33,6 +33,7 @@ NAMES = ("A_vector", "B_graph", "C_verified")
 RUNTIME_SNAPSHOT_FILES = (
     "apps/api/pipelines/llm_client.py",
     "apps/api/pipelines/embeddings/embedding_function.py",
+    "apps/api/services/chat/streaming.py",
 )
 RUNTIME_SNAPSHOT = HERE / "runtime_snapshot"
 # The manifest also hashes its original tooling/documentation. Retain those

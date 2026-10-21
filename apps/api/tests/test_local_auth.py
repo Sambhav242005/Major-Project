@@ -198,3 +198,35 @@ async def test_local_login_enforces_ten_attempts_per_minute(db, monkeypatch):
             response = await client.post("/auth/local-login", json={"email": "member@example.com", "password": "wrong password"})
             statuses.append(response.status_code)
     assert statuses == [401] * 10 + [429]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trusted", [True, False])
+async def test_proxied_login_buckets_require_authenticated_client_ip(db, monkeypatch, trusted):
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.include_router(router, prefix="/auth")
+
+    async def session_override():
+        yield db
+
+    app.dependency_overrides[get_db] = session_override
+    monkeypatch.setattr(limiter, "enabled", True)
+    monkeypatch.setattr(settings, "AUTH_PROXY_SECRET", "private-proxy-secret-with-at-least-32-characters")
+    monkeypatch.setattr(local_auth, "authenticate", AsyncMock(return_value=None))
+    transport = httpx.ASGITransport(app=app, client=(f"198.51.100.{242 if trusted else 243}", 3422))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"X-AKGB-Client-IP": "192.168.1.10", "X-AKGB-Proxy-Secret": settings.AUTH_PROXY_SECRET if trusted else "forged"}
+        body = {"email": "member@example.com", "password": "wrong password"}
+        for _ in range(10):
+            assert (await client.post("/auth/local-login", json=body, headers=headers)).status_code == 401
+        assert (await client.post("/auth/local-login", json=body, headers=headers)).status_code == 429
+        headers["X-AKGB-Client-IP"] = "192.168.1.11"
+        response = await client.post("/auth/local-login", json=body, headers=headers)
+        assert response.status_code == (401 if trusted else 429)
+        # Even a trusted proxy cannot rotate malformed IP strings to evade limits.
+        if not trusted:
+            headers["X-AKGB-Proxy-Secret"] = settings.AUTH_PROXY_SECRET
+            headers["X-AKGB-Client-IP"] = "not-an-ip"
+            assert (await client.post("/auth/local-login", json=body, headers=headers)).status_code == 429
