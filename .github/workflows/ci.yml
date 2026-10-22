@@ -1,8 +1,11 @@
+# CI is validation only: pull requests and merges to main never deploy.
+# Production builds below test compilation but do not publish or deploy files.
 name: Continuous integration
 
 on:
+  # Avoid redundant testing when feature branches already have an open PR.
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     branches: ["**"]
   workflow_dispatch:
@@ -19,7 +22,83 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Keep the workflow active on docs-only PRs so required checks cannot get stuck Pending.
+  # The lightweight change detector skips expensive jobs when no relevant code changed.
+  changes:
+    name: Identify affected CI sections
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      research: ${{ steps.filter.outputs.research }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed paths
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          backend=false
+          frontend=false
+          research=false
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            # Explicit manual runs test every area.
+            backend=true
+            frontend=true
+            research=true
+          else
+            # Use Git history rather than a third-party path-filter action.
+            # Pull requests compare against their merge base, like GitHub's Files changed tab.
+            if [[ "$EVENT_NAME" == "pull_request" ]]; then
+              range="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+            elif [[ -n "$PUSH_BEFORE_SHA" ]] && [[ ! "$PUSH_BEFORE_SHA" =~ ^0+$ ]] && git cat-file -e "${PUSH_BEFORE_SHA}^{commit}" 2>/dev/null; then
+              range="${PUSH_BEFORE_SHA}..${GITHUB_SHA}"
+            else
+              # New branches or an unavailable push base: check everything in the commit.
+              range=""
+            fi
+
+            if [[ -n "$range" ]]; then
+              git diff --name-only -z "$range" > "$RUNNER_TEMP/ci-changed-files"
+            else
+              git ls-files -z > "$RUNNER_TEMP/ci-changed-files"
+            fi
+
+            while IFS= read -r -d '' file; do
+              case "$file" in
+                .github/workflows/ci.yml)
+                  backend=true; frontend=true; research=true ;;
+                infra/*|apps/packages/*)
+                  backend=true; frontend=true ;;
+                experiments/controlled_qa/*)
+                  backend=true; research=true ;;
+                apps/api/scripts/research_benchmark.py|apps/api/scripts/test_research_benchmark.py)
+                  backend=true; research=true ;;
+                apps/api/*)
+                  backend=true ;;
+                apps/web/*)
+                  frontend=true ;;
+                # Documentation and unrelated files do not trigger test jobs.
+              esac
+            done < "$RUNNER_TEMP/ci-changed-files"
+          fi
+
+          {
+            echo "backend=$backend"
+            echo "frontend=$frontend"
+            echo "research=$research"
+          } >> "$GITHUB_OUTPUT"
+
   backend:
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
     name: Backend compile and offline tests
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -83,6 +162,8 @@ jobs:
           retention-days: 14
 
   frontend:
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
     name: Frontend lint, types, tests and build
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -137,6 +218,8 @@ jobs:
           retention-days: 7
 
   research-reproduction:
+    needs: changes
+    if: ${{ needs.changes.outputs.research == 'true' }}
     name: Offline research reproduction
     runs-on: ubuntu-latest
     timeout-minutes: 10
