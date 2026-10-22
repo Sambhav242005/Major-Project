@@ -19,6 +19,7 @@ PUBLIC_ROUTES = {
     "/openapi.json",
     "/redoc",
     "/auth/mock-login",
+    "/mcp/callback",  # one-time random expiring state is validated by the handler
 }
 
 # Route prefixes that don't require auth

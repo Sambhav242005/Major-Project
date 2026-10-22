@@ -26,19 +26,8 @@ const STAGE_LABELS: Record<string, string> = {
   embedding: "Generating embeddings...",
   extracting_entities: "Extracting entities...",
   complete: "Done!",
+  failed: "Processing failed — open the document for details and retry.",
 };
-
-interface DocumentApiRecord {
-  id: string;
-  filename: string;
-  file_type: string;
-  status: Document["status"];
-  page_count: number | null;
-  error_message: string | null;
-  uploaded_at: string;
-  processed_at: string | null;
-}
-
 
 interface DocumentApiRecord {
   id: string;
@@ -66,6 +55,7 @@ export default function DocumentsPage() {
 
   const fetchDocuments = useCallback(async () => {
     try {
+      if (!activeProjectId) { setDocuments([]); return; }
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
@@ -85,6 +75,7 @@ export default function DocumentsPage() {
         processedAt: d.processed_at,
       }));
       const parsed = DocumentListSchema.safeParse({ documents: docs });
+      setError(null);
       if (parsed.success) {
         setDocuments(parsed.data.documents);
       } else {
@@ -136,8 +127,8 @@ export default function DocumentsPage() {
 
     const refresh = () => { if (!cancelled) fetchDocuments(); };
 
-    const finishWatch = () => {
-      setProcessStage("complete");
+    const finishWatch = (failed: boolean) => {
+      setProcessStage(failed ? "failed" : "complete");
       setWatchingDocId(null);
       setWatchDone(true);
       closeAll();
@@ -154,7 +145,10 @@ export default function DocumentsPage() {
         try {
           const data = JSON.parse(event.data);
           setProcessStage(data.stage || data.status);
-          if (data.stage === "complete" || data.status === "failed") finishWatch();
+          if (data.stage === "failed" || data.status === "failed") {
+            setError(data.error || "Document processing failed. Open the document to retry with the original file.");
+            finishWatch(true);
+          } else if (data.stage === "complete" || data.status === "processed") finishWatch(false);
         } catch {}
       };
 
@@ -185,6 +179,7 @@ export default function DocumentsPage() {
   }, [loadProjects, projects.length, supabase.auth]);
 
   const handleUpload = async (file: File) => {
+    if (!activeProjectId) throw new Error("Create or select a project before uploading a document.");
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Not authenticated");
 

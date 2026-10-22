@@ -137,6 +137,8 @@ export interface AgentTask {
 
 /** Meeting analysis result */
 export interface MeetingAnalysis {
+  id?: string;
+  created_at?: string;
   filename?: string;
   transcript: string;
   summary: string;

@@ -27,6 +27,13 @@ RUN python -m pip install --no-cache-dir -r requirements.txt \
     aiosqlite==0.22.1 \
     https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
+# SpeechRecognition needs the system FLAC encoder on ARM (its bundled encoder
+# targets other architectures). Keep this separate from the Python dependency
+# layer so the deployment fix does not reinstall the model/runtime packages.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends flac \
+    && rm -rf /var/lib/apt/lists/*
+
 # Explicit source allowlist keeps tests, experiments, .env and local state out
 # of the image even if the build context later gains additional files.
 COPY app ./app

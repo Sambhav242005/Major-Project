@@ -4,6 +4,6 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
-from . import connections, oauth_flow, schemas  # noqa: F401, E402
+from . import connections, oauth_flow, protocol, schemas  # noqa: F401, E402
 
 __all__ = ["router"]

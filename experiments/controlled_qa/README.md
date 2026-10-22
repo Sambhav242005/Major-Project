@@ -73,11 +73,12 @@ dates, review independence or the scientific validity of annotations.
 
 Deployment and its review later changed `apps/api/pipelines/llm_client.py`,
 `apps/api/pipelines/embeddings/embedding_function.py` and
-`apps/api/services/chat/streaming.py`. Their exact original bytes
+`apps/api/services/chat/streaming.py`. The release OCR fix also changed
+`apps/api/pipelines/parser.py`, whose original published bytes are archived too. Their exact original bytes
 from commit `c725d63` are retained under `runtime_snapshot/`, with the same
 repository-relative paths. Because the manifest also hashes the original
 `experiments/controlled_qa/README.md`, `reproduce.py` and `test_reproduce.py`, their
-exact published versions are archived there too. Audit checks **only these six
+exact published versions are archived there too. Audit checks **only these seven
 explicit snapshot paths** against the unchanged publication-manifest hashes;
 every other path retains its original check. Current audit/replay tooling and
 documentation evolve separately from those archived published versions. Frozen

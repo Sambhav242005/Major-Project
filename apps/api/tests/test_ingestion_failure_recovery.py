@@ -18,6 +18,7 @@ async def test_missing_chunk_column_rolls_back_and_records_failure(monkeypatch):
     monkeypatch.setattr(pipeline, "parse_document", lambda *_: [{"text": "A test document", "page_number": 1}])
     monkeypatch.setattr(pipeline, "chunk_pages", lambda *_: [{"text": "A test document", "page_number": 1, "chunk_index": 0, "token_count": 3}])
     monkeypatch.setattr(pipeline, "upsert_chunks", lambda *_: ["test_chunk_0"])
+    monkeypatch.setattr("pipelines.embeddings.delete_document_chunks", lambda *_: None)
     monkeypatch.setattr(pipeline, "_notify", lambda _id, event: events.append(event))
     monkeypatch.setattr("services.webhooks.fire_event", AsyncMock())
     try:

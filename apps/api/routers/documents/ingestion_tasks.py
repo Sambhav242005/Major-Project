@@ -1,6 +1,8 @@
 """Background ingestion helpers and SSE subscribers for documents."""
 
 import asyncio
+from sqlalchemy import update
+from db.models import Document
 
 from pipelines.ingestion import ingest_document, set_doc_notifier
 
@@ -10,6 +12,15 @@ _doc_subscribers: dict[str, list[asyncio.Queue]] = {}
 # Strong references to running ingestion tasks so the event loop never
 # garbage-collects a task mid-run (same pattern as core.task_queue).
 _running_ingestions: set[asyncio.Task] = set()
+
+
+async def recover_interrupted_ingestions(session_factory) -> None:
+    """Single-worker startup: interrupted jobs become visibly retryable."""
+    async with session_factory() as db:
+        await db.execute(update(Document).where(Document.status.in_(("pending", "processing"))).values(
+            status="failed", error_message="Processing was interrupted by an API restart. Retry the document to resume from its saved original."
+        ))
+        await db.commit()
 
 
 def _start_ingestion(session_factory, document_id: str, file_content: bytes) -> None:

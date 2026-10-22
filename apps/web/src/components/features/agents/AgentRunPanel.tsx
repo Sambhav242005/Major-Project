@@ -9,6 +9,7 @@ interface AgentRunPanelProps {
   onRun: () => void;
   isRunning: boolean;
   runError: string | null;
+  unavailableReason?: string;
 }
 
 export function AgentRunPanel({
@@ -18,6 +19,7 @@ export function AgentRunPanel({
   onRun,
   isRunning,
   runError,
+  unavailableReason,
 }: AgentRunPanelProps) {
   return (
     <div className="glow-accent p-5 mb-6">
@@ -30,6 +32,7 @@ export function AgentRunPanel({
       <div className="flex gap-2">
         <input
           value={runInput}
+          disabled={!!unavailableReason}
           onChange={(e) => onInputChange(e.target.value)}
           placeholder="Enter query or task..."
           onKeyDown={(e) => {
@@ -39,7 +42,7 @@ export function AgentRunPanel({
         />
         <button
           onClick={onRun}
-          disabled={!runInput.trim() || isRunning}
+          disabled={!runInput.trim() || isRunning || !!unavailableReason}
           className="flex items-center gap-2 px-4 h-9 rounded-lg bg-purple-500/20 text-app-text border border-purple-500/30 text-sm font-medium hover:bg-purple-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
         >
           {isRunning ? (
@@ -50,6 +53,7 @@ export function AgentRunPanel({
           Run
         </button>
       </div>
+      {unavailableReason && <p className="text-xs text-amber-400 mt-2">{unavailableReason}</p>}
       {runError && (
         <p className="text-xs text-red-400 mt-2 bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/20">
           {runError}

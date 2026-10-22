@@ -98,7 +98,6 @@ export default function ProjectsPage() {
                 isActive={p.id === activeProjectId}
                 onSelect={() => handleSelect(p.id)}
                 onRename={() => setRenameTarget({ id: p.id, name: p.name })}
-                onDelete={() => {}}
               />
             ))}
           </div>

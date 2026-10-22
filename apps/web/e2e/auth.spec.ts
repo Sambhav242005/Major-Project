@@ -13,11 +13,12 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-// Helper: authenticate via demo-login route (bypasses Supabase entirely)
-async function mockLogin(page: Page) {
-  // Hit the demo-login API route directly — sets cookie + redirects
-  await page.goto("/auth/demo-login");
-  // demo-login returns a redirect; follow it to /dashboard
+// Real account credentials are provided only via the test environment.
+async function signIn(page: Page) {
+  await page.goto("/auth/signin");
+  await page.getByLabel("Email", { exact: true }).fill(process.env.E2E_EMAIL!);
+  await page.getByLabel("Password", { exact: true }).fill(process.env.E2E_PASSWORD!);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.waitForURL(/\/dashboard$/);
   await page.getByRole("heading", { name: "Dashboard" }).waitFor();
 }
@@ -26,8 +27,7 @@ test.describe("Auth flow", () => {
   test("signin page renders with expected elements", async ({ page }) => {
     await page.goto("/auth/signin");
     await expect(page.getByRole("heading", { name: /welcome back/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /try demo/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /continue with google/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /try demo/i })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
@@ -36,10 +36,16 @@ test.describe("Auth flow", () => {
     await expect(page.getByRole("button", { name: /sign up/i })).toBeVisible();
   });
 
-  test("demo-login redirects to dashboard", async ({ page }) => {
-    await mockLogin(page);
+  test("demo authentication cannot issue a session", async ({ request }) => {
+    const response = await request.post("/auth/demo-login");
+    expect(response.status()).toBe(404);
+    expect(response.headers()["set-cookie"]).toBeUndefined();
+  });
+
+  test("real account signs in", async ({ page }) => {
+    test.skip(!process.env.E2E_EMAIL || !process.env.E2E_PASSWORD, "Supply a real test account through environment variables.");
+    await signIn(page);
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   });
 
   test("protected route redirects to signin when not logged in", async ({ page }) => {
@@ -49,7 +55,8 @@ test.describe("Auth flow", () => {
   });
 
   test("sign out returns to signin", async ({ page }) => {
-    await mockLogin(page);
+    test.skip(!process.env.E2E_EMAIL || !process.env.E2E_PASSWORD, "Supply a real test account through environment variables.");
+    await signIn(page);
     // Sign out button lives in the nav bar on app pages
     await page.getByRole("button", { name: /sign out/i }).click();
     await page.waitForURL(/\/auth\/signin/);

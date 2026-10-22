@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,8 +15,13 @@ from services.webhooks import (
     fire_event, dispatch_delivery, verify_inbound_signature,
     handle_inbound, dispatch_pending_deliveries,
 )
+from core.outbound import validate_public_https_url
 
 router = APIRouter()
+
+
+class SubscriptionUpdate(BaseModel):
+    active: bool
 
 
 # --- Outbound Webhook Subscriptions ---
@@ -56,6 +62,10 @@ async def create_subscription(
     user: User = Depends(get_current_user),
 ):
     """Create a new webhook subscription."""
+    try:
+        await validate_public_https_url(url)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     sub = WebhookSubscription(
         id=uuid.uuid4(),
         project_id=uuid.UUID(project_id),
@@ -96,6 +106,26 @@ async def delete_subscription(
     await db.delete(sub)
     await db.flush()
     return {"status": "deleted"}
+
+
+@router.patch("/subscriptions/{subscription_id}")
+async def update_subscription(
+    subscription_id: uuid.UUID,
+    payload: SubscriptionUpdate,
+    project_id: str = Depends(get_project_id),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(WebhookSubscription).where(
+        WebhookSubscription.id == subscription_id,
+        WebhookSubscription.project_id == uuid.UUID(project_id),
+    ))
+    subscription = result.scalar_one_or_none()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    subscription.active = payload.active
+    subscription.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    return {"id": str(subscription.id), "active": subscription.active}
 
 
 @router.post("/test/{subscription_id}")
@@ -184,8 +214,9 @@ async def inbound_webhook(
 
 @router.post("/retry-pending")
 async def retry_pending(
+    project_id: str = Depends(get_project_id),
     db: AsyncSession = Depends(get_db),
 ):
     """Retry all pending webhook deliveries (admin endpoint)."""
-    dispatched = await dispatch_pending_deliveries(db)
+    dispatched = await dispatch_pending_deliveries(db, project_id)
     return {"dispatched": dispatched}

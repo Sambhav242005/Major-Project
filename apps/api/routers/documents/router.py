@@ -15,6 +15,7 @@ from db.models import Document
 from db.session import async_session_factory, get_db
 from schemas import DocumentListResponse, DocumentOut, DocumentStatusResponse, DocumentUploadResponse
 from services import documents as doc_service
+from services.documents.storage import save_original, load_original, delete_original
 from services.audit import write_audit_log
 from .ingestion_tasks import _doc_subscribers, _start_ingestion
 from .validation import ALLOWED_TYPES, MAX_FILE_SIZE
@@ -28,6 +29,8 @@ async def upload_document(request: Request, response: Response, file: UploadFile
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail=f"File type '{file.content_type}' not allowed. Accepted: PDF, DOCX, TXT, images")
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty document")
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File exceeds 25MB limit")
     doc_id = str(uuid.uuid4())
@@ -35,6 +38,7 @@ async def upload_document(request: Request, response: Response, file: UploadFile
     storage_path = f"projects/{project_id}/documents/{doc_id}/{safe_filename}"
     result = await doc_service.upload_document(db=db, user=user, filename=safe_filename, file_type=file.content_type, storage_path=storage_path, project_id=project_id)
     await write_audit_log(db=db, project_id=project_id, actor_id=user.id, action="document.uploaded", resource_type="document", resource_id=result["id"], meta={"filename": result["filename"]})
+    await asyncio.to_thread(save_original, project_id, result["id"], content)
     await db.commit()
     _start_ingestion(async_session_factory, result["id"], content)
     return DocumentUploadResponse(id=result["id"], filename=result["filename"], status="pending", message="Document uploaded and queued for processing")
@@ -82,30 +86,45 @@ async def get_document_entities(document_id: str, project_id: str = Depends(get_
 
 @router.delete("/{document_id}")
 async def delete_document(document_id: str, project_id: str = Depends(get_project_id), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    status = await doc_service.get_document_status(db, document_id, project_id)
+    if status and status["status"] in ("pending", "processing"):
+        raise HTTPException(status_code=409, detail="Wait for processing to finish before deleting this document")
     deleted = await doc_service.delete_document(db, document_id, project_id)
     if not deleted:
         raise DocumentNotFoundError()
     await write_audit_log(db=db, project_id=project_id, actor_id=user.id, action="document.deleted", resource_type="document", resource_id=document_id)
     await db.commit()
+    await asyncio.to_thread(delete_original, project_id, document_id)
     return {"deleted": True}
 
 
 @router.post("/{document_id}/retry", status_code=202)
 async def retry_document(document_id: str, request: Request, response: Response, project_id: str = Depends(get_project_id), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    form = await request.form()
-    file = form.get("file")
-    if file is None:
-        raise HTTPException(status_code=400, detail="Re-upload the file to retry: POST /documents/{id}/retry with the file as multipart 'file'")
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File exceeds 25MB limit")
     status = await doc_service.get_document_status(db, document_id, project_id)
     if not status:
         raise DocumentNotFoundError()
-    if status["status"] not in ("pending", "failed"):
-        raise HTTPException(status_code=409, detail=f"Document status is '{status['status']}'; only pending/failed documents can be retried")
+    if status["status"] != "failed":
+        raise HTTPException(status_code=409, detail="Only failed documents can be retried")
+    form = await request.form()
+    file = form.get("file")
+    if file is None:
+        try:
+            content = await asyncio.to_thread(load_original, project_id, document_id)
+        except FileNotFoundError:
+            raise HTTPException(status_code=400, detail="Original file unavailable for this older upload; re-upload the file as multipart 'file'")
+    else:
+        if not hasattr(file, "read") or file.content_type not in ALLOWED_TYPES:
+            raise HTTPException(status_code=400, detail="Unsupported retry file")
+        content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty document")
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File exceeds 25MB limit")
     doc = await db.get(Document, uuid.UUID(document_id))
     if doc:
+        if file is not None and file.content_type != doc.file_type:
+            raise HTTPException(status_code=400, detail="Retry file must use the original document type")
+        await asyncio.to_thread(save_original, project_id, document_id, content)
         doc.status = "pending"
         doc.error_message = None
         await db.commit()

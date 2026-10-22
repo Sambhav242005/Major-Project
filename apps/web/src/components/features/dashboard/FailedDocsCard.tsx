@@ -32,7 +32,7 @@ export function FailedDocsCard({ documents, onRetry }: FailedDocsCardProps) {
               {doc.error_message ?? "Unknown error"}
             </span>
             <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => onRetry(doc.id)}>
-              Retry
+              Review &amp; retry
             </Button>
           </div>
         ))}

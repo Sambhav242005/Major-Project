@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from .browser import _run_blocking, join_and_record
 from .errors import GoogleMeetError
 from .transcription import transcribe_audio
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ async def analyze_transcript(transcript: str) -> dict:
     try:
         response = await chat_completion(
             messages=messages,
-            model="llama-3.3-70b-versatile",
+            model=settings.LLM_CHAT_MODEL,
             temperature=0.2,
             max_tokens=1500,
         )
@@ -62,12 +63,7 @@ async def analyze_transcript(transcript: str) -> dict:
         return {"summary": response[:500], "key_points": [], "action_items": [], "sentiment": "neutral"}
     except Exception as e:
         logger.exception("Meeting analysis failed: %s", e)
-        return {
-            "summary": "Meeting analysis failed: " + str(e),
-            "key_points": [],
-            "action_items": [],
-            "sentiment": "neutral",
-        }
+        raise GoogleMeetError("Meeting analysis failed; check model authorization and configuration") from e
 
 
 async def run_meeting_bot(meet_link: str, duration_seconds: int = 60, progress=None) -> dict:

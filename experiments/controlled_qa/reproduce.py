@@ -34,6 +34,7 @@ RUNTIME_SNAPSHOT_FILES = (
     "apps/api/pipelines/llm_client.py",
     "apps/api/pipelines/embeddings/embedding_function.py",
     "apps/api/services/chat/streaming.py",
+    "apps/api/pipelines/parser.py",
 )
 RUNTIME_SNAPSHOT = HERE / "runtime_snapshot"
 # The manifest also hashes its original tooling/documentation. Retain those

@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 from functools import partial
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete
 
-from db.models import Document, DocumentChunk
+from db.models import Document, DocumentChunk, EntityMention, Relationship
 from pipelines.chunking import chunk_pages
 from pipelines.embeddings import upsert_chunks
 from pipelines.ingestion.notifier import _notify
@@ -46,6 +47,7 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
                 error_message="No text content could be extracted from the document"
             )
             await db.commit()
+            _notify(document_id, {"stage": "failed", "status": "failed", "error_message": "No text content could be extracted from the document"})
             return
 
         logger.info(f"Chunking {len(pages)} pages")
@@ -58,10 +60,13 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
                 error_message="Document produced no chunks after processing"
             )
             await db.commit()
+            _notify(document_id, {"stage": "failed", "status": "failed", "error_message": "Document produced no chunks after processing"})
             return
 
         logger.info(f"Embedding {len(chunks)} chunks")
         _notify(document_id, {"stage": "embedding", "status": "running", "chunk_count": len(chunks), "timestamp": datetime.now(timezone.utc).isoformat()})
+        from pipelines.embeddings import delete_document_chunks
+        await _offload(delete_document_chunks, document_id)
         chroma_ids = await _offload(
             upsert_chunks,
             chunks,
@@ -69,6 +74,11 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
             document_id,
         )
 
+        # A retry replaces partial work instead of accumulating duplicate chunks
+        # and graph evidence from a previously failed extraction.
+        await db.execute(delete(EntityMention).where(EntityMention.document_id == doc.id))
+        await db.execute(delete(Relationship).where(Relationship.source_document_id == doc.id))
+        await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc.id))
         db_chunks = []
         for i, chunk in enumerate(chunks):
             db_chunk = DocumentChunk(

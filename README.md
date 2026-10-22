@@ -280,13 +280,63 @@ Pending live deployment checks remain tracked in [TODO](docs/TODO.md).
 
 ### Raspberry Pi 5 (isolated deployment)
 
+The current Pi release serves HTTPS on **9900**, with the API diagnostic port
+**9901 bound to loopback**. PostgreSQL, Chroma and the frontend's internal port
+are not published. Personal ChatGPT authorization uses a temporary loopback
+callback; it is independent of application login and MCP resource authentication.
+Set `LOCAL_AUTH_ALLOW_SIGNUP=true` only when public local registration is wanted.
+Local signup stores password hashes and creates isolated accounts; it does not
+verify email ownership or provide an email password-reset service. Demo login is
+disabled. New uploads retain private originals for retry; earlier uploads may
+still need their original file supplied again.
+
+`POST /mcp` implements authenticated stateless Streamable HTTP with three
+read-only tools: `search_knowledge_base`, `fetch_document`, and
+`get_knowledge_graph`. Send a user Bearer token, the JSON/SSE Accept header and
+the selected `project_id`. Browser ChatGPT connector OAuth is not supplied by
+the model-provider sign-in. Outbound connection tests perform MCP initialization
+and tool discovery; arbitrary external tool execution/import is not implemented.
+
+#### Automatic updates from main
+
+After an initial verified deployment, `infra/pi/watch_main.py` checks GitHub
+every three minutes and deploys a changed `main` revision only after its
+**Continuous integration** workflow succeeds. It extracts application and
+infrastructure files into `.release/releases/<sha>`, validates the AKGB service,
+port and storage boundaries, builds tagged images, makes a private database dump,
+applies migrations, recreates only AKGB application containers, and checks HTTPS
+health and the sign-in page. Failed candidates leave a log and restore previous
+application containers; database migrations are **not** automatically reversed.
+The smoke check is not proof of every provider-dependent feature.
+
+The optional `infra/pi/updater.compose.yaml` runs this updater without inbound
+ports and with restart-after-reboot enabled. It needs the AKGB directory and the
+Docker control socket. Its deployment policy limits changes to AKGB, but Docker
+socket access is powerful and is not an operating-system security sandbox.
+Keep the updater image/configuration private and reviewed. The deployment must
+seed `.release/current.json` before starting it. `main_sha` records the last
+observed main revision when the initial tested build comes from a feature branch.
+Merging reviewed changes into `main` then triggers the normal update path.
+
+```sh
+cd /home/pulkit26/akgb/infra/pi
+docker compose -f updater.compose.yaml up -d --build
+docker compose -f updater.compose.yaml logs --tail 50 -f updater
+```
+
+These commands manage the separate `akgb-updater` project. Stop it independently
+with `docker compose -f updater.compose.yaml stop` before manually stopping the
+application for maintenance. No host Caddy, cron, systemd, router or DNS changes
+are required. The gateway supports the configured public hostname and LAN IP;
+the operator forwards only TCP 9900. Port 9901 remains loopback-only.
+
 The configuration in `infra/pi/compose.yaml` prepares a separate `akgb` Docker
 Compose project: Next.js, one FastAPI worker, PostgreSQL 16 and persistent API
 data. Local accounts and application tables live in the dedicated Pi database;
 Supabase is optional. The template selects personal ChatGPT-plan OAuth for generation and
 CPU MiniLM for embeddings. No MCP server
-is required for these model calls. This is preparation, not a verified live
-deployment; ARM64 image builds and end-to-end checks remain release gates.
+is required for these model calls. Release gates include ARM64 builds, isolated
+tests, actual ingestion/model calls, and a database backup restoration check.
 
 1. Confirm the Pi runs a 64-bit OS and has Docker/Compose, sufficient disk and
    free memory. Put the reviewed application checkout under a dedicated directory
@@ -296,7 +346,8 @@ deployment; ARM64 image builds and end-to-end checks remain release gates.
 2. Copy `infra/pi/.env.example` to a private `infra/pi/.env`. Keep
    `AUTH_PROVIDER=local`; generate an independent `LOCAL_AUTH_SECRET` with
    `openssl rand -hex 32`. Local accounts use salted password hashes and signed,
-   expiring access tokens; public signup is disabled. Supabase variables can stay
+   expiring access tokens; signup is disabled by default. Set
+   `LOCAL_AUTH_ALLOW_SIGNUP=true` for the private LAN registration flow. Supabase variables can stay
    empty. Keep `MOCK_AUTH=false` in production.
 3. Authorize a fresh AKGB ChatGPT registration using the included OAuth tool.
    This is a personal/self-hosted integration, subject to account eligibility,
@@ -344,8 +395,12 @@ deployment; ARM64 image builds and end-to-end checks remain release gates.
    private behind this gateway; deployments without this trusted hop retain the
    socket-IP limit. Rebuild the web image and have the operator recreate the AKGB
    containers after configuring this new secret; do not alter other services.
-   The LAN defaults are `APP_URL=https://192.168.1.100:13000` and
-   `API_URL=https://192.168.1.100:13000/api`, without trailing slashes.
+   Set `PUBLIC_HOST=wg.pulkitworks.info`,
+   `APP_URL=https://wg.pulkitworks.info:9900` and `API_URL=/api`.
+   Relative API URLs keep requests on the browser's HTTPS origin. Compose sets
+   server-only `AUTH_ALLOWED_ORIGINS` and backend `CORS_ORIGINS` to the public
+   origin and `https://${LAN_IP}:${WEB_PORT}`. Only those exact origins can submit
+   local login/logout requests; LAN and public addresses have separate cookies.
    Protect the file with `chmod 600 .env`. Never publish `docker compose config`
    output: it expands credentials. Validate using `docker compose config --quiet`.
 5. From `infra/pi`, build with `docker compose build`. ARM64 dependency support is
@@ -361,9 +416,9 @@ deployment; ARM64 image builds and end-to-end checks remain release gates.
    bootstrap schema as current. Check the migration version with
    `docker compose run --rm --no-deps api alembic current`.
 7. Start the application with `docker compose up -d api web gateway`. The new
-   gateway binds **192.168.1.100:13000** for LAN HTTPS; its Caddyfile permits
-   `192.168.1.0/24` and rejects other client addresses. The API's diagnostic port
-   remains **127.0.0.1:18000**. PostgreSQL and the web container have no published
+   gateway binds **192.168.1.100:9900** for HTTPS on both configured hostnames.
+   The API's diagnostic port
+   remains **127.0.0.1:9901**. PostgreSQL and the web container have no published
    ports. Check `docker compose ps` and API `/health`.
    The named API volume must permit UID 10001 to write `/data/chroma` and
    `/data/meet_recordings`; verify actual ownership rather than bypassing the
@@ -378,10 +433,20 @@ deployment; ARM64 image builds and end-to-end checks remain release gates.
    `docker compose cp gateway:/data/caddy/pki/authorities/local/root.crt ./akgb-lan-root.crt`.
    Transfer it over SSH and explicitly trust it on each intended LAN client;
    never export `root.key`. Verify with
-   `curl --cacert akgb-lan-root.crt https://192.168.1.100:13000/api/health`.
+   `curl --cacert akgb-lan-root.crt https://192.168.1.100:9900/api/health`.
    Do not use `curl -k` as proof of valid HTTPS. Existing host Caddy, DNS, routing
-   and port forwarding remain unchanged and operator-managed. Review the LAN
-   subnet restriction before using another subnet or preparing public access.
+   and port forwarding remain unchanged and operator-managed.
+   For publicly trusted domain HTTPS, obtain a certificate using DNS validation
+   (no inbound 80/443 required). Store the full chain and private key in the
+   persistent gateway volume at `/data/akgb/public/fullchain.pem` and
+   `/data/akgb/public/key.pem`, with the private key readable only by its owner.
+   Set `PUBLIC_TLS=/data/akgb/public/fullchain.pem /data/akgb/public/key.pem` in
+   the private Pi `.env`; validate Caddy, then recreate only the AKGB gateway.
+   The LAN IP retains its private-CA certificate. `PUBLIC_TLS=internal` is the
+   explicit fallback and requires client trust; it is not public browser trust.
+   Manual DNS issuance requires manual renewal before certificate expiry.
+   Keep ACME accounts, certificate keys and backups out of Git. Deployment health
+   checks use the verified LAN HTTPS endpoint, independent of router forwarding.
 9. Verify real signup/sign-in, default-project creation, document upload and
    processing, graph retrieval, streamed answers with citations, and agent
    execution. Test a second account for isolation. Verify embedding and chat
@@ -493,6 +558,7 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 |----------|----------|---------|-------------|
 | `ENVIRONMENT` | No | `development` | `development` or `production` (dev forces `sqlite+aiosqlite:///./akgb.db`) |
 | `AUTH_PROVIDER` | No | `supabase` | `local` for administrator-created Pi accounts; `supabase` for managed Auth |
+| `LOCAL_AUTH_ALLOW_SIGNUP` | No | `false` | Explicitly enable local registration; keep disabled when administrator-provisioned accounts are required |
 | `LOCAL_AUTH_SECRET` | Local auth | — | Independent signing secret of at least 32 random characters; backend only |
 | `AUTH_PROXY_SECRET` | Pi stack | — | Separate secret of at least 32 random characters, shared only with the web server to authenticate forwarded login client IPs; optional outside this proxy topology |
 | `LOCAL_AUTH_TOKEN_TTL_SECONDS` | No | `3600` | Local-session lifetime; 60–86400 seconds |
@@ -532,8 +598,9 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | `NEXT_PUBLIC_AUTH_PROVIDER` | No | `supabase` | Build-time choice: `local` administrator-created accounts or `supabase` |
 | `API_INTERNAL_URL` | No | `NEXT_PUBLIC_API_URL`, then `http://localhost:8000` | Server-only API address for local login and session verification; Pi uses `http://api:8000` |
 | `AUTH_PROXY_SECRET` | Pi stack | — | Server-only counterpart to the API secret; never use a `NEXT_PUBLIC_` prefix or expose the web server outside the trusted gateway |
+| `AUTH_ALLOWED_ORIGINS` | No | `NEXT_PUBLIC_APP_URL` | Server-only JSON array of exact origins allowed for local authentication; malformed values fail closed |
 | `NEXT_PUBLIC_APP_URL` | No | `localhost:3000` | App base URL |
-| `NEXT_PUBLIC_API_URL` | Yes for hosting | `http://localhost:8000` | Public backend API URL; set before building |
+| `NEXT_PUBLIC_API_URL` | Yes for hosting | `http://localhost:8000` | Browser API base; Pi uses same-origin `/api`; set before building |
 
 \* Required when using Supabase auth with `NEXT_PUBLIC_MOCK_AUTH=false`; not required when `NEXT_PUBLIC_AUTH_PROVIDER=local`.
 

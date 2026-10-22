@@ -39,10 +39,10 @@ export function useMCP({ token, projectId }: UseMCPOptions) {
   }, [fetchConnections]);
 
   const createConnection = useCallback(
-    async (payload: { name: string; endpoint_url: string; auth_config?: Record<string, unknown> }) => {
-      if (!token || !projectId) return null;
+    async (payload: { direction: "sender" | "receiver"; name: string; endpoint_url: string; auth_config?: Record<string, unknown> }) => {
+      if (!token || !projectId) throw new Error("Select a project and sign in first.");
       try {
-      const conn = await apiFetch<MCPConnectionRaw>("/mcp/connections", {
+      const { connection: conn } = await apiFetch<{ connection: MCPConnectionRaw }>("/mcp/connections", {
           method: "POST",
           token,
           projectId,
@@ -52,7 +52,7 @@ export function useMCP({ token, projectId }: UseMCPOptions) {
         return conn;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create connection");
-        return null;
+        throw e;
       }
     },
     [token, projectId]
@@ -79,33 +79,30 @@ export function useMCP({ token, projectId }: UseMCPOptions) {
     async (connectionId: string, payload: Partial<MCPConnectionRaw>) => {
       if (!token || !projectId) return;
       try {
-        const updated = await apiFetch<MCPConnectionRaw>(`/mcp/connections/${connectionId}`, {
+        const { connection: updated } = await apiFetch<{ connection: MCPConnectionRaw }>(`/mcp/connections/${connectionId}`, {
           method: "PATCH", token, projectId, body: payload,
         });
         setConnections((prev) => prev.map((c) => c.id === connectionId ? updated : c));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to update connection");
+        throw e;
       }
     }, [token, projectId]
   );
 
   const syncConnection = useCallback(async (connectionId: string) => {
-    if (!token || !projectId) return;
+    if (!token || !projectId) throw new Error("Select a project and sign in first.");
     try {
-      await apiFetch(`/mcp/connections/${connectionId}/sync`, { method: "POST", token, projectId });
+      const result = await apiFetch<{ status: string; protocol_version: string; tool_count: number | null }>(`/mcp/connections/${connectionId}/test`, { method: "POST", token, projectId, timeoutMs: 45000 });
+      setConnections((prev) => prev.map((connection) => connection.id === connectionId ? { ...connection, status: result.status } : connection));
+      setError(null);
+      return result;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync failed");
+      setError(e instanceof Error ? e.message : "Connection test failed");
+      throw e;
     }
   }, [token, projectId]);
 
-  const syncMeetings = useCallback(async () => {
-    if (!token || !projectId) return;
-    try {
-      await apiFetch("/meetings/sync", { method: "POST", token, projectId, body: { source: "google_meet" } });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Sync failed");
-    }
-  }, [token, projectId]);
 
   return {
     connections,
@@ -115,7 +112,6 @@ export function useMCP({ token, projectId }: UseMCPOptions) {
     updateConnection,
     deleteConnection,
     syncConnection,
-    syncMeetings,
     refresh: fetchConnections,
   };
 }

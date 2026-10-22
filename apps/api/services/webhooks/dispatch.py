@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import WebhookDelivery, WebhookSubscription
+from core.outbound import validate_public_https_url
 
 from .signing import MAX_RETRIES, RETRY_DELAYS, _sign_payload
 
@@ -43,6 +44,7 @@ async def dispatch_delivery(db: AsyncSession, delivery_id: str) -> bool:
         headers["X-Webhook-Signature"] = f"sha256={signature}"
 
     try:
+        await validate_public_https_url(subscription.url)
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 subscription.url,
@@ -76,9 +78,11 @@ async def dispatch_delivery(db: AsyncSession, delivery_id: str) -> bool:
         return False
 
 
-async def dispatch_pending_deliveries(db: AsyncSession) -> int:
+async def dispatch_pending_deliveries(db: AsyncSession, project_id: str) -> int:
     """Dispatch all pending webhook deliveries that are due for retry."""
-    stmt = select(WebhookDelivery).where(
+    stmt = select(WebhookDelivery).join(WebhookSubscription).where(
+        WebhookSubscription.project_id == uuid.UUID(project_id),
+        WebhookSubscription.active == True,
         WebhookDelivery.success == False,
         WebhookDelivery.attempts < MAX_RETRIES,
         WebhookDelivery.next_retry_at <= datetime.now(timezone.utc),

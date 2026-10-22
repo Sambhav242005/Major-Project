@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { apiFetch, API_BASE } from "@/lib/api/client";
+import { apiFetch, withProject } from "@/lib/api/client";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { useProjectStore } from "@/stores/project";
 import { ChatBubble, ChatSuggestions, ChatInput, ChatHeader } from "@/components/features/chat";
 import type { ChatMessage } from "@/components/features/chat";
+import { readChatStream } from "@/lib/chat-stream";
 
 export default function ChatPage() {
   const [supabase] = useState(() => createClient());
@@ -16,6 +17,7 @@ export default function ChatPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamBufferRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
@@ -32,9 +34,11 @@ export default function ChatPage() {
   }, []);
 
   const createSession = useCallback(async () => {
+    abortRef.current?.abort();
     setLoading(true);
     setMessages([]);
     setSessionId(null);
+    setSessionError(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -53,7 +57,7 @@ export default function ChatPage() {
         setSessionId(data.id);
       }
     } catch (e) {
-      console.error("Failed to create chat session:", e);
+      setSessionError(e instanceof Error ? e.message : "Failed to create chat session");
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -100,8 +104,8 @@ export default function ChatPage() {
     abortRef.current = controller;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
+      if (!session) throw new Error("Your session expired. Sign in again.");
+      const res = await fetch(withProject(`/chat/sessions/${sessionId}/messages`, activeProjectId), {
         method: "POST",
         signal: controller.signal,
         headers: {
@@ -110,62 +114,42 @@ export default function ChatPage() {
         },
         body: JSON.stringify({ message: userMessage }),
       });
-      if (!res.ok) throw new Error("Failed to send message");
-      const reader = res.body?.getReader();
-      if (!reader) return;
-      const decoder = new TextDecoder();
-      let buffer = "";
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.detail || "Failed to send message");
+      }
+      if (!res.body) throw new Error("No response stream received");
       let chunkCount = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.type === "chunk") {
-              streamBufferRef.current += data.content;
-              chunkCount++;
-              if (chunkCount % 10 === 0) flushBuffer();
-            } else if (data.type === "citations") {
-              flushBuffer();
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === "assistant") {
-                  updated[updated.length - 1] = { ...last, citations: data.citations };
-                }
-                return updated;
-              });
-            } else if (data.type === "error") {
-              flushBuffer();
-              setMessages((prev) => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                if (last && last.role === "assistant") {
-                  updated[updated.length - 1] = { ...last, content: `Error: ${data.error}` };
-                }
-                return updated;
-              });
+      for await (const data of readChatStream(res.body)) {
+        if (data.type === "chunk") {
+          streamBufferRef.current += data.content;
+          chunkCount++;
+          if (chunkCount % 10 === 0) flushBuffer();
+        } else if (data.type === "citations") {
+          flushBuffer();
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last && last.role === "assistant") {
+              updated[updated.length - 1] = { ...last, citations: data.citations };
             }
-          } catch { /* Skip malformed JSON */ }
+            return updated;
+          });
         }
       }
       flushBuffer();
     } catch (err) {
-      if (!(err instanceof DOMException && err.name === "AbortError")) {
+      if (mountedRef.current) {
         console.error("Chat error:", err);
-        flushBuffer();
+        streamBufferRef.current = "";
         setMessages((prev) => {
           const updated = [...prev];
           const last = updated[updated.length - 1];
           if (last && last.role === "assistant") {
             updated[updated.length - 1] = {
               ...last,
-              content: "Failed to get response. Make sure the backend is running.",
+              content: controller.signal.aborted ? "Response stopped before completion. Send the question again to retry." : err instanceof Error ? err.message : "Failed to get a complete response. Please try again.",
+              citations: [],
             };
           }
           return updated;
@@ -175,7 +159,7 @@ export default function ChatPage() {
       if (mountedRef.current) setStreaming(false);
       abortRef.current = null;
     }
-  }, [message, streaming, sessionId, flushBuffer, supabase]);
+  }, [message, streaming, sessionId, flushBuffer, supabase, activeProjectId]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();
@@ -197,6 +181,7 @@ export default function ChatPage() {
     <div className="min-h-screen bg-app-bg flex flex-col">
       <DashboardHeader title="Chat" showBack backHref="/dashboard" />
       <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-6 flex flex-col">
+        {sessionError && <p role="alert" className="text-sm text-red-400 mb-4">{sessionError} <button onClick={() => { void createSession(); }} className="underline">Retry connection</button></p>}
         <ChatHeader
           projectName={activeProject?.name ?? null}
           onNewSession={sessionId ? () => { void createSession(); } : undefined}

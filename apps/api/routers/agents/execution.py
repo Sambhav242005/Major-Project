@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.deps import get_project_id
 from core.rate_limit import limiter
 from core.security import User, get_current_user
-from core.sse import queue_sse_stream
+from core.sse import queue_sse_stream, generator_sse_stream
 from core.task_queue import start_agent_task, subscribe_task, unsubscribe_task
 from db.models import AgentTask
 from db.session import async_session_factory, get_db
@@ -104,8 +104,19 @@ async def stream_agent_task(
     task_id: str,
     project_id: str = Depends(get_project_id),
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """SSE stream for real-time agent task progress."""
+    try:
+        task = await agent_service.get_task(db, agent_id, task_id, project_id)
+    except ValueError:
+        task = None
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task["status"] in ("completed", "failed"):
+        async def terminal_event():
+            yield {"step": "complete", "status": task["status"], "output": task.get("output"), "error": task.get("error")}
+        return await generator_sse_stream(terminal_event())
     return await queue_sse_stream(
         subscribe=lambda: subscribe_task(task_id),
         unsubscribe=lambda q: unsubscribe_task(task_id, q),

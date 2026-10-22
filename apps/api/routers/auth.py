@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from core.security import get_current_user, User
 from core.config import settings
@@ -14,6 +15,12 @@ router = APIRouter()
 class LocalLogin(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=1024)
+
+
+class LocalSignup(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=12, max_length=1024)
+    full_name: str = Field(default="", max_length=200)
 
 
 @router.post("/local-login")
@@ -35,8 +42,27 @@ async def local_login(request: Request, response: Response, credentials: LocalLo
 
 @router.post("/local-signup")
 @router.post("/signup")
-async def local_signup():
-    raise HTTPException(status_code=403, detail="Public registration is disabled. Ask the administrator to create an account.")
+@limiter.limit("5/minute", key_func=local_login_rate_limit_key)
+async def local_signup(request: Request, response: Response, credentials: LocalSignup, db: AsyncSession = Depends(get_db)):
+    if settings.AUTH_PROVIDER != "local" or not settings.LOCAL_AUTH_ALLOW_SIGNUP:
+        raise HTTPException(status_code=403, detail="Public registration is disabled. Ask the administrator to create an account.")
+    from core.local_auth import create_account, create_access_token
+
+    try:
+        account = await create_account(db, credentials.email, credentials.password, credentials.full_name)
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except IntegrityError:
+        # The unique constraint also handles simultaneous requests for one email.
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="An account already exists for this email.") from None
+    token, expires_at = create_access_token(account.id, account.email)
+    await db.commit()
+    user = {"id": str(account.id), "email": account.email}
+    response.headers["Cache-Control"] = "no-store"
+    return {"user": user, "session": {"access_token": token, "user": user, "expires_at": expires_at,
+                                      "expires_in": settings.LOCAL_AUTH_TOKEN_TTL_SECONDS, "token_type": "bearer"}}
 
 
 @router.get("/me")
@@ -52,7 +78,7 @@ async def mock_login(request: Request, response: Response):
     Returns a fake JWT token and sets cookies for the frontend.
     Only works when MOCK_AUTH=true.
     """
-    if not settings.MOCK_AUTH:
+    if not settings.MOCK_AUTH or settings.ENVIRONMENT != "development":
         return JSONResponse(
             status_code=403,
             content={"detail": "Mock login disabled. Set MOCK_AUTH=true in .env"},

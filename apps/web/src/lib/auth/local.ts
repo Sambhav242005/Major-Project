@@ -19,9 +19,19 @@ export const localCookieOptions = () => ({
 
 export function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
-  const expected = process.env.NEXT_PUBLIC_APP_URL || request.url;
   try {
-    return origin === new URL(expected).origin;
+    const configured = process.env.AUTH_ALLOWED_ORIGINS;
+    // This private runtime setting is consumed only by server route handlers.
+    // Never derive trusted origins from Host, forwarded headers or request.url.
+    const allowed: unknown = configured === undefined
+      ? [new URL(process.env.NEXT_PUBLIC_APP_URL || "").origin]
+      : JSON.parse(configured);
+    if (!Array.isArray(allowed) || allowed.length === 0 || !allowed.every((entry) => {
+      if (typeof entry !== "string") return false;
+      const url = new URL(entry);
+      return ["https:", "http:"].includes(url.protocol) && url.origin === entry;
+    })) return false;
+    return origin !== null && allowed.includes(origin);
   } catch {
     return false;
   }

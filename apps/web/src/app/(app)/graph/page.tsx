@@ -42,28 +42,6 @@ interface ApiGraphResponse {
 }
 
 
-interface ApiGraphNode {
-  id: string;
-  name: string;
-  type: string;
-  description: string | null;
-}
-
-interface ApiGraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  relation_type: string;
-  description: string | null;
-  confidence: number;
-}
-
-interface ApiGraphResponse {
-  nodes: ApiGraphNode[];
-  edges: ApiGraphEdge[];
-}
-
-
 export default function GraphPage() {
   const [supabase] = useState(() => createClient());
 
@@ -183,7 +161,7 @@ export default function GraphPage() {
         setSelectedEntity(entityRes.entity);
         setEntityChunks(dedupeEntityChunks(chunksRes.chunks || []));
       } catch (e) {
-        console.error("Failed to fetch entity:", e);
+        setError(e instanceof Error ? e.message : "Failed to load entity evidence");
         setSelectedEntity(null);
         setEntityChunks([]);
       }
@@ -199,6 +177,15 @@ export default function GraphPage() {
     };
     init();
   }, [loadProjects, projects.length, supabase.auth]);
+
+  useEffect(() => {
+    clearGraph();
+    setSelectedEntity(null);
+    setEntityChunks([]);
+    setGraphNodes([]);
+    setGraphEdges([]);
+    setTypeFilter([]);
+  }, [activeProjectId, clearGraph]);
 
   useEffect(() => {
     fetchGraph();
@@ -226,7 +213,7 @@ export default function GraphPage() {
       selectEntity(match.id);
       fetchGraph(match.id);
       fetchEntity(match.id);
-    }
+    } else setError("No entity with that name exists in the loaded graph. Choose a displayed entity name.");
   };
 
   return (
@@ -238,7 +225,7 @@ export default function GraphPage() {
         <span className="font-medium text-app-text">{activeProject?.name ?? "—"}</span>
         <span className="flex-1" />
         <button
-          onClick={clearGraph}
+          onClick={() => { clearGraph(); setGraphNodes([]); setGraphEdges([]); setSelectedEntity(null); setEntityChunks([]); }}
           disabled={storeNodes.length === 0}
           className="text-xs px-3 py-1.5 rounded-lg bg-app-surface border border-app-border-strong text-app-muted hover:text-app-text transition-colors disabled:opacity-40"
         >

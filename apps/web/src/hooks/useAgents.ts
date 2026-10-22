@@ -3,7 +3,7 @@
  */
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, withProject } from "@/lib/api/client";
 import type {
   SearchResults,
@@ -39,6 +39,12 @@ export function useAgents({ token, projectId }: UseAgentsOptions) {
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
   const [entityDetail, setEntityDetail] = useState<EntityDetail | null>(null);
   const [searching, setSearching] = useState(false);
+  const stopStreamRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    setAgents([]); setTasks([]);
+    return () => { stopStreamRef.current?.(); stopStreamRef.current = null; };
+  }, [projectId]);
 
   const fetchAgents = useCallback(async () => {
     if (!token || !projectId) return;
@@ -58,8 +64,10 @@ export function useAgents({ token, projectId }: UseAgentsOptions) {
 
   const fetchTasks = useCallback(async (agentId: string) => {
     if (!token || !projectId) return;
-    const response = await apiFetch<{ tasks: AgentTask[] }>(`/agents/${agentId}/tasks`, { token, projectId });
-    setTasks(response.tasks ?? []);
+    try {
+      const response = await apiFetch<{ tasks: AgentTask[] }>(`/agents/${agentId}/tasks`, { token, projectId });
+      setTasks(response.tasks ?? []);
+    } catch (error) { setError(error instanceof Error ? error.message : "Could not load task history"); }
   }, [token, projectId]);
 
   const fetchTaskDetail = useCallback(async (agentId: string, taskId: string) => {
@@ -83,18 +91,42 @@ export function useAgents({ token, projectId }: UseAgentsOptions) {
 
   const runAgent = useCallback(async (agentId: string, input: string, onTrace: (event: AgentTraceStep) => void, onDone: () => void) => {
     if (!token || !projectId) return;
+    stopStreamRef.current?.();
+    setError(null);
     const response = await apiFetch<{ task_id: string }>(`/agents/${agentId}/run`, {
       method: "POST", token, projectId, body: { input: { query: input, source: "manual_trigger" } },
     });
     const stream = new EventSource(`${withProject(`/agents/${agentId}/tasks/${response.task_id}/stream?token=${encodeURIComponent(token)}`, projectId)}`);
+    let finished = false;
+    let polling = false;
+    const stop = () => { finished = true; stream.close(); clearInterval(timer); };
+    const finish = () => { if (!finished) { stop(); onDone(); } };
+    const poll = async () => {
+      if (finished || polling) return;
+      polling = true;
+      try {
+        const { task } = await apiFetch<{ task: AgentTask }>(`/agents/${agentId}/tasks/${response.task_id}`, { token, projectId });
+        if (task.status === "completed" || task.status === "failed") {
+          if (task.status === "failed") setError(task.error || "Agent task failed. Open its trace for details.");
+          finish();
+        }
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Could not check task status");
+        finish();
+      } finally { polling = false; }
+    };
+    const timer = setInterval(() => { void poll(); }, 3000);
+    stopStreamRef.current = stop;
+    void poll();
     stream.onmessage = (event) => {
       try {
         const traceEvent = JSON.parse(event.data);
         onTrace(traceEvent);
-        if (traceEvent.step === "complete" || traceEvent.status === "error") { stream.close(); onDone(); }
+        if (traceEvent.status === "error") setError(traceEvent.error || "Agent task failed. Open its trace for details.");
+        if (traceEvent.step === "complete" || traceEvent.status === "error") finish();
       } catch { /* ignore malformed trace events */ }
     };
-    stream.onerror = () => { stream.close(); onDone(); };
+    stream.onerror = () => { stream.close(); void poll(); };
   }, [token, projectId]);
 
   useEffect(() => {

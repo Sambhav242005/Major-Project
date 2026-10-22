@@ -1,14 +1,15 @@
 """Document CRUD — upload, fetch, list, update, delete."""
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import _user_uuid
 from core.security import User
-from db.models import Document
+from db.models import Document, DocumentChunk, Entity, EntityMention, Relationship
 
 
 def _doc_to_dict(d: Document) -> dict:
@@ -125,6 +126,14 @@ async def delete_document(db: AsyncSession, document_id: str, project_id: str) -
     doc = result.scalar_one_or_none()
     if not doc:
         return False
+    # Remove external evidence first: a failed vector deletion must not leave a
+    # successfully deleted SQL document still retrievable by chat.
+    from pipelines.embeddings import delete_document_chunks
+    await asyncio.to_thread(delete_document_chunks, document_id)
+    await db.execute(delete(EntityMention).where(EntityMention.document_id == doc.id))
+    await db.execute(delete(Relationship).where(Relationship.source_document_id == doc.id))
+    await db.execute(update(Entity).where(Entity.first_seen_document_id == doc.id).values(first_seen_document_id=None))
+    await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc.id))
     await db.delete(doc)
     await db.flush()
     return True

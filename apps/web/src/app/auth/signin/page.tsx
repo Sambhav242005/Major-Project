@@ -6,7 +6,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { LOCAL_AUTH } from "@/lib/auth/local";
 
-const MOCK_AUTH = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
@@ -56,23 +55,6 @@ export default function SignIn() {
           Sign in to access your knowledge base
         </p>
 
-        {MOCK_AUTH && !LOCAL_AUTH && (
-          <form action="/auth/demo-login" method="post">
-            <button
-              type="submit"
-              className="w-full py-3 bg-amber text-white font-medium rounded-lg hover:bg-amber/90 mb-4 border-2 border-amber/50"
-            >
-              Try Demo (Auto-Login)
-            </button>
-          </form>
-        )}
-
-        <div className="my-6 flex items-center gap-3">
-          <div className="flex-1 h-px bg-app-surface" />
-          <span className="text-xs text-app-muted">or sign in with email</span>
-          <div className="flex-1 h-px bg-app-surface" />
-        </div>
-
         <form onSubmit={handleSignIn} className="space-y-4">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-app-text mb-1">
@@ -80,6 +62,8 @@ export default function SignIn() {
             </label>
             <input
               id="email"
+              autoComplete="email"
+              maxLength={320}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -93,6 +77,8 @@ export default function SignIn() {
             </label>
             <input
               id="password"
+              autoComplete="current-password"
+              maxLength={1024}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -127,14 +113,14 @@ export default function SignIn() {
           Continue with Google
         </button>
 
+        </>}
         <p className="mt-6 text-center text-sm text-app-muted">
           Don&apos;t have an account?{" "}
           <Link href="/auth/signup" className="text-amber-400 hover:underline font-medium">
             Sign up
           </Link>
         </p>
-        </>}
-        {LOCAL_AUTH && <p className="mt-6 text-center text-sm text-app-muted">Contact the project administrator for an account.</p>}
+
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Download, Copy, Check, RefreshCw, Save, Trash2, Loader2 } from "lucide-react";
+import { Send, Download, Copy, Check, Save, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { MCPConnectionRaw } from "@/lib/types";
 
@@ -21,28 +21,34 @@ export function MCPConnectionCard({ connection, onUpdate, onDelete, onSync, isSy
   const [authToken, setAuthToken] = useState((connection.auth_config as { token?: string })?.token ?? "");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isSender = connection.direction === "sender";
   const Icon = isSender ? Send : Download;
   const colorClass = isSender ? "text-sky-400" : "text-emerald-400";
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (connection.endpoint_url) {
-      navigator.clipboard.writeText(connection.endpoint_url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      try {
+        await navigator.clipboard.writeText(connection.endpoint_url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch { setError("Clipboard permission was denied. Select and copy the endpoint manually."); }
     }
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setError(null);
     try {
       await onUpdate(connection.id, {
         name,
         endpoint_url: endpointUrl,
-        auth_config: { token: authToken },
+        auth_config: { ...connection.auth_config, direction: connection.direction, ...(authToken ? { token: authToken } : {}) },
       });
       setEditing(false);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not save connection.");
     } finally {
       setSaving(false);
     }
@@ -67,6 +73,10 @@ export function MCPConnectionCard({ connection, onUpdate, onDelete, onSync, isSy
         </span>
         <span className="text-[10px] text-app-muted ml-auto">{connection.status}</span>
       </div>
+      {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
+      <Button variant="outline" size="sm" className="text-xs" onClick={() => { void onSync(connection.id); }} disabled={isSyncing || !connection.endpoint_url}>
+        {isSyncing ? "Testing MCP handshake..." : "Test connection"}
+      </Button>
 
       {isSender && !editing && (
         <div className="space-y-2">
@@ -80,20 +90,10 @@ export function MCPConnectionCard({ connection, onUpdate, onDelete, onSync, isSy
               {copied ? <Check size={12} /> : <Copy size={12} />}
             </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs"
-            onClick={() => onSync(connection.id)}
-            disabled={isSyncing}
-          >
-            {isSyncing ? <Loader2 size={12} className="mr-1 animate-spin" /> : <RefreshCw size={12} className="mr-1" />}
-            Sync Now
-          </Button>
         </div>
       )}
 
-      {(editing || !isSender) && (
+      {editing && (
         <div className="space-y-2">
           <input
             type="text"
@@ -113,7 +113,7 @@ export function MCPConnectionCard({ connection, onUpdate, onDelete, onSync, isSy
             type="password"
             value={authToken}
             onChange={(e) => setAuthToken(e.target.value)}
-            placeholder="Auth token"
+            placeholder="New auth token (leave blank to keep existing)"
             className="w-full bg-app-surface border border-app-border rounded px-2 py-1 text-xs text-app-text"
           />
           <div className="flex gap-2">
@@ -131,10 +131,11 @@ export function MCPConnectionCard({ connection, onUpdate, onDelete, onSync, isSy
         </div>
       )}
 
-      {!isSender && !editing && (
-        <Button variant="outline" size="sm" className="text-xs" onClick={() => setEditing(true)}>
-          Edit
-        </Button>
+      {!editing && (
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="text-xs" onClick={() => setEditing(true)}>Edit</Button>
+          <Button variant="ghost" size="sm" aria-label={`Delete ${connection.name}`} disabled={deleting} onClick={handleDelete}><Trash2 size={12} /></Button>
+        </div>
       )}
     </div>
   );

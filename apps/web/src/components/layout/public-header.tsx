@@ -9,9 +9,6 @@ export function PublicHeader() {
           AI Knowledge Graph Builder
         </Link>
         <div className="flex items-center gap-4">
-          <Link href="/demo" className="text-sm text-app-muted hover:text-app-text transition-colors">
-            Demo
-          </Link>
           <Link href="/contact" className="text-sm text-app-muted hover:text-app-text transition-colors">
             Contact
           </Link>

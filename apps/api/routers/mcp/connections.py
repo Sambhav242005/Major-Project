@@ -87,14 +87,9 @@ async def test_connection(
     if not conn:
         raise HTTPException(status_code=404, detail="Connection not found")
 
-    auth_config = conn.auth_config or {}
-    oauth_client = create_oauth_client(auth_config)
-    if oauth_client:
-        await oauth_client.load_token_from_db(db, connection_id)
-
     result = await mcp_service.test_connection(db, connection_id, project_id)
     if "error" in result:
-        raise HTTPException(status_code=404, detail=result["error"])
+        raise HTTPException(status_code=502, detail=result["error"])
     return result
 
 

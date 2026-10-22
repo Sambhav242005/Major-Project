@@ -53,7 +53,22 @@ export function createLocalClient(): SupabaseClient {
           return { error: { message: "Cannot reach the sign-in service." } };
         }
       },
-      signUp: async () => ({ data: { user: null, session: null }, error: { message: "Ask the project administrator to create your account." } }),
+      signUp: async (credentials: { email: string; password: string; options?: { data?: { full_name?: string } } }) => {
+        try {
+          const response = await fetch("/auth/local-signup", {
+            method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: credentials.email, password: credentials.password, full_name: credentials.options?.data?.full_name || "" }),
+          });
+          const result = await response.json();
+          if (!response.ok) return { data: { user: null, session: null }, error: { message: result.error || "Account creation failed." } };
+          const session = await currentSession();
+          if (!session) return { data: { user: null, session: null }, error: { message: "Account created. Please sign in to continue." } };
+          listeners.forEach((listener) => listener("SIGNED_IN", session));
+          return { data: { user: session.user, session }, error: null };
+        } catch {
+          return { data: { user: null, session: null }, error: { message: "Cannot reach the registration service. Please try again." } };
+        }
+      },
       signInWithOAuth: async () => ({ data: null, error: { message: "External sign-in is unavailable with local accounts." } }),
       exchangeCodeForSession: async () => ({ data: null, error: { message: "External sign-in is unavailable with local accounts." } }),
       onAuthStateChange: (listener: Listener) => {

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     LOCAL_AUTH_SECRET: str = ""
     AUTH_PROXY_SECRET: str = ""
     LOCAL_AUTH_TOKEN_TTL_SECONDS: int = 3600
+    LOCAL_AUTH_ALLOW_SIGNUP: bool = False
 
     # Mock auth for development (bypasses Supabase)
     MOCK_AUTH: bool = False

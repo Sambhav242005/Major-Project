@@ -32,10 +32,11 @@ async def fire_event(
 
     payload_str = json.dumps(payload, default=str)
     if len(payload_str) > MAX_PAYLOAD_SIZE:
-        payload = json.loads(payload_str[:MAX_PAYLOAD_SIZE])
+        raise ValueError("Webhook payload exceeds the maximum size")
 
     deliveries_created = 0
 
+    delivery_ids = []
     for sub in subscriptions:
         delivery = WebhookDelivery(
             id=uuid.uuid4(),
@@ -48,7 +49,11 @@ async def fire_event(
             created_at=datetime.now(timezone.utc),
         )
         db.add(delivery)
+        delivery_ids.append(str(delivery.id))
         deliveries_created += 1
 
     await db.flush()
+    from .dispatch import dispatch_delivery
+    for delivery_id in delivery_ids:
+        await dispatch_delivery(db, delivery_id)
     return deliveries_created

@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { DashboardStats } from "@/components/features/dashboard";
@@ -11,6 +12,7 @@ import { useDashboard } from "@/hooks/useDashboard";
 import { useProjectStore } from "@/stores/project";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { activeProjectId } = useProjectStore();
   const { token } = useAuth();
   const { data, loading, error: loadError, refresh } = useDashboard({ token, projectId: activeProjectId, pollInterval: 10000 });
@@ -60,7 +62,7 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 my-10">
               <PipelineHealthCard health={data.pipeline_health} />
-              <FailedDocsCard documents={data.failed_documents} onRetry={() => {}} />
+              <FailedDocsCard documents={data.failed_documents} onRetry={(id) => router.push(`/documents/${id}`)} />
               <QuickLinksCard />
             </div>
 

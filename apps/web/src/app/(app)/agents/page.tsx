@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAgents, type AgentTask } from "@/hooks/useAgents";
 import type { AgentTraceStep } from "@/lib/types";
@@ -19,7 +19,7 @@ import {
 export default function AgentsPage() {
   const { token } = useAuth();
   const { projects, activeProjectId } = useProjectStore();
-  const { agents, agentTypes, tasks, loading, fetchTasks, fetchTaskDetail, createAgent, deleteAgent, runAgent } = useAgents({ token, projectId: activeProjectId });
+  const { agents, agentTypes, tasks, loading, error, fetchTasks, fetchTaskDetail, createAgent, deleteAgent, runAgent } = useAgents({ token, projectId: activeProjectId });
   const [selectedAgent, setSelectedAgent] = useState<(typeof agents)[number] | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showTrace, setShowTrace] = useState<AgentTask | null>(null);
@@ -34,6 +34,10 @@ export default function AgentsPage() {
   const [runError, setRunError] = useState<string>("");
   const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
+
+  useEffect(() => {
+    setSelectedAgent(null); setRunning(null); setLiveTrace([]); setShowTrace(null); setRunError("");
+  }, [activeProjectId]);
 
   const handleCreate = async () => {
     if (!newName.trim()) {
@@ -56,6 +60,10 @@ export default function AgentsPage() {
 
   const handleRun = async (agentId: string) => {
     if (!runInput.trim()) return;
+    if (agents.find((agent) => agent.id === agentId)?.type === "google_meet") {
+      setRunError("Server-side meeting bots are unavailable. Use Meetings to record or upload audio.");
+      return;
+    }
     setRunning(agentId);
     setLiveTrace([]);
     setRunError("");
@@ -138,6 +146,7 @@ export default function AgentsPage() {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6">
+        {error && <p role="alert" className="text-sm text-red-400 mb-4">{error}</p>}
         <AgentStats
           agentCount={agents.length}
           taskCount={tasks.length}
@@ -198,6 +207,7 @@ export default function AgentsPage() {
                   onRun={() => handleRun(selectedAgent.id)}
                   isRunning={running === selectedAgent.id}
                   runError={runError}
+                  unavailableReason={selectedAgent.type === "google_meet" ? "Server-side browser and audio capture are unavailable. Use the Meetings page instead." : undefined}
                 />
                 <AgentLiveTrace
                   running={running === selectedAgent.id}
@@ -232,9 +242,13 @@ export default function AgentsPage() {
                   setExpandedSteps(new Set());
                   setTraceLoading(true);
                   setShowTrace({ ...task, trace: [] });
-                  const detail = await fetchTaskDetail(task.agent_id, task.id);
-                  if (detail) setShowTrace(detail);
-                  setTraceLoading(false);
+                  try {
+                    const detail = await fetchTaskDetail(task.agent_id, task.id);
+                    if (detail) setShowTrace(detail);
+                  } catch (error) {
+                    setRunError(error instanceof Error ? error.message : "Could not load task trace");
+                    setShowTrace(null);
+                  } finally { setTraceLoading(false); }
                 }}
               />
             ) : (
