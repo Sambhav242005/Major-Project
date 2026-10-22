@@ -12,6 +12,7 @@ export default function SignUp() {
   const [fullName, setFullName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
   const router = useRouter();
   const [supabase] = useState(() => createClient());
 
@@ -20,7 +21,7 @@ export default function SignUp() {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -34,19 +35,16 @@ export default function SignUp() {
       return;
     }
 
+    if (!data.session) {
+      setMessage("Check your email to confirm your account, then sign in.");
+      setLoading(false);
+      return;
+    }
+
     router.push("/dashboard");
     router.refresh();
   };
 
-  if (LOCAL_AUTH) return (
-    <div className="min-h-screen flex items-center justify-center bg-app-bg">
-      <div className="max-w-md px-6 text-center text-app-text">
-        <h1 className="font-display text-3xl font-semibold mb-4">Project accounts</h1>
-        <p className="text-app-muted mb-6">Contact the project administrator to create your account.</p>
-        <Link href="/auth/signin" className="text-amber-400 hover:underline">Sign in</Link>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-app-bg">
@@ -65,6 +63,8 @@ export default function SignUp() {
             </label>
             <input
               id="fullName"
+              autoComplete="name"
+              maxLength={200}
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -78,6 +78,8 @@ export default function SignUp() {
             </label>
             <input
               id="email"
+              autoComplete="email"
+              maxLength={320}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -95,14 +97,18 @@ export default function SignUp() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={LOCAL_AUTH ? 12 : 6}
+              maxLength={1024}
+              autoComplete="new-password"
               className="w-full px-3 py-2 border border-app-border-strong rounded-lg focus:outline-none focus:ring-2 focus:ring-amber/50 focus:border-amber bg-app-card text-app-text"
             />
+            {LOCAL_AUTH && <p className="mt-1 text-xs text-app-muted">Use at least 12 characters.</p>}
           </div>
 
           {error && (
             <p className="text-rust text-sm">{error}</p>
           )}
+          {message && <p role="status" className="text-sm text-app-muted">{message}</p>}
 
           <button
             type="submit"

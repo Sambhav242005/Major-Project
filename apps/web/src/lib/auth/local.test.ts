@@ -9,6 +9,49 @@ afterEach(() => {
 
 const tokenFor = (expiresAt: number) => `header.${Buffer.from(JSON.stringify({ exp: expiresAt })).toString("base64url")}.signature`;
 
+describe("signup and retired demo", () => {
+  it.each([true, false])("enforces signup origin and keeps sessions HttpOnly (same origin: %s)", async (trusted) => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "local");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.example.com");
+    vi.stubEnv("NODE_ENV", "production");
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ session: { access_token: "signup-token", expires_in: 600 } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { POST } = await import("@/app/auth/local-signup/route");
+    const response = await POST(new NextRequest("https://app.example.com/auth/local-signup", {
+      method: "POST", headers: { origin: trusted ? "https://app.example.com" : "https://attacker.example" },
+      body: JSON.stringify({ email: "member@example.com", password: "a strong test password", full_name: "Member" }),
+    }));
+    expect(response.status).toBe(trusted ? 200 : 403);
+    if (trusted) {
+      expect(await response.json()).toEqual({ ok: true });
+      expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+      expect(response.headers.get("set-cookie")).toContain("Secure");
+    } else expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("never creates a demo session", async () => {
+    const { GET, POST } = await import("@/app/auth/demo-login/route");
+    for (const method of [GET, POST]) {
+      const response = await method();
+      expect(response.status).toBe(404);
+      expect(response.headers.get("set-cookie")).toBeNull();
+    }
+  });
+
+  it("does not create a signup cookie when the backend refuses registration", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "local");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://app.example.com");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ detail: "An account already exists for this email." }, { status: 409 })));
+    const { POST } = await import("@/app/auth/local-signup/route");
+    const response = await POST(new NextRequest("https://app.example.com/auth/local-signup", {
+      method: "POST", headers: { origin: "https://app.example.com" },
+      body: JSON.stringify({ email: "member@example.com", password: "a strong test password" }),
+    }));
+    expect(response.status).toBe(409);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+});
+
 describe("local session verification", () => {
   it("never accepts a cookie without API verification", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("Unauthorized", { status: 401 }));

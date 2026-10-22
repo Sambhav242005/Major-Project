@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import hmac
+import re
 import secrets
 import time
 import uuid
@@ -25,7 +26,10 @@ def normalize_email(email: str) -> str:
     if len(email) > 320 or email.count("@") != 1 or any(char.isspace() for char in email):
         raise ValueError("Provide a valid email address.")
     local, domain = email.split("@")
-    if not local or not domain or "." not in domain:
+    labels = domain.split(".")
+    if (not local or len(local) > 64 or local.startswith(".") or local.endswith(".") or ".." in local
+            or not re.fullmatch(r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+", local)
+            or len(labels) < 2 or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels)):
         raise ValueError("Provide a valid email address.")
     return email
 
@@ -108,7 +112,7 @@ async def authenticate(db: AsyncSession, email: str, password: str) -> LocalAcco
     return account
 
 
-async def create_account(db: AsyncSession, email: str, password: str) -> LocalAccount:
+async def create_account(db: AsyncSession, email: str, password: str, full_name: str = "") -> LocalAccount:
     from db.models import Profile
     import asyncio
 
@@ -118,7 +122,7 @@ async def create_account(db: AsyncSession, email: str, password: str) -> LocalAc
         raise ValueError("A local account already exists for this email.")
     password_hash = await asyncio.to_thread(hash_password, password)
     user_id = uuid.uuid4()
-    db.add(Profile(id=user_id, full_name=email))
+    db.add(Profile(id=user_id, full_name=full_name.strip() or email))
     await db.flush()
     account = LocalAccount(id=user_id, email=email, password_hash=password_hash)
     db.add(account)

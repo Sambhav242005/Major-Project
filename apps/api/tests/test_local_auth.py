@@ -31,6 +31,7 @@ def auth_config(monkeypatch):
     monkeypatch.setattr(settings, "LOCAL_AUTH_SECRET", "test-local-secret-with-more-than-32-characters")
     monkeypatch.setattr(settings, "LOCAL_AUTH_TOKEN_TTL_SECONDS", 3600)
     monkeypatch.setattr(settings, "MOCK_AUTH", False)
+    monkeypatch.setattr(settings, "LOCAL_AUTH_ALLOW_SIGNUP", False)
 
 
 @pytest_asyncio.fixture
@@ -65,6 +66,12 @@ def test_password_hash_uses_random_salt_and_verifies():
 def test_rejects_invalid_new_password_length(password):
     with pytest.raises(ValueError):
         local_auth.hash_password(password)
+
+
+@pytest.mark.parametrize("email", ["x@invalid", "a..b@example.com", ".a@example.com", "a@-invalid.com", "a@example..com", "a@example.com/path"])
+def test_rejects_invalid_email_addresses(email):
+    with pytest.raises(ValueError, match="valid email"):
+        local_auth.normalize_email(email)
 
 
 @pytest.mark.asyncio
@@ -168,7 +175,7 @@ async def test_login_route_and_authenticated_me_with_real_password_and_session(d
         assert (await client.get("/private", headers={"Authorization": f"Bearer {token}"})).status_code == 200
         denied = await client.post("/auth/local-login", json={"email": account.email, "password": "wrong password"})
         assert denied.status_code == 401
-        assert (await client.post("/auth/signup", json={})).status_code == 403
+        assert (await client.post("/auth/signup", json={"email": "new@example.com", "password": "a strong test password"})).status_code == 403
         account.active = False
         await db.commit()
         assert (await client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})).status_code == 401
@@ -230,3 +237,86 @@ async def test_proxied_login_buckets_require_authenticated_client_ip(db, monkeyp
             headers["X-AKGB-Proxy-Secret"] = settings.AUTH_PROXY_SECRET
             headers["X-AKGB-Client-IP"] = "not-an-ip"
             assert (await client.post("/auth/local-login", json=body, headers=headers)).status_code == 429
+
+@pytest.mark.asyncio
+async def test_signup_creates_enabled_account_and_verified_session_without_project_access(db, monkeypatch):
+    from db.models import ProjectMember
+    monkeypatch.setattr(settings, "LOCAL_AUTH_ALLOW_SIGNUP", True)
+    monkeypatch.setattr(limiter, "enabled", False)
+    app = FastAPI()
+    app.add_middleware(GlobalAuthMiddleware)
+    app.include_router(router, prefix="/auth")
+    async def session_override():
+        yield db
+    app.dependency_overrides[get_db] = session_override
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        body = {"email": " New@Example.COM ", "password": "a strong test password", "full_name": "Test Member"}
+        response = await client.post("/auth/local-signup", json=body)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        data = response.json()
+        assert data["user"]["email"] == "new@example.com"
+        assert body["password"] not in response.text
+        token = data["session"]["access_token"]
+        assert (await client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})).status_code == 200
+        profile = await db.get(Profile, uuid.UUID(data["user"]["id"]))
+        assert profile.full_name == "Test Member"
+        assert (await db.execute(select(ProjectMember))).scalars().all() == []
+        duplicate = await client.post("/auth/signup", json=body)
+        assert duplicate.status_code == 400
+        assert "already exists" in duplicate.json()["detail"]
+        assert (await client.post("/auth/local-login", json=body)).status_code == 200
+        assert (await client.post("/auth/signup", json={**body, "email": "bad-email"})).status_code == 400
+        assert (await client.post("/auth/signup", json={**body, "password": "short"})).status_code == 422
+        monkeypatch.setattr(settings, "AUTH_PROVIDER", "supabase")
+        assert (await client.post("/auth/signup", json=body)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_signup_handles_unique_constraint_race_and_rolls_back(db, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    monkeypatch.setattr(settings, "LOCAL_AUTH_ALLOW_SIGNUP", True)
+    monkeypatch.setattr(limiter, "enabled", False)
+    monkeypatch.setattr(local_auth, "create_account", AsyncMock(side_effect=IntegrityError("insert", {}, Exception("duplicate"))))
+    app = FastAPI()
+    app.include_router(router, prefix="/auth")
+    rollback = AsyncMock()
+    monkeypatch.setattr(db, "rollback", rollback)
+    async def session_override():
+        yield db
+    app.dependency_overrides[get_db] = session_override
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/auth/signup", json={"email": "member@example.com", "password": "a strong test password"})
+        assert response.status_code == 409
+        rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mock_login_rejected_outside_development(monkeypatch):
+    monkeypatch.setattr(settings, "MOCK_AUTH", True)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(limiter, "enabled", False)
+    app = FastAPI()
+    app.include_router(router, prefix="/auth")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.post("/auth/mock-login")).status_code == 403
+
+@pytest.mark.asyncio
+async def test_signup_rate_limited_before_expensive_password_hashing(db, monkeypatch):
+    monkeypatch.setattr(settings, "LOCAL_AUTH_ALLOW_SIGNUP", True)
+    monkeypatch.setattr(limiter, "enabled", True)
+    create = AsyncMock(side_effect=ValueError("Provide a valid email address."))
+    monkeypatch.setattr(local_auth, "create_account", create)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.include_router(router, prefix="/auth")
+    async def session_override():
+        yield db
+    app.dependency_overrides[get_db] = session_override
+    transport = httpx.ASGITransport(app=app, client=("198.51.100.244", 3422))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        for _ in range(5):
+            assert (await client.post("/auth/signup", json={"email": "bad-email", "password": "a strong test password"})).status_code == 400
+        assert (await client.post("/auth/signup", json={"email": "bad-email", "password": "a strong test password"})).status_code == 429
+    assert create.await_count == 5

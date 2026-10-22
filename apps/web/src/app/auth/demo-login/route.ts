@@ -1,25 +1,8 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-function createDemoResponse(request: NextRequest) {
-  // 303 See Other: converts POST form submissions into GET /dashboard
-  const response = NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin), 303);
-
-  // Set mock session cookie for demo user
-  response.cookies.set("mock-session", "demo-user-001", {
-    path: "/",
-    maxAge: 3600,
-    httpOnly: false,
-  });
-
-  return response;
+// Demo authentication has been retired. Never issue mock session cookies.
+export async function GET() {
+  return NextResponse.json({ error: "Demo authentication is unavailable. Create an account or sign in." }, { status: 404 });
 }
 
-// GET allows page.goto() in E2E tests
-export async function GET(request: NextRequest) {
-  return createDemoResponse(request);
-}
-
-// POST allows form submissions from landing/signin pages
-export async function POST(request: NextRequest) {
-  return createDemoResponse(request);
-}
+export const POST = GET;

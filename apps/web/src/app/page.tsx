@@ -26,14 +26,7 @@ export default function HomePage() {
             >
               Get Started Free
             </Link>
-            <form action="/auth/demo-login" method="post" className="inline">
-              <button
-                type="submit"
-                className="px-8 py-3 border border-app-border-strong text-app-text font-medium rounded-lg hover:bg-app-card-hover transition-colors text-lg"
-              >
-                Try the Demo
-              </button>
-            </form>
+            <Link href="/auth/signin" className="px-8 py-3 border border-app-border-strong text-app-text font-medium rounded-lg hover:bg-app-card-hover transition-colors text-lg">Sign in</Link>
           </div>
         </Reveal>
       </section>
