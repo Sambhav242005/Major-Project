@@ -44,7 +44,7 @@ services:
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
       SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-}
-      CORS_ORIGINS: '["${APP_URL:?Set the final frontend HTTPS origin}"]'
+      CORS_ORIGINS: '["${APP_URL:?Set the final frontend HTTPS origin}", "https://${LAN_IP:-192.168.1.100}:${WEB_PORT:-9900}"]'
       CHROMA_PATH: /data/chroma
       MEET_AUDIO_DIR: /data/meet_recordings
       LLM_PROVIDER: ${LLM_PROVIDER:-chatgpt}
@@ -79,6 +79,7 @@ services:
     environment:
       API_INTERNAL_URL: http://api:8000
       AUTH_PROXY_SECRET: ${AUTH_PROXY_SECRET:?Generate a separate private auth proxy secret}
+      AUTH_ALLOWED_ORIGINS: '["${APP_URL}", "https://${LAN_IP:-192.168.1.100}:${WEB_PORT:-9900}"]'
     restart: unless-stopped
     logging: *logging
 
@@ -88,11 +89,13 @@ services:
     depends_on:
       - web
       - api
-    # LAN-only binding. No existing host Caddy/tunnel configuration is used.
+    # Bind the Pi NIC; operator forwards only this port for public access.
     ports:
       - '${LAN_IP:-192.168.1.100}:${WEB_PORT:-9900}:443'
     environment:
       LAN_IP: ${LAN_IP:-192.168.1.100}
+      PUBLIC_HOST: ${PUBLIC_HOST:-wg.pulkitworks.info}
+      PUBLIC_TLS: ${PUBLIC_TLS:-internal}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - gateway_data:/data

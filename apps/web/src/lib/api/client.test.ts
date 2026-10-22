@@ -7,6 +7,18 @@ afterEach(() => {
 });
 
 describe("configured API destination", () => {
+  it("keeps Pi API requests on the current HTTPS origin", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "/api");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal("fetch", fetchMock);
+    const { apiFetch, withProject } = await import("./client");
+    expect(withProject("/mcp", "project-1")).toBe("/api/mcp?project_id=project-1");
+    await apiFetch("/documents", { token: "token" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/documents", expect.objectContaining({
+      headers: { Authorization: "Bearer token" },
+    }));
+  });
+
   it("uses the configured public backend for requests with project context", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.akgb.example");
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true })));

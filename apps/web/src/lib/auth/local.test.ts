@@ -9,6 +9,53 @@ afterEach(() => {
 
 const tokenFor = (expiresAt: number) => `header.${Buffer.from(JSON.stringify({ exp: expiresAt })).toString("base64url")}.signature`;
 
+describe("explicit public and LAN authentication origins", () => {
+  const publicOrigin = "https://wg.pulkitworks.info:9900";
+  const lanOrigin = "https://192.168.1.100:9900";
+
+  it.each([publicOrigin, lanOrigin])("accepts configured %s and returns logout to the same browser origin", async (origin) => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "local");
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", publicOrigin);
+    vi.stubEnv("AUTH_ALLOWED_ORIGINS", JSON.stringify([publicOrigin, lanOrigin]));
+    const { sameOrigin } = await import("./local");
+    const request = new NextRequest("http://web:3000/auth/signout", { method: "POST", headers: { origin } });
+    expect(sameOrigin(request)).toBe(true);
+    const { POST } = await import("@/app/auth/signout/route");
+    const response = await POST(request);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(`${origin}/auth/signin`);
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+
+  it.each(["not-json", "{}", "[]", '["https://wg.pulkitworks.info:9900", false]', '["https://wg.pulkitworks.info:9900/path"]', '["null"]'])
+    ("fails closed for malformed origin configuration %s", async (configuration) => {
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", publicOrigin);
+      vi.stubEnv("AUTH_ALLOWED_ORIGINS", configuration);
+      const { sameOrigin } = await import("./local");
+      expect(sameOrigin(new Request(`${publicOrigin}/auth/local-login`, { headers: { origin: publicOrigin } }))).toBe(false);
+    });
+
+  it("rejects forged origins even when Host and forwarding headers agree", async () => {
+    vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "local");
+    vi.stubEnv("AUTH_ALLOWED_ORIGINS", JSON.stringify([publicOrigin, lanOrigin]));
+    const request = new NextRequest("https://attacker.example/auth/signout", { method: "POST", headers: {
+      origin: "https://attacker.example", host: "attacker.example", "x-forwarded-host": "attacker.example", "x-forwarded-proto": "https",
+    } });
+    const { POST } = await import("@/app/auth/signout/route");
+    const response = await POST(request);
+    expect(response.status).toBe(403);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("never trusts the request URL when no origin is configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    vi.stubEnv("AUTH_ALLOWED_ORIGINS", undefined);
+    const { sameOrigin } = await import("./local");
+    expect(sameOrigin(new Request("https://attacker.example/auth/local-login", { headers: { origin: "https://attacker.example" } }))).toBe(false);
+  });
+});
+
 describe("signup and retired demo", () => {
   it.each([true, false])("enforces signup origin and keeps sessions HttpOnly (same origin: %s)", async (trusted) => {
     vi.stubEnv("NEXT_PUBLIC_AUTH_PROVIDER", "local");

@@ -1,11 +1,13 @@
 """Offline safety and successful-main-only deployment checks; never invoke Docker."""
 
 import copy
+from contextlib import nullcontext
 import importlib.util
 import io
 import json
 from pathlib import Path
 import sys
+import ssl
 import tarfile
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -223,4 +225,83 @@ def test_failed_deployment_restores_only_previous_application_containers(updater
     runs = [{"name": "Continuous integration", "head_branch": "main", "head_sha": "b" * 40, "status": "completed", "conclusion": "success"}]
     poll_once(updater_module, instance, monkeypatch, "b" * 40, runs)
     instance.compose.assert_called_once_with(previous["directory"], previous["sha"], "up", "-d", "--no-deps", "--force-recreate", "api", "web", "gateway")
+    assert json.loads((instance.state_dir / "current.json").read_text()) == previous
+
+
+def configure_smoke_environment(instance, content):
+    instance.env_file.parent.mkdir(parents=True, exist_ok=True)
+    instance.env_file.write_text(content)
+
+
+@pytest.mark.parametrize("address,port", [("10.0.0.9", "9904"), ("172.16.2.3", "9910"), ("192.168.1.100", "9900")])
+def test_smoke_origin_uses_explicit_configured_lan_address_and_port(updater_module, deployment, address, port):
+    instance, _, _ = deployment
+    configure_smoke_environment(instance, f"LAN_IP={address}\nWEB_PORT={port}\n")
+    assert updater_module.local_smoke_origin(instance.env_file) == f"https://{address}:{port}"
+
+
+@pytest.mark.parametrize("content", [
+    "LAN_IP=wg.pulkitworks.info\nWEB_PORT=9900\n",
+    "LAN_IP=8.8.8.8\nWEB_PORT=9900\n",
+    "LAN_IP=127.0.0.1\nWEB_PORT=9900\n",
+    "LAN_IP=0.0.0.0\nWEB_PORT=9900\n",
+    "LAN_IP=192.168.1.100/api\nWEB_PORT=9900\n",
+    "LAN_IP=192.168.1.100\nWEB_PORT=443\n",
+    "LAN_IP=192.168.1.100\nWEB_PORT=9900/path\n",
+    "LAN_IP=192.168.1.100\n",
+    "WEB_PORT=9900\n",
+])
+def test_deployment_rejects_invalid_local_smoke_configuration_before_docker(deployment, content):
+    instance, release, _ = deployment
+    configure_smoke_environment(instance, content)
+    instance.compose = Mock()
+    with pytest.raises(ValueError):
+        instance.deploy(release, "candidate")
+    instance.compose.assert_not_called()
+
+
+def prepare_smoke_deployment(instance, monkeypatch):
+    configure_smoke_environment(instance, "LAN_IP=192.168.1.100\nWEB_PORT=9900\nAPP_URL=https://wg.pulkitworks.info:9900\n")
+    instance.validate = Mock()
+    instance.compose = Mock(return_value=SimpleNamespace(stdout="gateway-private-ca"))
+    instance.backup_database = Mock()
+    # A real verification-enabled context is passed to the mocked HTTP layer.
+    # Only CA loading is mocked because this test never contacts a gateway.
+    context = ssl.create_default_context()
+    create_context = Mock(return_value=context)
+    monkeypatch.setattr(ssl, "create_default_context", create_context)
+    return context, create_context
+
+
+def test_deployment_checks_lan_https_with_gateway_ca_instead_of_public_dns(updater_module, deployment, monkeypatch):
+    instance, release, _ = deployment
+    context, create_context = prepare_smoke_deployment(instance, monkeypatch)
+    request = Mock(side_effect=[
+        nullcontext(io.BytesIO(b'{"status":"ok"}')),
+        nullcontext(SimpleNamespace(status=200)),
+    ])
+    monkeypatch.setattr(updater_module.urllib.request, "urlopen", request)
+    instance.deploy(release, "candidate")
+    assert [call.args[0] for call in request.call_args_list] == [
+        "https://192.168.1.100:9900/api/health",
+        "https://192.168.1.100:9900/auth/signin",
+    ]
+    assert all(call.kwargs["context"] is context for call in request.call_args_list)
+    assert context.check_hostname is True
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    create_context.assert_called_once_with(cadata="gateway-private-ca")
+    assert json.loads((instance.state_dir / "current.json").read_text())["sha"] == "candidate"
+
+
+def test_failed_lan_certificate_verification_never_marks_release_healthy(updater_module, deployment, monkeypatch):
+    instance, release, _ = deployment
+    previous = current_state(instance)
+    context, _ = prepare_smoke_deployment(instance, monkeypatch)
+    request = Mock(side_effect=ssl.SSLCertVerificationError("LAN certificate mismatch"))
+    monkeypatch.setattr(updater_module.urllib.request, "urlopen", request)
+    monkeypatch.setattr(updater_module.time, "sleep", Mock())
+    with pytest.raises(ssl.SSLCertVerificationError):
+        instance.deploy(release, "candidate")
+    assert request.call_count == 36
+    assert all(call.kwargs["context"] is context for call in request.call_args_list)
     assert json.loads((instance.state_dir / "current.json").read_text()) == previous

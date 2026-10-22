@@ -327,16 +327,16 @@ docker compose -f updater.compose.yaml logs --tail 50 -f updater
 These commands manage the separate `akgb-updater` project. Stop it independently
 with `docker compose -f updater.compose.yaml stop` before manually stopping the
 application for maintenance. No host Caddy, cron, systemd, router or DNS changes
-are required. The default gateway remains LAN restricted; public exposure also
-requires an intentional hostname/origin/TLS and gateway-policy configuration.
+are required. The gateway supports the configured public hostname and LAN IP;
+the operator forwards only TCP 9900. Port 9901 remains loopback-only.
 
 The configuration in `infra/pi/compose.yaml` prepares a separate `akgb` Docker
 Compose project: Next.js, one FastAPI worker, PostgreSQL 16 and persistent API
 data. Local accounts and application tables live in the dedicated Pi database;
 Supabase is optional. The template selects personal ChatGPT-plan OAuth for generation and
 CPU MiniLM for embeddings. No MCP server
-is required for these model calls. This is preparation, not a verified live
-deployment; ARM64 image builds and end-to-end checks remain release gates.
+is required for these model calls. Release gates include ARM64 builds, isolated
+tests, actual ingestion/model calls, and a database backup restoration check.
 
 1. Confirm the Pi runs a 64-bit OS and has Docker/Compose, sufficient disk and
    free memory. Put the reviewed application checkout under a dedicated directory
@@ -395,8 +395,12 @@ deployment; ARM64 image builds and end-to-end checks remain release gates.
    private behind this gateway; deployments without this trusted hop retain the
    socket-IP limit. Rebuild the web image and have the operator recreate the AKGB
    containers after configuring this new secret; do not alter other services.
-   The LAN defaults are `APP_URL=https://192.168.1.100:9900` and
-   `API_URL=https://192.168.1.100:9900/api`, without trailing slashes.
+   Set `PUBLIC_HOST=wg.pulkitworks.info`,
+   `APP_URL=https://wg.pulkitworks.info:9900` and `API_URL=/api`.
+   Relative API URLs keep requests on the browser's HTTPS origin. Compose sets
+   server-only `AUTH_ALLOWED_ORIGINS` and backend `CORS_ORIGINS` to the public
+   origin and `https://${LAN_IP}:${WEB_PORT}`. Only those exact origins can submit
+   local login/logout requests; LAN and public addresses have separate cookies.
    Protect the file with `chmod 600 .env`. Never publish `docker compose config`
    output: it expands credentials. Validate using `docker compose config --quiet`.
 5. From `infra/pi`, build with `docker compose build`. ARM64 dependency support is
@@ -412,8 +416,8 @@ deployment; ARM64 image builds and end-to-end checks remain release gates.
    bootstrap schema as current. Check the migration version with
    `docker compose run --rm --no-deps api alembic current`.
 7. Start the application with `docker compose up -d api web gateway`. The new
-   gateway binds **192.168.1.100:9900** for LAN HTTPS; its Caddyfile permits
-   `192.168.1.0/24` and rejects other client addresses. The API's diagnostic port
+   gateway binds **192.168.1.100:9900** for HTTPS on both configured hostnames.
+   The API's diagnostic port
    remains **127.0.0.1:9901**. PostgreSQL and the web container have no published
    ports. Check `docker compose ps` and API `/health`.
    The named API volume must permit UID 10001 to write `/data/chroma` and
@@ -431,8 +435,18 @@ deployment; ARM64 image builds and end-to-end checks remain release gates.
    never export `root.key`. Verify with
    `curl --cacert akgb-lan-root.crt https://192.168.1.100:9900/api/health`.
    Do not use `curl -k` as proof of valid HTTPS. Existing host Caddy, DNS, routing
-   and port forwarding remain unchanged and operator-managed. Review the LAN
-   subnet restriction before using another subnet or preparing public access.
+   and port forwarding remain unchanged and operator-managed.
+   For publicly trusted domain HTTPS, obtain a certificate using DNS validation
+   (no inbound 80/443 required). Store the full chain and private key in the
+   persistent gateway volume at `/data/akgb/public/fullchain.pem` and
+   `/data/akgb/public/key.pem`, with the private key readable only by its owner.
+   Set `PUBLIC_TLS=/data/akgb/public/fullchain.pem /data/akgb/public/key.pem` in
+   the private Pi `.env`; validate Caddy, then recreate only the AKGB gateway.
+   The LAN IP retains its private-CA certificate. `PUBLIC_TLS=internal` is the
+   explicit fallback and requires client trust; it is not public browser trust.
+   Manual DNS issuance requires manual renewal before certificate expiry.
+   Keep ACME accounts, certificate keys and backups out of Git. Deployment health
+   checks use the verified LAN HTTPS endpoint, independent of router forwarding.
 9. Verify real signup/sign-in, default-project creation, document upload and
    processing, graph retrieval, streamed answers with citations, and agent
    execution. Test a second account for isolation. Verify embedding and chat
@@ -584,8 +598,9 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | `NEXT_PUBLIC_AUTH_PROVIDER` | No | `supabase` | Build-time choice: `local` administrator-created accounts or `supabase` |
 | `API_INTERNAL_URL` | No | `NEXT_PUBLIC_API_URL`, then `http://localhost:8000` | Server-only API address for local login and session verification; Pi uses `http://api:8000` |
 | `AUTH_PROXY_SECRET` | Pi stack | — | Server-only counterpart to the API secret; never use a `NEXT_PUBLIC_` prefix or expose the web server outside the trusted gateway |
+| `AUTH_ALLOWED_ORIGINS` | No | `NEXT_PUBLIC_APP_URL` | Server-only JSON array of exact origins allowed for local authentication; malformed values fail closed |
 | `NEXT_PUBLIC_APP_URL` | No | `localhost:3000` | App base URL |
-| `NEXT_PUBLIC_API_URL` | Yes for hosting | `http://localhost:8000` | Public backend API URL; set before building |
+| `NEXT_PUBLIC_API_URL` | Yes for hosting | `http://localhost:8000` | Browser API base; Pi uses same-origin `/api`; set before building |
 
 \* Required when using Supabase auth with `NEXT_PUBLIC_MOCK_AUTH=false`; not required when `NEXT_PUBLIC_AUTH_PROVIDER=local`.
 

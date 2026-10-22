@@ -5,10 +5,7 @@
     default_sni {$LAN_IP:192.168.1.100}
 }
 
-https://{$LAN_IP:192.168.1.100} {
-    tls internal
-    @outside_lan not remote_ip 192.168.1.0/24 127.0.0.1 ::1
-    respond @outside_lan "LAN access only" 403
+(akgb_routes) {
     handle_path /api/* {
         reverse_proxy api:8000 {
             header_up -X-AKGB-Proxy-Secret
@@ -21,4 +18,16 @@ https://{$LAN_IP:192.168.1.100} {
             header_up X-AKGB-Client-IP {remote_host}
         }
     }
+}
+
+https://{$LAN_IP:192.168.1.100} {
+    tls internal
+    import akgb_routes
+}
+
+https://{$PUBLIC_HOST:wg.pulkitworks.info} {
+    # Set PUBLIC_TLS to the full-chain and key paths after DNS verification.
+    # The persistent gateway volume holds the private key, never the image.
+    tls {$PUBLIC_TLS:internal}
+    import akgb_routes
 }

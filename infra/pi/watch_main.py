@@ -7,6 +7,7 @@ State, releases, logs and database backups remain under the AKGB directory.
 import argparse
 import fcntl
 import gzip
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,22 @@ import time
 import urllib.request
 
 REPOSITORY = "Sambhav242005/Major-Project"
+
+
+def local_smoke_origin(env_file: Path):
+    """Keep deployment checks on the configured private LAN, independent of DNS."""
+    env = dict(line.split("=", 1) for line in env_file.read_text().splitlines() if line and not line.startswith("#") and "=" in line)
+    try:
+        address = ipaddress.IPv4Address(env["LAN_IP"].strip())
+        port_text = env["WEB_PORT"].strip()
+    except (KeyError, ipaddress.AddressValueError) as exc:
+        raise ValueError("Deployment smoke checks require a private IPv4 LAN_IP and WEB_PORT") from exc
+    private_networks = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+    if not any(address in ipaddress.IPv4Network(network) for network in private_networks):
+        raise ValueError("Deployment smoke LAN_IP must be an RFC1918 private IPv4 address")
+    if not re.fullmatch(r"[0-9]{4,5}", port_text) or not 9900 <= int(port_text) <= 9910:
+        raise ValueError("Deployment smoke WEB_PORT must be in the authorized range 9900-9910")
+    return f"https://{address}:{int(port_text)}"
 
 
 def read_json(url):
@@ -120,6 +137,7 @@ class Updater:
         os.chmod(filename, 0o600)
 
     def deploy(self, release, tag):
+        smoke_origin = local_smoke_origin(self.env_file)
         self.validate(release, tag)
         self.compose(release, tag, "build", "api", "web")
         self.compose(release, tag, "up", "-d", "--no-deps", "postgres")
@@ -137,13 +155,12 @@ class Updater:
         import ssl
         ca = self.compose(release, tag, "exec", "-T", "gateway", "cat", "/data/caddy/pki/authorities/local/root.crt", capture=True).stdout
         context = ssl.create_default_context(cadata=ca)
-        env = dict(line.split("=", 1) for line in self.env_file.read_text().splitlines() if line and not line.startswith("#") and "=" in line)
         for attempt in range(36):
             try:
-                with urllib.request.urlopen(env["APP_URL"].rstrip("/") + "/api/health", context=context, timeout=10) as response:
+                with urllib.request.urlopen(smoke_origin + "/api/health", context=context, timeout=10) as response:
                     if json.load(response) != {"status": "ok"}:
                         raise ValueError("Unexpected health payload")
-                with urllib.request.urlopen(env["APP_URL"].rstrip("/") + "/auth/signin", context=context, timeout=10) as response:
+                with urllib.request.urlopen(smoke_origin + "/auth/signin", context=context, timeout=10) as response:
                     if response.status != 200:
                         raise ValueError("Sign-in page unavailable")
                 break
