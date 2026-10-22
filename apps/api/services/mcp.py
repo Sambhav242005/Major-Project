@@ -1,5 +1,6 @@
 """MCP service — manage MCP connections (sender/receiver) and Google Meet sync."""
 
+import asyncio
 import uuid
 from datetime import datetime
 
@@ -8,7 +9,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.oauth import create_oauth_client
+from core.outbound import validate_public_https_url
+from services.mcp_probe import probe_mcp
 from db.models import MCPConnection
+
+
+def public_auth_config(config: dict) -> dict:
+    return {key: value for key, value in config.items()
+            if not key.startswith("_") and key not in {"oauth_client_secret", "access_token", "refresh_token", "token"}}
 
 
 async def list_connections(db: AsyncSession, project_id: str) -> list[dict]:
@@ -26,7 +34,7 @@ async def list_connections(db: AsyncSession, project_id: str) -> list[dict]:
             "direction": c.direction,
             "name": c.name,
             "endpoint_url": c.endpoint_url,
-            "auth_config": c.auth_config or {},
+            "auth_config": public_auth_config(c.auth_config or {}),
             "status": c.status,
         }
         for c in conns
@@ -68,7 +76,7 @@ async def create_connection(
         "direction": conn.direction,
         "name": conn.name,
         "endpoint_url": conn.endpoint_url,
-        "auth_config": conn.auth_config,
+        "auth_config": public_auth_config(conn.auth_config or {}),
         "status": conn.status,
     }
 
@@ -97,7 +105,9 @@ async def update_connection(
     if endpoint_url is not None:
         conn.endpoint_url = endpoint_url
     if auth_config is not None:
-        conn.auth_config = auth_config
+        updates = {key: value for key, value in auth_config.items()
+                   if key not in {"token", "oauth_client_secret"} or value}
+        conn.auth_config = {**(conn.auth_config or {}), **updates}
     if status is not None:
         conn.status = status
 
@@ -107,7 +117,7 @@ async def update_connection(
         "direction": conn.direction,
         "name": conn.name,
         "endpoint_url": conn.endpoint_url,
-        "auth_config": conn.auth_config,
+        "auth_config": public_auth_config(conn.auth_config or {}),
         "status": conn.status,
     }
 
@@ -141,32 +151,33 @@ async def test_connection(db: AsyncSession, connection_id: str, project_id: str)
     if not conn.endpoint_url:
         return {"error": "No endpoint URL configured"}
 
+    oauth_client = None
     try:
         headers = {}
-
-        # Use OAuth if configured
-        oauth_client = create_oauth_client(conn.auth_config or {})
+        auth_config = conn.auth_config or {}
+        if auth_config.get("token"):
+            headers["Authorization"] = f"Bearer {auth_config['token']}"
+        for key in ("oauth_token_url", "oauth_authorize_url"):
+            if auth_config.get(key):
+                await validate_public_https_url(auth_config[key])
+        oauth_client = create_oauth_client(auth_config)
         if oauth_client:
-            try:
-                token = await oauth_client.get_client_credentials_token()
-                headers.update(oauth_client.get_auth_header())
-            except Exception as e:
-                return {"status": "error", "error": f"OAuth failed: {e}"}
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(conn.endpoint_url, headers=headers)
-            if resp.status_code == 200:
-                conn.status = "connected"
-                await db.flush()
-                return {"status": "connected", "status_code": resp.status_code, "oauth": bool(oauth_client)}
-            else:
-                conn.status = "error"
-                await db.flush()
-                return {"status": "error", "status_code": resp.status_code}
-    except Exception as e:
+            token = await oauth_client.load_token_from_db(db, connection_id)
+            if token is None:
+                await oauth_client.get_client_credentials_token()
+            headers.update(oauth_client.get_auth_header())
+        metadata = await asyncio.wait_for(probe_mcp(conn.endpoint_url, headers), timeout=30)
+        conn.status = "connected"
+        await db.flush()
+        return {"status": "connected", "oauth": bool(oauth_client), **metadata}
+    except Exception:
         conn.status = "error"
         await db.flush()
-        return {"status": "error", "error": str(e)}
+        # Provider responses and endpoint query strings can contain credentials.
+        return {"status": "error", "error": "MCP handshake failed. Check the public HTTPS endpoint, protocol support, and authorization."}
+    finally:
+        if oauth_client:
+            await oauth_client.close()
 
 
 async def search_knowledge_base(

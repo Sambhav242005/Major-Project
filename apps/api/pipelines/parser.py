@@ -1,6 +1,7 @@
 """Document parsing — extract text from PDF, DOCX, and image files."""
 
 import io
+import math
 from pathlib import Path
 
 
@@ -8,12 +9,18 @@ def parse_pdf(file_content: bytes) -> list[dict]:
     """Extract text from PDF using PyMuPDF. Returns list of pages."""
     import fitz  # PyMuPDF
 
-    doc = fitz.open(stream=file_content, filetype="pdf")
     pages = []
-    for i, page in enumerate(doc):
-        text = page.get_text()
-        pages.append({"text": text, "page_number": i + 1})
-    doc.close()
+    with fitz.open(stream=file_content, filetype="pdf") as doc:
+        for i, page in enumerate(doc):
+            text = page.get_text()
+            if not text.strip():
+                # Tesseract accepts images, not raw PDF bytes. Rasterize only
+                # the scanned pages, preserving numbering in mixed PDFs.
+                area = max(1, page.rect.width * page.rect.height)
+                scale = min(2.0, math.sqrt(16_000_000 / area))
+                image = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+                text = parse_image(image.tobytes("png"), f"page_{i + 1}.png")[0]["text"]
+            pages.append({"text": text, "page_number": i + 1})
     return pages
 
 
@@ -32,7 +39,7 @@ def parse_image(file_content: bytes, filename: str) -> list[dict]:
     from PIL import Image
 
     img = Image.open(io.BytesIO(file_content))
-    text = pytesseract.image_to_string(img)
+    text = pytesseract.image_to_string(img, timeout=60)
     return [{"text": text, "page_number": 1}]
 
 
@@ -63,10 +70,7 @@ def parse_document(file_content: bytes, filename: str, file_type: str) -> list[d
     ext = Path(filename).suffix.lower()
 
     if ext == ".pdf":
-        if has_text_layer(file_content):
-            return parse_pdf(file_content)
-        else:
-            return parse_image(file_content, filename)
+        return parse_pdf(file_content)
     elif ext == ".docx":
         return parse_docx(file_content)
     elif ext in (".txt", ".md", ".csv"):

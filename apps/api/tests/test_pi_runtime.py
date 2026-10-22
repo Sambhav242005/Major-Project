@@ -76,9 +76,10 @@ async def test_uploaded_meeting_uses_configured_writable_directory(monkeypatch, 
     transcribe = Mock(return_value="Meeting transcript")
     monkeypatch.setattr(google_meet, "transcribe_audio", transcribe)
     monkeypatch.setattr(google_meet, "analyze_transcript", AsyncMock(return_value={"summary": "Summary"}))
+    monkeypatch.setattr(meetings, "write_audit_log", AsyncMock())
     result = await meetings.analyze_meeting_audio(
         file=UploadFile(filename="meeting.webm", file=BytesIO(b"audio")),
-        project_id="project", user=User(id="user"), db=AsyncMock(),
+        project_id="550e8400-e29b-41d4-a716-446655440001", user=User(id="user"), db=AsyncMock(),
     )
     saved = list(target.glob("*.webm"))
     assert len(saved) == 1

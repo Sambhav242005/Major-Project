@@ -26,8 +26,9 @@ async def get_entity(db: AsyncSession, entity_id: str, project_id: str) -> dict 
     mentions = mention_result.scalars().all()
 
     rel_stmt = select(Relationship).where(
-        (Relationship.source_entity_id == entity.id)
-        | (Relationship.target_entity_id == entity.id)
+        ((Relationship.source_entity_id == entity.id)
+        | (Relationship.target_entity_id == entity.id)),
+        Relationship.project_id == _uuid_val(project_id),
     )
     rel_result = await db.execute(rel_stmt)
     relationships = rel_result.scalars().all()
@@ -149,7 +150,13 @@ async def get_entity_chunks(
     """Get chunks that mention a specific entity."""
     stmt = (
         select(EntityMention)
-        .where(EntityMention.entity_id == _uuid_val(entity_id))
+        .join(Entity, Entity.id == EntityMention.entity_id)
+        .join(Document, Document.id == EntityMention.document_id)
+        .where(
+            EntityMention.entity_id == _uuid_val(entity_id),
+            Entity.project_id == _uuid_val(project_id),
+            Document.project_id == _uuid_val(project_id),
+        )
         .order_by(EntityMention.id)
     )
     result = await db.execute(stmt)

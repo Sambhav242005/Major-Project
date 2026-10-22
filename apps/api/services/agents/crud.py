@@ -1,5 +1,6 @@
 """Agent CRUD — list/get/create/update/delete and type listing."""
 
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -150,4 +151,5 @@ def list_agent_types() -> list[dict]:
             "description": v["description"],
         }
         for k, v in AGENT_TYPES.items()
+        if k != "google_meet" or os.name == "nt" or os.environ.get("DISPLAY")
     ]

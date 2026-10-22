@@ -2,6 +2,7 @@
 
 import logging
 import time
+import uuid
 from datetime import datetime
 
 from sqlalchemy import select
@@ -20,7 +21,7 @@ async def _load_token_from_db(
 
     stmt = (
         select(MCPAuthToken)
-        .where(MCPAuthToken.connection_id == connection_id)
+        .where(MCPAuthToken.connection_id == uuid.UUID(connection_id))
         .order_by(MCPAuthToken.created_at.desc())
         .limit(1)
     )
@@ -60,13 +61,13 @@ async def _save_token_to_db(self, db: AsyncSession, connection_id: str) -> None:
     from db.models import MCPAuthToken
 
     old = await db.execute(
-        select(MCPAuthToken).where(MCPAuthToken.connection_id == connection_id)
+        select(MCPAuthToken).where(MCPAuthToken.connection_id == uuid.UUID(connection_id))
     )
     for row in old.scalars().all():
         await db.delete(row)
 
     token_row = MCPAuthToken(
-        connection_id=connection_id,
+        connection_id=uuid.UUID(connection_id),
         access_token=self._token.access_token,
         token_type=self._token.token_type,
         refresh_token=self._token.refresh_token,

@@ -1,5 +1,7 @@
 """Application factory — creates and configures the FastAPI app."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,11 +18,20 @@ from routers import system as system_router
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    @asynccontextmanager
+    async def lifespan(app):
+        if settings.ENVIRONMENT == "production" and settings.DATABASE_URL.startswith("postgresql"):
+            from db.session import async_session_factory
+            from routers.documents.ingestion_tasks import recover_interrupted_ingestions
+            await recover_interrupted_ingestions(async_session_factory)
+        yield
+
     app = FastAPI(
         title="AI Knowledge Graph Builder API",
         version="0.1.0",
         docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
         redoc_url=None,
+        lifespan=lifespan,
     )
 
     app.add_exception_handler(AppError, app_error_handler)
