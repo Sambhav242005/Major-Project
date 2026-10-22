@@ -82,6 +82,7 @@ export default function DocumentsPage() {
         console.error("Invalid response:", parsed.error);
         setDocuments(docs);
       }
+      return docs;
     } catch (e) {
       console.error("Failed to fetch documents:", e);
       setError("Failed to load documents");
@@ -125,15 +126,28 @@ export default function DocumentsPage() {
     setProcessingDoc(activeWatchId);
     setProcessStage("processing");
 
-    const refresh = () => { if (!cancelled) fetchDocuments(); };
-
     const finishWatch = (failed: boolean) => {
       setProcessStage(failed ? "failed" : "complete");
       setWatchingDocId(null);
       setWatchDone(true);
       closeAll();
-      refresh();
+      if (!cancelled) void fetchDocuments();
     };
+
+    // The database is authoritative even when a healthy SSE connection misses
+    // completion (for example, processing finishes before subscription).
+    const refresh = async () => {
+      if (cancelled) return;
+      const latest = await fetchDocuments();
+      if (cancelled) return;
+      const watched = latest?.find((doc) => doc.id === activeWatchId);
+      if (watched?.status === "processed") finishWatch(false);
+      else if (watched?.status === "failed") {
+        setError(watched.errorMessage || "Document processing failed. Open the document for details.");
+        finishWatch(true);
+      }
+    };
+    fallbackInterval = setInterval(() => { void refresh(); }, 3000);
 
     const openStream = (token: string) => {
       evtSource = new EventSource(
@@ -144,17 +158,19 @@ export default function DocumentsPage() {
       evtSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.step === "keepalive") return;
           setProcessStage(data.stage || data.status);
           if (data.stage === "failed" || data.status === "failed") {
-            setError(data.error || "Document processing failed. Open the document to retry with the original file.");
+            setError(data.error_message || data.error || "Document processing failed. Open the document to retry with the original file.");
             finishWatch(true);
           } else if (data.stage === "complete" || data.status === "processed") finishWatch(false);
         } catch {}
       };
 
       evtSource.onerror = () => {
-        closeAll();
-        fallbackInterval = setInterval(refresh, 3000);
+        evtSource?.close();
+        eventSourceRef.current = null;
+        // Polling remains active even if the progress connection disconnects.
       };
     };
 
