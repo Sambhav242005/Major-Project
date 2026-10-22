@@ -1,0 +1,15 @@
+# Default code owner for every file in the repository.
+# More specific rules below retain Sambhav as a code owner.
+* @Sambhav242005
+
+# Backend (API): Sambhav, Pulkit, and Raghav
+/apps/api/ @Sambhav242005 @pulkits2609 @Raghav1005
+
+# Frontend (web): Sambhav and Hriday
+/apps/web/ @Sambhav242005 @HridaySonawane
+
+# Infrastructure: Sambhav and Pulkit
+/infra/ @Sambhav242005 @pulkits2609
+
+# Ownership rules can be changed only after a code-owner review.
+/.github/CODEOWNERS @Sambhav242005
