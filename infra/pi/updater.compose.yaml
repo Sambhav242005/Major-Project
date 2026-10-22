@@ -1,0 +1,19 @@
+name: akgb-updater
+services:
+  updater:
+    image: akgb-updater:local
+    build:
+      context: .
+      dockerfile: Updater.Dockerfile
+    restart: unless-stopped
+    command: [--root, /home/pulkit26/akgb, --interval, '180']
+    volumes:
+      # Identical absolute path is required for host Docker build/bind paths.
+      - /home/pulkit26/akgb:/home/pulkit26/akgb
+      # Deployment control only; no inbound ports or public webhook.
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'

@@ -24,7 +24,7 @@ services:
         max-file: '3'
 
   api:
-    image: akgb-api:staging
+    image: akgb-api:${RELEASE_TAG:-staging}
     build:
       context: ../../apps/api
     restart: unless-stopped
@@ -36,6 +36,7 @@ services:
       PYTHONPATH: /app
       MOCK_AUTH: 'false'
       AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      LOCAL_AUTH_ALLOW_SIGNUP: ${LOCAL_AUTH_ALLOW_SIGNUP:-false}
       LOCAL_AUTH_SECRET: ${LOCAL_AUTH_SECRET:?Generate a private local signing secret}
       AUTH_PROXY_SECRET: ${AUTH_PROXY_SECRET:?Generate a separate private auth proxy secret}
       PORT: '8000'
@@ -62,10 +63,11 @@ services:
       - api_data:/data
     # Loopback-only: public access requires an explicitly reviewed proxy route.
     ports:
-      - '127.0.0.1:${API_PORT:-18000}:8000'
+      - '127.0.0.1:${API_PORT:-9901}:8000'
     logging: *logging
 
   web:
+    image: akgb-web:${RELEASE_TAG:-latest}
     build:
       context: ../../apps/web
       args:
@@ -88,7 +90,7 @@ services:
       - api
     # LAN-only binding. No existing host Caddy/tunnel configuration is used.
     ports:
-      - '${LAN_IP:-192.168.1.100}:${WEB_PORT:-13000}:443'
+      - '${LAN_IP:-192.168.1.100}:${WEB_PORT:-9900}:443'
     environment:
       LAN_IP: ${LAN_IP:-192.168.1.100}
     volumes:
