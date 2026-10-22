@@ -1,8 +1,11 @@
+# CI is validation only: pull requests and merges to main never deploy.
+# Production builds below test compilation but do not publish or deploy files.
 name: Continuous integration
 
 on:
+  # Avoid redundant testing when feature branches already have an open PR.
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
     branches: ["**"]
   workflow_dispatch:
