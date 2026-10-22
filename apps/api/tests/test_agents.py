@@ -25,8 +25,9 @@ async def test_list_agents_returns_empty():
 
 
 @pytest.mark.asyncio
-async def test_list_agent_types_returns_all():
-    """list_agent_types returns all available types."""
+async def test_list_agent_types_returns_all(monkeypatch):
+    """A desktop-capable environment advertises all available types."""
+    monkeypatch.setenv("DISPLAY", ":test")
     from services.agents import list_agent_types
 
     types = list_agent_types()
