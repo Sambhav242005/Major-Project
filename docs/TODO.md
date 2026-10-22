@@ -18,8 +18,8 @@ ChatGPT authorization and completed generation, MiniLM runtime/latency, document
 processing, two-account isolation, independent client login limits, public-origin
 sign-out, persistence and backup restoration. These live checks remain pending.
 Existing UUID5-based profile data requires an explicit migration before this
-identity change; the documented deployment targets a fresh database. The code is
-being published to `main`; this does not mark the live deployment checks complete.
+identity change; the documented deployment targets a fresh database. PR #34 has been
+merged into `main`; this does not mark the live deployment checks complete.
 See [SPEC §8.1](SPEC.md#81-pr-34-review-changes-by-file) for the review's file-by-file
 change map and recorded validation results. PR #33's already-reviewed deployment
 and CI parent is included because `main` was behind `develop`.
@@ -128,7 +128,7 @@ These are user-facing capabilities or integrations that are incomplete.
 - **Fix:** wire structlog + a middleware that stamps `request_id` onto logs (brief §12 asks for this); or drop the dep.
 - **Effort:** small–medium.
 
-#### 2.18 API CSP configured origins `[HARDEN]` — fixed in PR #34 review
+#### 2.18 API CSP configured origins `[HARDEN]` ✅ DONE — PR #34 merged (`08ddb05`)
 - **What changed:** API response `connect-src` now includes `'self'` and configured `CORS_ORIGINS`, with a LAN-origin regression test.
 - **Scope:** this header belongs to API responses; frontend document CSP remains a separate deployment concern.
 
@@ -278,7 +278,7 @@ These items define the research contribution and the evidence needed to defend i
 | P1 | **3.7 Health dashboard surface** | `pipeline_health → knowledge_health` extension + Requires Review inbox |
 | P1 | 4 bug list sweep (delete cleanup, chunk text, SSE reconnect) | robustness questions in viva |
 | P2 | **3.4 Temporal validity**, **3.5 Source reliability** | temporal/stale already partly covered by `3.6`; calibrate after pinned ships |
-| P2 | 2.17 structlog, 2.18 CSP, 2.19 frontend tests, 4.1 load test, 4.3 security pass | brief compliance + hardening |
+| P2 | 2.17 structlog, 2.19 frontend tests, 4.1 load test, 4.3 security pass | brief compliance + hardening |
 | P2 | 4.4 observability | nice-to-have |
 | P2 | 1.3 root akgb.db removal | tidy-up |
 
