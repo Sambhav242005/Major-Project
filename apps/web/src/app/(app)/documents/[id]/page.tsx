@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { apiFetch, API_BASE } from "@/lib/api/client";
+import { apiFetch, withProject } from "@/lib/api/client";
+import { useProjectStore } from "@/stores/project";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ const ENTITY_COLORS: Record<string, string> = {
 export default function DocumentDetailPage() {
   const params = useParams();
   const documentId = params.id as string;
+  const { activeProjectId } = useProjectStore();
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -65,20 +67,21 @@ export default function DocumentDetailPage() {
       const token = session.access_token;
 
       const [docData, chunksData, entitiesData] = await Promise.all([
-        apiFetch<DocumentDetail>(`/documents/${documentId}`, { token }),
-        apiFetch<{ data: Chunk[] }>(`/documents/${documentId}/chunks`, { token }),
-        apiFetch<{ data: Entity[] }>(`/documents/${documentId}/entities`, { token }),
+        apiFetch<DocumentDetail>(`/documents/${documentId}`, { token, projectId: activeProjectId }),
+        apiFetch<{ data: Chunk[] }>(`/documents/${documentId}/chunks`, { token, projectId: activeProjectId }),
+        apiFetch<{ data: Entity[] }>(`/documents/${documentId}/entities`, { token, projectId: activeProjectId }),
       ]);
 
       setDoc(docData);
       setChunks(chunksData.data || []);
       setEntities(entitiesData.data || []);
+      setErrorMsg(null);
     } catch (e) {
-      console.error("Failed to fetch document:", e);
+      setErrorMsg(e instanceof Error ? e.message : "Failed to load document");
     } finally {
       setLoading(false);
     }
-  }, [documentId, supabase.auth]);
+  }, [documentId, activeProjectId, supabase.auth]);
 
   useEffect(() => {
     fetchData();
@@ -86,16 +89,17 @@ export default function DocumentDetailPage() {
 
   // Poll status if pending/failed — a stuck doc needs a chance to update
   useEffect(() => {
-    if (!doc || (doc.status !== "pending" && doc.status !== "processing" && doc.status !== "failed")) return;
+    if (!doc || (doc.status !== "pending" && doc.status !== "processing")) return;
     const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, [doc, fetchData]);
 
   const handleRetry = async () => {
     setRetrying(true);
+    setErrorMsg(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!session) throw new Error("Your session expired. Sign in again.");
 
       // Re-upload the original file — the backend doesn't persist bytes,
       // so a retry needs the file re-submitted.
@@ -110,7 +114,7 @@ export default function DocumentDetailPage() {
         formData.append("file", file);
 
         res = await fetch(
-          `${API_BASE}/documents/${documentId}/retry`,
+          withProject(`/documents/${documentId}/retry`, activeProjectId),
           {
             method: "POST",
             headers: { Authorization: `Bearer ${session.access_token}` },
@@ -126,9 +130,9 @@ export default function DocumentDetailPage() {
       }
 
       // Poll until status changes
-      setTimeout(fetchData, 2000);
+      await fetchData();
     } catch (e) {
-      console.error("Retry failed:", e);
+      setErrorMsg(e instanceof Error ? e.message : "Retry failed");
     } finally {
       setRetrying(false);
     }
@@ -145,7 +149,7 @@ export default function DocumentDetailPage() {
   if (!doc) {
     return (
       <div className="min-h-screen bg-app-bg text-app-text flex items-center justify-center">
-        <p className="text-red-600 dark:text-red-400">Document not found</p>
+        <p role="alert" className="text-red-600 dark:text-red-400">{errorMsg || "Document not found"}</p>
       </div>
     );
   }
@@ -155,6 +159,7 @@ export default function DocumentDetailPage() {
       <DashboardHeader title={doc.filename} showBack backHref="/documents" />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        {errorMsg && <p role="alert" className="mb-4 text-sm text-red-400">{errorMsg}</p>}
         {/* Document Info */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="stat-glow p-4">
@@ -192,11 +197,11 @@ export default function DocumentDetailPage() {
                   {doc.error_message ? "Processing Error" : doc.status === "pending" ? "Waiting to process" : "Processing failed"}
                 </p>
                 <p className="text-sm text-app-muted">
-                  {doc.error_message ?? "This document was queued but never finished. Re-select the file and retry."}
+                  {doc.error_message ?? (doc.status === "pending" ? "Queued for processing. Status refreshes automatically." : "Processing failed. Re-select the original file and retry.")}
                 </p>
                 {errorMsg && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errorMsg}</p>}
               </div>
-              <div className="flex items-center gap-3">
+              {doc.status === "failed" && <div className="flex items-center gap-3">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -211,7 +216,7 @@ export default function DocumentDetailPage() {
                 >
                   {retrying ? "Retrying..." : "Retry Processing"}
                 </Button>
-              </div>
+              </div>}
             </CardContent>
           </Card>
         )}

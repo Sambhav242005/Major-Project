@@ -44,13 +44,13 @@ export function useChat({ token, projectId }: UseChatOptions) {
       if (!token) return;
       setActiveSessionId(sessionId);
       try {
-        const data = await apiFetch<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`, { token });
+        const data = await apiFetch<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`, { token, projectId });
         setMessages(Array.isArray(data) ? data : []);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load messages");
       }
     },
-    [token]
+    [token, projectId]
   );
 
   const createSession = useCallback(async () => {

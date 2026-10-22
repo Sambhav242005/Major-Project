@@ -8,10 +8,9 @@ interface ProjectCardProps {
   isActive: boolean;
   onSelect: () => void;
   onRename: () => void;
-  onDelete: () => void;
 }
 
-export function ProjectCard({ project, isActive, onSelect, onRename, onDelete }: ProjectCardProps) {
+export function ProjectCard({ project, isActive, onSelect, onRename }: ProjectCardProps) {
   return (
     <div
       className={`glow-card p-3 cursor-pointer ${isActive ? "glow-card-active" : ""}`}
@@ -41,10 +40,9 @@ export function ProjectCard({ project, isActive, onSelect, onRename, onDelete }:
             variant="ghost"
             size="sm"
             className="h-7 text-xs hover:text-red-400"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
+            disabled
+            title="Project deletion is not available. Documents can be managed from the document library."
+            aria-label="Project deletion unavailable"
           >
             <Trash2 size={12} />
           </Button>

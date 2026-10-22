@@ -5,13 +5,10 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const EVENT_TYPES = [
-  "document.uploaded",
   "document.processed",
   "document.failed",
-  "chat.message",
-  "agent.started",
-  "agent.completed",
-  "agent.failed",
+  "chat.completed",
+  "entity.extracted",
 ] as const;
 
 interface WebhookCreateFormProps {
@@ -23,12 +20,18 @@ export function WebhookCreateForm({ onCreate, isCreating }: WebhookCreateFormPro
   const [eventType, setEventType] = useState<typeof EVENT_TYPES[number]>(EVENT_TYPES[0]);
   const [url, setUrl] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!url.trim()) return;
-    await onCreate(eventType, url.trim());
-    setUrl("");
-    setShowForm(false);
+    setError(null);
+    try {
+      const destination = new URL(url.trim());
+      if (destination.protocol !== "https:") throw new Error("Use a public HTTPS endpoint.");
+      await onCreate(eventType, url.trim());
+      setUrl("");
+      setShowForm(false);
+    } catch (error) { setError(error instanceof Error ? error.message : "Could not create subscription."); }
   };
 
   if (!showForm) {
@@ -49,6 +52,8 @@ export function WebhookCreateForm({ onCreate, isCreating }: WebhookCreateFormPro
         </Button>
       </div>
       <div className="space-y-2">
+        <p className="text-xs text-app-muted">Deliveries require a public HTTPS destination. Local network and private IP endpoints are blocked.</p>
+        {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
         <select
           value={eventType}
           onChange={(e) => setEventType(e.target.value as typeof EVENT_TYPES[number])}

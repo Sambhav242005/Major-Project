@@ -13,12 +13,19 @@ export function MCPCreateDialog({ onCreate, isCreating }: MCPCreateDialogProps) 
   const [show, setShow] = useState(false);
   const [direction, setDirection] = useState<"sender" | "receiver">("sender");
   const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
-    await onCreate(direction, name.trim());
-    setName("");
-    setShow(false);
+    setPending(true);
+    setError(null);
+    try {
+      await onCreate(direction, name.trim());
+      setName("");
+      setShow(false);
+    } catch (error) { setError(error instanceof Error ? error.message : "Could not create connection."); }
+    finally { setPending(false); }
   };
 
   if (!show) {
@@ -33,6 +40,7 @@ export function MCPCreateDialog({ onCreate, isCreating }: MCPCreateDialogProps) 
   return (
     <div className="glow-card p-4 space-y-3">
       <h4 className="text-sm font-medium text-app-text">New Connection</h4>
+      {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
       <div className="flex gap-2">
         <Button
           variant={direction === "sender" ? "default" : "outline"}
@@ -61,7 +69,7 @@ export function MCPCreateDialog({ onCreate, isCreating }: MCPCreateDialogProps) 
         autoFocus
       />
       <div className="flex gap-2">
-        <Button size="sm" className="text-xs glow-button" onClick={handleSubmit} disabled={!name.trim() || isCreating}>
+        <Button size="sm" className="text-xs glow-button" onClick={handleSubmit} disabled={!name.trim() || isCreating || pending}>
           {isCreating ? "Creating..." : "Create"}
         </Button>
         <Button variant="ghost" size="sm" className="text-xs" onClick={() => setShow(false)}>

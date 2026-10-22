@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { apiFetch, ApiRequestError } from "@/lib/api/client";
+import { useGraphStore } from "@/stores/graph";
 
 export interface Project {
   id: string;
@@ -16,8 +17,11 @@ export interface Project {
 }
 
 const STORAGE_KEY = "akgb.activeProject";
+const IDENTITY_STORAGE_KEY = "akgb.activeProjectUser";
 
 interface ProjectState {
+  identityId: string | null;
+  setIdentity: (id: string | null) => void;
   projects: Project[];
   activeProjectId: string | null;
   loaded: boolean;
@@ -46,6 +50,19 @@ function readStoredId(): string | null {
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
+  identityId: null,
+  setIdentity: (id) => {
+    if (get().identityId === id) return;
+    useGraphStore.getState().clearGraph();
+    let activeProjectId: string | null = null;
+    try {
+      if (id && localStorage.getItem(IDENTITY_STORAGE_KEY) === id) activeProjectId = readStoredId();
+      else localStorage.removeItem(STORAGE_KEY);
+      if (id) localStorage.setItem(IDENTITY_STORAGE_KEY, id);
+      else localStorage.removeItem(IDENTITY_STORAGE_KEY);
+    } catch { /* private mode */ }
+    set({ identityId: id, projects: [], activeProjectId, loaded: false, error: null, offline: false });
+  },
   projects: [],
   activeProjectId: readStoredId(),
   loaded: false,
@@ -53,11 +70,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   offline: false,
 
   loadProjects: async (token: string) => {
+    const identityId = get().identityId;
     try {
       const projects = await apiFetch<Project[]>("/projects", {
         token,
       });
       if (!Array.isArray(projects)) throw new Error("Invalid projects response");
+      if (get().identityId !== identityId) return;
 
       // Pick active: stored id still valid → keep; else first project.
       let active = projects.find((p) => p.id === get().activeProjectId)?.id ?? null;
@@ -80,6 +99,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         offline: false,
       });
     } catch (e) {
+      if (get().identityId !== identityId) return;
       const offline = e instanceof ApiRequestError && e.status === 0;
       set({
         error: errorMessage(e, "Failed to load projects"),

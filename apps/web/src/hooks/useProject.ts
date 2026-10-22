@@ -18,10 +18,14 @@ export function useProject() {
   const setActiveProject = useProjectStore((s) => s.setActiveProject);
   const createProject = useProjectStore((s) => s.createProject);
   const renameProject = useProjectStore((s) => s.renameProject);
+  const identityId = useProjectStore((s) => s.identityId);
+  const setIdentity = useProjectStore((s) => s.setIdentity);
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? null;
 
   return {
+    identityId,
+    setIdentity,
     projects,
     activeProjectId,
     activeProject,

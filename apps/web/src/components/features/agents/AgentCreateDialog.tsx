@@ -73,11 +73,12 @@ export function AgentCreateDialog({
               className="w-full h-9 px-3 rounded-lg bg-app-surface-alt border border-app-border-strong text-sm text-app-text outline-none focus:border-sky-500/50 transition-all"
             >
               {agentTypes.map((t) => (
-                <option key={t.type} value={t.type} className="bg-app-card">
-                  {t.name}
+                <option key={t.type} value={t.type} disabled={t.type === "google_meet"} className="bg-app-card">
+                  {t.name}{t.type === "google_meet" ? " — browser bot unavailable" : ""}
                 </option>
               ))}
             </select>
+            <p className="text-[10px] text-app-muted">Google Meet Bot requires server-side browser and audio capture, which are unavailable in this deployment. Use Meetings to record or upload audio.</p>
             <p className="text-[10px] text-app-muted mt-1">
               {agentTypes.find((t) => t.type === newType)?.description}
             </p>

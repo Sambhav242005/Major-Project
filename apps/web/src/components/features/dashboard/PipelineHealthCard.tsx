@@ -17,7 +17,7 @@ export function PipelineHealthCard({ health }: PipelineHealthCardProps) {
     <div className="glow-card p-4">
       <div className="flex items-center gap-2 mb-3">
         <Activity size={16} className={isHealthy ? "text-emerald-400" : "text-amber-400"} />
-        <h3 className="text-sm font-medium text-app-text">Pipeline Health</h3>
+        <h3 className="text-sm font-medium text-app-text">Document Processing</h3>
       </div>
       <div className="space-y-2">
         <div className="flex items-center justify-between">
@@ -43,9 +43,10 @@ export function PipelineHealthCard({ health }: PipelineHealthCardProps) {
         {isHealthy && (
           <div className="flex items-center gap-1 text-xs text-emerald-400">
             <CheckCircle size={12} />
-            All systems operational
+            No document failures recorded
           </div>
         )}
+        <p className="text-[10px] text-app-muted">Based on document counts; model connectivity is checked separately during requests.</p>
       </div>
     </div>
   );

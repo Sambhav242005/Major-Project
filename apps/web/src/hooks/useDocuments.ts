@@ -42,7 +42,7 @@ export function useDocuments({ token, projectId }: UseDocumentsOptions) {
     if (!token || !projectId) return;
 
     const url = withProject(`/documents/stream`, projectId);
-    const es = new EventSource(`${url}?token=${encodeURIComponent(token)}`);
+    const es = new EventSource(`${url}&token=${encodeURIComponent(token)}`);
     eventSourceRef.current = es;
 
     es.onmessage = (event) => {

@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useProject } from "@/hooks/useProject";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, token, loading: authLoading, authError } = useAuth();
-  const { loadProjects, loaded: projectsLoaded } = useProject();
+  const { loadProjects, loaded: projectsLoaded, identityId, setIdentity, projects, error } = useProject();
   const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!authLoading) setIdentity(user?.id ?? null);
+  }, [authLoading, user?.id, setIdentity]);
 
   useEffect(() => {
     if (!authLoading && !authError && !user) {
@@ -17,10 +23,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [authLoading, authError, user, router]);
 
   useEffect(() => {
-    if (token && !projectsLoaded) {
+    if (token && user?.id === identityId && !projectsLoaded) {
       loadProjects(token);
     }
-  }, [token, projectsLoaded, loadProjects]);
+  }, [token, user?.id, identityId, projectsLoaded, loadProjects]);
 
   if (authLoading) {
     return (
@@ -38,6 +44,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 
   if (!user) return null;
+  if (identityId !== user.id || !projectsLoaded) return <div className="p-8 text-app-muted">Loading your projects...</div>;
+  if (error && !projects.length) return <div className="p-8 space-y-3"><p role="alert">{error}</p><button className="underline" onClick={() => { if (token) void loadProjects(token); }}>Retry loading projects</button></div>;
+  if (!projects.length && pathname !== "/projects") return <div className="p-8 space-y-3"><p>Create a project to upload documents, chat, and use the knowledge graph.</p><Link href="/projects" className="underline">Create your first project</Link></div>;
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text">

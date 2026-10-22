@@ -12,6 +12,9 @@ export default function ContactPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const subject = encodeURIComponent(`AKGB enquiry from ${name.trim()}`);
+    const body = encodeURIComponent(`Name: ${name.trim()}\nReply email: ${email.trim()}\n\n${message.trim()}`);
+    window.location.href = `mailto:pulkitsharmam2609@gmail.com?subject=${subject}&body=${body}`;
     setSubmitted(true);
   };
 
@@ -29,8 +32,9 @@ export default function ContactPage() {
           <h2 className="font-display text-xl font-semibold text-app-text mb-4">Get in Touch</h2>
           {submitted ? (
             <div className="text-center py-8">
-              <p className="text-verified font-medium text-lg mb-2">Message sent!</p>
-              <p className="text-app-muted text-sm">Thank you for reaching out. We&apos;ll get back to you soon.</p>
+              <p className="text-app-text font-medium text-lg mb-2">Email draft requested</p>
+              <p className="text-app-muted text-sm">Send the message in your email app. This website does not send or store contact messages. If no draft opened, email pulkitsharmam2609@gmail.com directly.</p>
+              <button className="mt-3 text-sm underline" onClick={() => setSubmitted(false)}>Back to message</button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -74,7 +78,7 @@ export default function ContactPage() {
                 type="submit"
                 className="px-6 py-2 bg-app-text text-app-bg font-medium rounded-lg hover:bg-app-card-hover transition-colors"
               >
-                Send Message
+                Open email draft
               </button>
             </form>
           )}

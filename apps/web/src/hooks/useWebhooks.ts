@@ -66,7 +66,7 @@ export function useWebhooks({ token, projectId }: UseWebhooksOptions) {
         return sub;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to create webhook");
-        return null;
+        throw e;
       }
     },
     [token, projectId]
