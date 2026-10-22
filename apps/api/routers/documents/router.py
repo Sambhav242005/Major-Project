@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from contextlib import aclosing
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +11,8 @@ from core.errors import DocumentNotFoundError
 from core.rate_limit import limiter
 from core.security import User, get_current_user
 from core.security_utils import sanitize_filename
-from core.sse import queue_sse_stream
+from core.sse import format_sse, KEEPALIVE_TIMEOUT
+from starlette.responses import StreamingResponse
 from db.models import Document
 from db.session import async_session_factory, get_db
 from schemas import DocumentListResponse, DocumentOut, DocumentStatusResponse, DocumentUploadResponse
@@ -146,4 +148,44 @@ async def stream_document_processing(document_id: str, project_id: str = Depends
     def _unsubscribe(q: asyncio.Queue):
         if document_id in _doc_subscribers:
             _doc_subscribers[document_id] = [x for x in _doc_subscribers[document_id] if x is not q]
-    return await queue_sse_stream(subscribe=_subscribe, unsubscribe=_unsubscribe, done_condition=lambda e: e.get("stage") == "complete" or e.get("status") == "failed")
+            if not _doc_subscribers[document_id]:
+                _doc_subscribers.pop(document_id, None)
+
+    async def events():
+        # Subscribe first. A completion committed while the snapshot is being
+        # read is either visible in that snapshot or already waiting in q.
+        # Use a short new session rather than the request's earlier transaction.
+        q = _subscribe()
+        try:
+            async with async_session_factory() as snapshot_db:
+                current = await doc_service.get_document_status(snapshot_db, document_id, project_id)
+            if current is None:
+                yield {"stage": "failed", "status": "failed", "error_message": "Document is no longer available"}
+                return
+            if current["status"] == "processed":
+                yield {"stage": "complete", "status": "completed"}
+                return
+            if current["status"] == "failed":
+                yield {"stage": "failed", "status": "failed", "error_message": current.get("error_message")}
+                return
+            yield {"stage": current["status"], "status": "running"}
+            while True:
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=KEEPALIVE_TIMEOUT)
+                except asyncio.TimeoutError:
+                    yield {"step": "keepalive"}
+                    continue
+                yield event
+                if event.get("stage") == "complete" or event.get("status") == "failed":
+                    return
+        finally:
+            _unsubscribe(q)
+
+    async def encoded_events():
+        async with aclosing(events()) as stream:
+            async for event in stream:
+                yield format_sse(event)
+
+    return StreamingResponse(encoded_events(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no",
+    })
