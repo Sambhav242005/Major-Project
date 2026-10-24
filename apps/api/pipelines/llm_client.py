@@ -2,6 +2,7 @@
 
 import json
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -11,6 +12,14 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 _http_client: httpx.AsyncClient | None = None
+
+
+@dataclass(frozen=True)
+class GenerationConfig:
+    provider: str
+    model: str
+    base_url: str = ""
+    api_key: str = field(default="", repr=False)
 
 
 def _get_client() -> httpx.AsyncClient:
@@ -130,12 +139,20 @@ async def chat_completion_stream(
     messages: list[dict[str, str]],
     model: str | None = None,
     temperature: float = 0.3,
+    generation: GenerationConfig | None = None,
 ):
-    if settings.LLM_PROVIDER == "chatgpt":
+    provider = generation.provider if generation else settings.LLM_PROVIDER
+    model = generation.model if generation else model
+    if provider == "chatgpt":
         async for part in _chatgpt_completion_stream(messages, model):
             yield part
         return
     client = _get_client()
+    base_url = generation.base_url if generation else settings.LLM_BASE_URL
+    if generation:
+        headers = {"Authorization": f"Bearer {generation.api_key}"} if generation.api_key else {}
+    else:
+        headers = _get_auth_header()
     body = {
         "model": model or settings.LLM_MODEL,
         "messages": messages,
@@ -145,8 +162,8 @@ async def chat_completion_stream(
 
     async with client.stream(
         "POST",
-        f"{settings.LLM_BASE_URL}/chat/completions",
-        headers=_get_auth_header(),
+        f"{base_url}/chat/completions",
+        headers=headers,
         json=body,
     ) as resp:
         resp.raise_for_status()

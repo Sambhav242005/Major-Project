@@ -129,10 +129,14 @@ def test_format_source_block():
 # --- Test: Send message yields events ---
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("use_selection", [False, True])
 @patch("services.chat.streaming.query_chunks")
-async def test_send_message_yields_events(mock_query_chunks, monkeypatch):
+async def test_send_message_yields_events(mock_query_chunks, monkeypatch, use_selection):
     mock_query_chunks.return_value = []
+    from pipelines.llm_client import GenerationConfig
+    selected = GenerationConfig("openai", "selected-model", "https://api.groq.com/openai/v1", "test-key")
     async def successful_stream(**kwargs):
+        assert kwargs.get("generation") == (selected if use_selection else None)
         yield "A complete answer"
     monkeypatch.setattr("pipelines.llm_client.chat_completion_stream", successful_stream)
     monkeypatch.setattr("services.webhooks.fire_event", AsyncMock())
@@ -158,6 +162,7 @@ async def test_send_message_yields_events(mock_query_chunks, monkeypatch):
         message="Hello",
         project_id="550e8400-e29b-41d4-a716-446655440001",
         actor_id="550e8400-e29b-41d4-a716-446655440000",
+        **({"generation": selected} if use_selection else {}),
     ):
         events.append(event)
 
