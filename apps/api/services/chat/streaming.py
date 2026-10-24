@@ -12,6 +12,7 @@ from core.security_utils import detect_injection, sanitize_for_llm
 from db.models import ChatMessage
 from pipelines.embeddings import query_chunks
 from services.audit import write_audit_log
+from pipelines.llm_client import GenerationConfig
 
 from .prompt import build_entity_context, build_messages, build_user_prompt
 from .retrieval import _expand_via_graph, _format_source_block, _get_entity_context
@@ -25,6 +26,7 @@ async def send_message(
     message: str,
     project_id: str,
     actor_id,
+    generation: GenerationConfig | None = None,
 ):
     """Stream assistant response with RAG retrieval.
 
@@ -118,6 +120,7 @@ async def send_message(
             messages=messages,
             model=settings.LLM_CHAT_MODEL,
             temperature=0.3,
+            **({"generation": generation} if generation else {}),
         ):
             full_response += chunk
             yield {"type": "chunk", "content": chunk}

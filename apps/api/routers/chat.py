@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_project_id
@@ -10,6 +11,8 @@ from core.security_utils import sanitize_input
 from core.sse import generator_sse_stream
 from db.session import get_db
 from services import chat as chat_service
+from core.config import settings
+from pipelines.llm_client import GenerationConfig
 
 router = APIRouter()
 
@@ -18,8 +21,46 @@ class CreateSessionRequest(BaseModel):
     title: str | None = None
 
 
+class GenerationSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["configured", "openai", "groq", "openrouter", "gemini", "chatgpt"] = "configured"
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+    api_key: SecretStr | None = None
+
+    @field_validator("model")
+    @classmethod
+    def clean_model(cls, value):
+        if value is not None:
+            value = value.strip()
+            if not value or any(ord(char) < 32 for char in value):
+                raise ValueError("Enter a valid model ID")
+        return value
+
+    def resolve(self) -> GenerationConfig:
+        if self.provider == "configured":
+            return GenerationConfig(settings.LLM_PROVIDER, self.model or settings.LLM_CHAT_MODEL,
+                                    settings.LLM_BASE_URL, settings.LLM_API_KEY)
+        if not self.model:
+            raise HTTPException(422, "Enter a model ID for the selected provider")
+        if self.provider == "chatgpt":
+            if not settings.CHATGPT_CREDENTIALS_PATH:
+                raise HTTPException(422, "ChatGPT is not connected on the server")
+            return GenerationConfig("chatgpt", self.model)
+        key = self.api_key.get_secret_value().strip() if self.api_key else ""
+        if not key or any(ord(char) < 32 or ord(char) > 126 for char in key):
+            raise HTTPException(422, "Enter an API key for the selected provider")
+        endpoints = {
+            "openai": "https://api.openai.com/v1",
+            "groq": "https://api.groq.com/openai/v1",
+            "openrouter": "https://openrouter.ai/api/v1",
+            "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+        }
+        return GenerationConfig("openai", self.model, endpoints[self.provider], key)
+
+
 class SendMessageRequest(BaseModel):
     message: str
+    generation: GenerationSelection | None = None
 
 
 @router.post("/sessions")
@@ -75,6 +116,7 @@ async def send_message(
 
     # Sanitize user input
     safe_message = sanitize_input(body.message)
+    generation = body.generation.resolve() if body.generation else None
 
     # SSE streaming response
     return await generator_sse_stream(
@@ -84,5 +126,6 @@ async def send_message(
             message=safe_message,
             project_id=project_id,
             actor_id=user.id,
+            **({"generation": generation} if generation else {}),
         )
     )

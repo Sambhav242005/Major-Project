@@ -4,6 +4,14 @@ This file separates repository problems, product features, research work, harden
 
 ## Index
 
+Chat now offers per-message provider/model selection (server configuration,
+OpenAI API, Groq, OpenRouter, Google Gemini, or server-connected ChatGPT). Gemini
+uses Google's OpenAI-compatible streaming endpoint. Hosted provider keys
+are entered in the UI and remain in page/request memory; selections reset on
+navigation. Offline tests cover validation, credential isolation, concurrent
+provider routing and streaming propagation. Verify the controls in a running
+browser and complete real generation with each available provider/account.
+
 PR #34 review: the isolated Pi stack, local accounts, ChatGPT OAuth, CPU MiniLM,
 schema revision 008 and ingestion failure recovery have offline coverage. Login
 limits now separate LAN clients through an authenticated private web proxy;
