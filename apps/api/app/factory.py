@@ -23,6 +23,8 @@ def create_app() -> FastAPI:
     async def lifespan(app):
         from db.session import async_session_factory
         from services.webhooks.dispatch import run_retry_scheduler, stop_retry_scheduler
+        from services.webhooks.provisioning import ensure_inbound_webhook_secrets
+        await ensure_inbound_webhook_secrets(async_session_factory)
         if settings.ENVIRONMENT == "production" and settings.DATABASE_URL.startswith("postgresql"):
             from db.session import async_session_factory
             from routers.documents.ingestion_tasks import recover_interrupted_ingestions

@@ -63,7 +63,7 @@ and CI parent is included because `main` was behind `develop`.
 | P1 | Verification | Alembic revisions reach 009 with legacy audit backfill. | Offline schema/data checks pass; PostgreSQL runtime validation pending. |
 | P1 | Feature | Google Meet output never enters the knowledge base. | Needed for an end-to-end meeting demo. |
 | P1 | Research | No sentence-level evidence, contradiction detection, or stale-knowledge evaluation exists. | Core research scope; build in dependency order. |
-| P1 | Verification | Signed inbound requests and bounded retry scheduling implemented in hardening branch. | Provision inbound secrets; live checks and replay/DNS hardening remain. |
+| P1 | Verification | Signed inbound requests, startup secret provisioning and bounded retry scheduling implemented. | Configure senders with stored secrets; live checks and replay/DNS hardening remain. |
 | P1 | Quality | No controlled retrieval or knowledge-health benchmark exists. | Blocks defensible research claims. |
 | P2 | Hardening | Frontend SSE recovery, CSP configuration, observability, and unit tests need work. | Important polish after the core demo path. |
 | P2 | Stretch | Load testing, source reliability scoring, and advanced temporal modeling. | Defer unless core scope is complete. |
@@ -141,7 +141,8 @@ These are user-facing capabilities or integrations that are incomplete.
 
 #### 2.14 Webhook signatures and retry scheduler `[HARDEN]` — implemented, live checks pending
 - **Implemented on worker branch:** raw-body HMAC before parsing/side effects; a narrow inbound POST JWT exemption; owner/editor authorization for manual retries; bounded lifespan retry scheduler with owned sessions, strong task reference and awaited cancellation. Download ingestion now saves originals and queues the normal pipeline with size/type/HTTPS checks.
-- **Operator requirement:** provision a strong `config.secret` on each inbound webhook through database administration; no configuration UI/API exists. Missing secrets fail closed. Send `X-Webhook-Signature: sha256=<HMAC-SHA256 of exact request bytes>`.
+- **Secret provisioning:** startup runs `ensure_inbound_webhook_secrets` before the retry scheduler, storing a distinct `secrets.token_urlsafe(32)` key for each existing webhook with an absent/invalid secret. Existing nonblank string secrets and other config fields are preserved; conditional updates protect concurrent workers. Values are never printed and SQL parameter logging is hidden. Failed provisioning aborts startup. Five provisioning regressions plus related webhook/integration/migration checks: **52 passed**.
+- **Operator requirement:** retrieve the stored `inbound_webhooks.config.secret` through authorized database administration and configure the sender with the same key; no configuration UI/API exists. Rows added after startup need provisioning before first use (or the next operator-managed startup); missing secrets still fail closed. Send `X-Webhook-Signature: sha256=<HMAC-SHA256 of exact request bytes>`.
 - **Remaining limits:** at-least-once delivery, no inbound timestamp/replay deduplication, shared DNS-check/re-resolution gap, and single-process SQLite serialization. PostgreSQL row locks support concurrent dispatchers. Live provider delivery remains unverified.
 - **Status:** targeted tests and independent review passed, including bounded streamed request bodies and cancellation-safe ingestion persistence. Prior wording incorrectly called inbound public: global JWT middleware previously blocked it.
 
@@ -336,7 +337,7 @@ These items define the research contribution and the evidence needed to defend i
 | P1 | **2.2 Meet results into KB** | turns the meeting recorder from a demo gadget into an ingestion source |
 | P1 | ~~**2.13 rate-limiter fix**~~ ✅ PR #1 done | one line; viva question "does rate limiting actually work per user?" — **merged** |
 | P1 | ~~**2.15 `audit_log` writers**~~ ✅ PR #2 done | dashboard activity feed is empty; dashboard is demo moment #1 — **merged** |
-| Verify | **2.14 webhook scheduler + inbound auth** | implementation, regressions and review complete; provision secrets and perform live checks |
+| Verify | **2.14 webhook scheduler + inbound auth** | startup creates missing secrets; configure senders and perform live checks |
 | P1 | ~~2.20 LLM model config~~ ✅ PR #3 done | removes hardcoded model + reasoning-model hazard — **merged** |
 | P1 | **3.7 Health dashboard surface** | `pipeline_health → knowledge_health` extension + Requires Review inbox |
 | P1 | 4 bug list sweep (delete cleanup, chunk text, SSE reconnect) | robustness questions in viva |
