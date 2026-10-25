@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -13,6 +14,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.models import InboundWebhook
 from core.outbound import validate_public_https_url
 from .signing import verify_inbound_signature, MAX_PAYLOAD_SIZE
+
+logger = logging.getLogger(__name__)
+
+
+async def _finish_ingest_mutation(operation):
+    """Finish persistence and job launch before returning caller cancellation."""
+    task = asyncio.create_task(operation)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        # Keep a strong reference and withstand repeated request cancellation.
+        # A thread doing an atomic file replacement cannot safely be cancelled.
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        try:
+            task.result()
+        except Exception:
+            logger.exception("Inbound ingestion persistence failed after cancellation")
+        raise
 
 
 async def handle_inbound(
@@ -103,16 +128,22 @@ async def _handle_ingest_document(
     doc = Document(id=document_id, project_id=webhook.project_id, filename=filename,
                    file_type=file_type, storage_path=f"projects/{webhook.project_id}/documents/{document_id}/{filename}",
                    status="pending")
-    db.add(doc)
-    try:
-        await db.flush()
-        await asyncio.to_thread(save_original, str(webhook.project_id), str(document_id), bytes(file_content))
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        await asyncio.to_thread(delete_original, str(webhook.project_id), str(document_id))
-        raise
-    _start_ingestion(async_session_factory, str(document_id), bytes(file_content))
+    async def persist_and_launch():
+        db.add(doc)
+        try:
+            await db.flush()
+            await asyncio.to_thread(save_original, str(webhook.project_id), str(document_id), bytes(file_content))
+            await db.commit()
+        except Exception:
+            for cleanup in (db.rollback(), asyncio.to_thread(delete_original, str(webhook.project_id), str(document_id))):
+                try:
+                    await cleanup
+                except Exception:
+                    logger.exception("Inbound document persistence cleanup failed")
+            raise
+        _start_ingestion(async_session_factory, str(document_id), bytes(file_content))
+
+    await _finish_ingest_mutation(persist_and_launch())
     return {"status": "pending", "document_id": str(document_id), "filename": filename, "size": len(file_content)}
 
 

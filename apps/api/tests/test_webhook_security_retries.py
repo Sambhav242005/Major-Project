@@ -261,3 +261,67 @@ async def test_ingest_persists_before_launch_and_compensates(monkeypatch):
     deleted.assert_called_once()
     db.rollback.assert_awaited_once()
     started.assert_not_called()
+
+@pytest.mark.parametrize("slug", ["test", "unknown"])
+async def test_chunked_oversized_public_request_is_rejected_before_handler(client, slug):
+    session, handler = client
+    consumed = []
+    async def body():
+        for index in range(4):
+            consumed.append(index)
+            yield b'x' * 32768
+    response = await session.post(f"/webhooks/inbound/{slug}", content=body())
+    assert response.status_code == 413
+    assert consumed == [0, 1, 2]
+    handler.assert_not_awaited()
+
+@pytest.mark.parametrize("stage", ["save", "commit"])
+@pytest.mark.parametrize("commit_failure", [False, True])
+async def test_ingest_cancellation_finishes_write_and_launch_or_compensation(monkeypatch, stage, commit_failure):
+    import threading
+    from services.documents import storage
+    from routers.documents import ingestion_tasks
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(inbound, "validate_public_https_url", AsyncMock())
+    monkeypatch.setattr(inbound.httpx, "AsyncClient", lambda **kw: original_client(transport=httpx.MockTransport(lambda req: httpx.Response(200, content=b'hello', headers={"content-type": "text/plain"})), **kw))
+    entered = asyncio.Event()
+    release_save = threading.Event()
+    release_commit = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    sequence = []
+    def save(*args):
+        if stage == "save":
+            loop.call_soon_threadsafe(entered.set)
+            assert release_save.wait(3)
+        sequence.append("saved")
+    async def commit():
+        if stage == "commit":
+            entered.set()
+            await release_commit.wait()
+        if commit_failure:
+            raise RuntimeError("commit failed")
+        sequence.append("committed")
+    def delete(*args):
+        assert "saved" in sequence
+        sequence.append("deleted")
+    monkeypatch.setattr(storage, "save_original", save)
+    monkeypatch.setattr(storage, "delete_original", delete)
+    monkeypatch.setattr(ingestion_tasks, "_start_ingestion", lambda *args: sequence.append("launched"))
+    db = SimpleNamespace(add=MagicMock(), flush=AsyncMock(), commit=commit, rollback=AsyncMock())
+    task = asyncio.create_task(inbound._handle_ingest_document(db, SimpleNamespace(project_id=uuid.uuid4()), {"file_url": "https://example.com/file"}, {}))
+    await asyncio.wait_for(entered.wait(), 2)
+    task.cancel()
+    await asyncio.sleep(0)
+    assert not task.done()
+    task.cancel()  # repeated cancellation must not orphan the mutation
+    await asyncio.sleep(0)
+    release_save.set()
+    release_commit.set()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, 3)
+    if commit_failure:
+        assert sequence == ["saved", "deleted"]
+        db.rollback.assert_awaited_once()
+    else:
+        assert sequence == ["saved", "committed", "launched"]
+        db.rollback.assert_not_awaited()

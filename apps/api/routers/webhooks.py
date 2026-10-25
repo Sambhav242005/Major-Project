@@ -13,7 +13,7 @@ from core.security import User, get_current_user
 from db.models import WebhookSubscription, WebhookDelivery, ProjectMember
 from services.webhooks import (
     fire_event,
-    handle_inbound, dispatch_pending_deliveries,
+    handle_inbound, dispatch_pending_deliveries, MAX_PAYLOAD_SIZE,
 )
 from core.outbound import validate_public_https_url
 
@@ -198,10 +198,14 @@ async def inbound_webhook(
     db: AsyncSession = Depends(get_db),
 ):
     """Receive an inbound webhook POST."""
-    body = await request.body()
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_PAYLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Webhook payload exceeds maximum size")
+        body.extend(chunk)
     headers = dict(request.headers)
 
-    result = await handle_inbound(db=db, slug=slug, payload=body, headers=headers)
+    result = await handle_inbound(db=db, slug=slug, payload=bytes(body), headers=headers)
     return result
 
 
