@@ -221,7 +221,8 @@ create table audit_log (
   action text not null,
   resource_type text,
   resource_id uuid,
-  metadata jsonb,
+  metadata jsonb, -- legacy audit details retained by Alembic revision 009
+  meta jsonb,
   created_at timestamptz default now()
 );
 
