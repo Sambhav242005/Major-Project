@@ -1,20 +1,25 @@
 """Webhook inbound — routing and handlers for inbound webhooks."""
 
+import asyncio
+import json
 import uuid
 from datetime import datetime, timezone
 
 import httpx
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import InboundWebhook
+from core.outbound import validate_public_https_url
+from .signing import verify_inbound_signature, MAX_PAYLOAD_SIZE
 
 
 async def handle_inbound(
     db: AsyncSession,
     slug: str,
-    payload: dict,
-    headers: dict = {},
+    payload: bytes,
+    headers: dict | None = None,
 ) -> dict:
     """Route an inbound webhook to its handler."""
     stmt = select(InboundWebhook).where(
@@ -25,7 +30,20 @@ async def handle_inbound(
     webhook = result.scalar_one_or_none()
 
     if not webhook:
-        return {"error": f"No active webhook found for slug: {slug}"}
+        raise HTTPException(status_code=404, detail="Webhook not found")
+
+    secret = (webhook.config or {}).get("secret")
+    signature = (headers or {}).get("x-webhook-signature", "")
+    if not isinstance(secret, str) or not secret or not verify_inbound_signature(payload, signature, secret):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    if len(payload) > MAX_PAYLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="Webhook payload exceeds maximum size")
+    try:
+        payload = json.loads(payload)
+    except (ValueError, UnicodeDecodeError):
+        raise HTTPException(status_code=400, detail="Webhook body must be JSON")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Webhook body must be a JSON object")
 
     handler = webhook.handler
     config = webhook.config or {}
@@ -54,13 +72,48 @@ async def _handle_ingest_document(
         return {"error": "Missing file_url in payload"}
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.get(file_url)
-            file_content = resp.content
+        from routers.documents.validation import ALLOWED_TYPES, MAX_FILE_SIZE
+        await validate_public_https_url(file_url)
+        async with asyncio.timeout(60), httpx.AsyncClient(timeout=60, follow_redirects=False, trust_env=False) as client:
+            async with client.stream("GET", file_url) as resp:
+                resp.raise_for_status()
+                if resp.is_redirect:
+                    raise ValueError("Document redirects are not allowed")
+                file_type = resp.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                if file_type not in ALLOWED_TYPES:
+                    raise ValueError("Unsupported document content type")
+                file_content = bytearray()
+                async for chunk in resp.aiter_bytes(chunk_size=65536):
+                    file_content.extend(chunk)
+                    if len(file_content) > MAX_FILE_SIZE:
+                        raise ValueError("Document exceeds 25MB limit")
+                if not file_content:
+                    raise ValueError("Empty document")
     except Exception as e:
         return {"error": f"Failed to download file: {e}"}
 
-    return {"status": "received", "filename": filename, "size": len(file_content)}
+    from core.security_utils import sanitize_filename
+    from db.models import Document
+    from db.session import async_session_factory
+    from services.documents.storage import save_original, delete_original
+    from routers.documents.ingestion_tasks import _start_ingestion
+
+    document_id = uuid.uuid4()
+    filename = sanitize_filename(str(filename)) or "webhook_upload"
+    doc = Document(id=document_id, project_id=webhook.project_id, filename=filename,
+                   file_type=file_type, storage_path=f"projects/{webhook.project_id}/documents/{document_id}/{filename}",
+                   status="pending")
+    db.add(doc)
+    try:
+        await db.flush()
+        await asyncio.to_thread(save_original, str(webhook.project_id), str(document_id), bytes(file_content))
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        await asyncio.to_thread(delete_original, str(webhook.project_id), str(document_id))
+        raise
+    _start_ingestion(async_session_factory, str(document_id), bytes(file_content))
+    return {"status": "pending", "document_id": str(document_id), "filename": filename, "size": len(file_content)}
 
 
 async def _handle_trigger_agent(

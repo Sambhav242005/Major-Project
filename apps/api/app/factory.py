@@ -1,5 +1,6 @@
 """Application factory — creates and configures the FastAPI app."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -20,11 +21,17 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     @asynccontextmanager
     async def lifespan(app):
+        from db.session import async_session_factory
+        from services.webhooks.dispatch import run_retry_scheduler, stop_retry_scheduler
         if settings.ENVIRONMENT == "production" and settings.DATABASE_URL.startswith("postgresql"):
             from db.session import async_session_factory
             from routers.documents.ingestion_tasks import recover_interrupted_ingestions
             await recover_interrupted_ingestions(async_session_factory)
-        yield
+        app.state.webhook_retry_task = asyncio.create_task(run_retry_scheduler(async_session_factory))
+        try:
+            yield
+        finally:
+            await stop_retry_scheduler(app.state.webhook_retry_task)
 
     app = FastAPI(
         title="AI Knowledge Graph Builder API",

@@ -43,6 +43,9 @@ class GlobalAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Allow public routes
+        # Inbound POSTs authenticate with the configured raw-body HMAC secret.
+        if request.method == "POST" and path.startswith("/webhooks/inbound/") and len(path.split("/")) == 4 and path.rsplit("/", 1)[1]:
+            return await call_next(request)
         if path in PUBLIC_ROUTES or path.startswith(PUBLIC_PREFIXES):
             return await call_next(request)
 

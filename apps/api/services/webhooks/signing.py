@@ -23,5 +23,8 @@ def verify_inbound_signature(
     secret: str,
 ) -> bool:
     """Verify HMAC-SHA256 signature for inbound webhook."""
-    expected = _sign_payload(payload.decode("utf-8"), secret)
-    return hmac.compare_digest(f"sha256={expected}", signature)
+    expected = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    try:
+        return hmac.compare_digest(f"sha256={expected}", signature)
+    except (TypeError, ValueError):
+        return False
