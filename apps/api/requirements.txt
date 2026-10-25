@@ -28,6 +28,9 @@ slowapi>=0.1.9
 
 # NLP entity extraction
 spacy>=3.8.0,<3.9.0
+# 3.0.14 breaks spaCy tokenizer deserialization (uint64 -> C ssize_t).
+# Verified with the same model/runtime: 3.0.13 loads; 3.0.14 raises OverflowError.
+preshed==3.0.13
 
 # Google Meet bot agent
 playwright>=1.49.0

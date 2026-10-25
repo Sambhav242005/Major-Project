@@ -52,6 +52,9 @@ git push origin --delete feat/short-description
 
 ## 3. What to Check Before Opening a PR
 
+- [ ] Before every push or PR create/update, review the complete `git diff <base>...HEAD` (the same merge-base comparison as the PR Files changed tab), including migrations, startup paths, tests and docs. Do not rely only on individual worker diffs.
+- [ ] Run the affected CI commands locally before pushing. Backend changes require the full offline suite from an isolated working directory with the CI environment, excluding only the two live-server scripts (`test_integration.py`, `test_integration_quick.py`). Targeted tests supplement this check; they do not replace it. Record interpreter/dependency differences and checks that could not run.
+- [ ] If CI fails, inspect its logs, reproduce the failure locally where possible, fix it and repeat local validation before pushing corrections. Report CI status accurately; a local pass does not imply remote CI passed.
 - [ ] `grep -r "prisma" apps/web/src` → 0 hits (Prisma must stay removed)
 - [ ] `BUILD_BRIEF.md` untouched unless explicitly approved (it's locked)
 - [ ] Env changes documented in `README.md#Environment Variables Reference` and `apps/api/.env.example` / `apps/web/.env.example`

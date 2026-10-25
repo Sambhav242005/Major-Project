@@ -6,6 +6,21 @@ This file separates repository problems, product features, research work, harden
 
 ### Parallel hardening delivery (2026-10-25)
 
+PR #41 follow-up validation: reproduced the CI tokenizer crash with
+`preshed==3.0.14`; changing only that dependency to 3.0.13 restores model loading.
+Requirements now pin the verified version. In-process middleware tests isolate
+startup database jobs, with dedicated provisioning tests retaining real coverage.
+Four new failed-retry interleavings reproduced compensation overwriting a newer
+run after its status/error repeated. Migration **010** adds a persistent document
+mutation version, incremented by retry/recovery, to distinguish these runs.
+Apply migrations before using the updated backend; `create_all` does not alter
+existing SQLite tables. Full isolated Python 3.11 offline suite: **590 passed,
+2 skipped**, excluding the two pre-existing live-server scripts. Compilation
+passed. AGENTS now requires the full PR diff and affected CI checks before push.
+Frontend validation on the same worktree: lint, TypeScript, **42 unit tests** and
+the production build passed. Local verification used Windows/Python 3.11.15;
+GitHub CI uses Linux/Python 3.11, so its remote result is tracked separately.
+
 Implemented on local integration branch `feat/old-todo-hardening`, with separate
 worker branches `feat/document-storage`, `fix/webhook-security-retries`, and
 `fix/schema-migration-gaps`. Combined isolated verification: **225 tests passed**.
@@ -60,7 +75,7 @@ and CI parent is included because `main` was behind `develop`.
 |---|---|---|---|
 | P0 | Verification | Private local originals exist; lifecycle improvements are in the hardening branch. | Original-access, retry/delete and compensation tests; browser checks pending. |
 | P0 | Feature | MCP has CRUD/OAuth plumbing but no real MCP server or client. | Large feature; required only if Claude Desktop integration is mandatory. |
-| P1 | Verification | Alembic revisions reach 009 with legacy audit backfill. | Offline schema/data checks pass; PostgreSQL runtime validation pending. |
+| P1 | Verification | Alembic revisions reach 010 with audit backfill and document mutation version. | Offline schema/data checks pass; PostgreSQL runtime validation pending. |
 | P1 | Feature | Google Meet output never enters the knowledge base. | Needed for an end-to-end meeting demo. |
 | P1 | Research | No sentence-level evidence, contradiction detection, or stale-knowledge evaluation exists. | Core research scope; build in dependency order. |
 | P1 | Verification | Signed inbound requests, startup secret provisioning and bounded retry scheduling implemented. | Configure senders with stored secrets; live checks and replay/DNS hardening remain. |
@@ -155,6 +170,7 @@ These are user-facing capabilities or integrations that are incomplete.
 #### 2.16 Alembic schema parity and legacy audit details `[HARDEN]`
 - **Audit:** revisions 001–008 already represent all 26 ORM tables with matching declared columns/types/nullability/keys. The frozen-001 claim was stale. Intentional differences include migration-only indexes, SQL defaults, and legacy `audit_log.metadata`.
 - **Implemented:** revision 009 copies legacy `metadata` into missing `meta` (SQL NULL or JSON null), preserving existing values and retaining legacy conflicts. The Supabase SQL bootstrap now also declares `meta`. Independent review passed.
+- **Follow-up:** revision 010 adds `documents.mutation_version` with default 0 for existing rows, preventing compensation from overwriting a newer retry that fails with the same status/error. Upgrade/downgrade preserves document content; real PostgreSQL execution remains pending.
 - **Verified:** offline PostgreSQL fresh/008→009 SQL generation and declared-schema comparison; temporary-database backfill/idempotence/data-preserving downgrade tests. Actual PostgreSQL upgrade/reflection remains pending; no server was started.
 - **Separate gap:** `infra/schema.sql` is a 21-table Supabase bootstrap, missing five current tables (`agent_memory`, `agent_checkpoints`, `project_memory_shares`, `mcp_auth_tokens`, `local_accounts`). Use Alembic for the current application schema; its local identity model intentionally differs from Supabase's `auth.users` FK/trigger. Full bootstrap alignment is deferred.
 

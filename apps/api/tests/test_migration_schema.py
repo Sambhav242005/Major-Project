@@ -34,7 +34,7 @@ def test_postgresql_fresh_upgrade_and_existing_upgrade_render_offline():
         from alembic.config import Config
         from alembic.script import ScriptDirectory
         config = Config('alembic.ini')
-        assert ScriptDirectory.from_config(config).get_heads() == ['009']
+        assert ScriptDirectory.from_config(config).get_heads() == ['010']
         output = StringIO()
         config.output_buffer = output
         command.upgrade(config, 'head', sql=True)
@@ -45,7 +45,8 @@ def test_postgresql_fresh_upgrade_and_existing_upgrade_render_offline():
             assert 'CREATE TABLE ' + table + ' (' in sql, table
         assert 'UPDATE audit_log SET meta = metadata' in sql
         assert 'CAST(meta AS TEXT)' in sql
-        assert "SET version_num='009'" in sql
+        assert "SET version_num='010'" in sql
+        assert 'ADD COLUMN mutation_version INTEGER DEFAULT' in sql
         output.truncate(0)
         output.seek(0)
         command.upgrade(config, '008:head', sql=True)
@@ -155,5 +156,30 @@ def test_legacy_audit_backfill_preserves_existing_details(tmp_path):
             with Operations.context(MigrationContext.configure(connection)):
                 revision.downgrade()
             assert connection.exec_driver_sql('SELECT id, metadata, meta FROM audit_log ORDER BY id').all() == actual
+        engine.dispose()
+    """)
+
+
+def test_document_mutation_version_upgrades_existing_rows(tmp_path):
+    run_isolated(f"""
+        import importlib.util
+        import sqlalchemy as sa
+        from alembic.migration import MigrationContext
+        from alembic.operations import Operations
+        engine = sa.create_engine('sqlite:///' + {str(tmp_path / 'documents.db')!r})
+        spec = importlib.util.spec_from_file_location('revision010', 'migrations/versions/010_document_mutation_version.py')
+        revision = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(revision)
+        with engine.begin() as connection:
+            connection.exec_driver_sql('CREATE TABLE documents (id INTEGER PRIMARY KEY, filename TEXT)')
+            connection.exec_driver_sql("INSERT INTO documents VALUES (1, 'existing.txt')")
+            with Operations.context(MigrationContext.configure(connection)):
+                revision.upgrade()
+            assert connection.exec_driver_sql('SELECT mutation_version FROM documents').scalar_one() == 0
+            connection.exec_driver_sql('UPDATE documents SET mutation_version = mutation_version + 1')
+            assert connection.exec_driver_sql('SELECT mutation_version FROM documents').scalar_one() == 1
+            with Operations.context(MigrationContext.configure(connection)):
+                revision.downgrade()
+            assert connection.exec_driver_sql('SELECT filename FROM documents').scalar_one() == 'existing.txt'
         engine.dispose()
     """)

@@ -295,7 +295,7 @@ async def test_retry_replacement_failure_restores_original(original_routes, monk
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("loser", ["delete", "retry"])
-@pytest.mark.parametrize("winner", ["delete", "retry", "completed_retry"])
+@pytest.mark.parametrize("winner", ["delete", "retry", "completed_retry", "failed_retry"])
 @pytest.mark.parametrize("has_original", [False, True])
 async def test_rollback_recovery_preserves_winning_mutation(original_routes, tmp_path, monkeypatch, loser, winner, has_original):
     from datetime import datetime, timezone
@@ -343,6 +343,14 @@ async def test_rollback_recovery_preserves_winning_mutation(original_routes, tmp
                             row.status = "processed"
                             row.processed_at = datetime.now(timezone.utc)
                             await winning_db.commit()
+                        elif winner == "failed_retry":
+                            # Same terminal state as before the losing request:
+                            # state labels alone cannot identify this new run.
+                            row = await winning_db.get(Document, document)
+                            row.status = "failed"
+                            row.error_message = None
+                            row.processed_at = None
+                            await winning_db.commit()
 
             monkeypatch.setattr(db, "rollback", rollback_then_winner)
             monkeypatch.setattr(db, "commit", AsyncMock(side_effect=RuntimeError("losing commit failed")))
@@ -359,7 +367,7 @@ async def test_rollback_recovery_preserves_winning_mutation(original_routes, tmp
                 assert not original_path(str(project), str(document)).exists()
                 started.assert_not_called()
             else:
-                assert row.status == ("processed" if winner == "completed_retry" else "pending")
+                assert row.status == ({"completed_retry": "processed", "failed_retry": "failed"}.get(winner, "pending"))
                 assert row.error_message is None
                 assert load_original(str(project), str(document)) == b"winning source"
                 started.assert_called_once()

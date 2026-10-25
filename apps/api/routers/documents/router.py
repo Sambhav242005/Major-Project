@@ -65,7 +65,7 @@ async def _compensate(operation):
 
 
 def _recovery_state(doc):
-    return doc.status, doc.processed_at, doc.error_message
+    return doc.status, doc.processed_at, doc.error_message, doc.mutation_version
 
 
 async def _recover_original(db, document_id, project_id, original, expected_state, *, evidence_removed=False):
@@ -82,6 +82,7 @@ async def _recover_original(db, document_id, project_id, original, expected_stat
         doc.status = "failed"
         doc.processed_at = None
         doc.error_message = "Deletion was interrupted after evidence cleanup. Retry this document to restore searchable evidence from its original file."
+    doc.mutation_version = (doc.mutation_version or 0) + 1
     # Keep the lock through the filesystem restoration and its SQL state update.
     await db.commit()
 
@@ -256,6 +257,7 @@ async def retry_document(document_id: str, request: Request, response: Response,
             if file is not None:
                 await asyncio.to_thread(save_original, project_id, document_id, content)
             doc.status = "pending"
+            doc.mutation_version = (doc.mutation_version or 0) + 1
             doc.error_message = None
             doc.processed_at = None
             await db.commit()

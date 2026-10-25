@@ -30,6 +30,7 @@ create table documents (
   file_type text not null,
   storage_path text not null,
   status text check (status in ('pending','processing','processed','failed')) default 'pending',
+  mutation_version int not null default 0,
   page_count int,
   error_message text,
   uploaded_at timestamptz default now(),
