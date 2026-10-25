@@ -8,6 +8,7 @@ from .crud import (
     get_document,
     get_document_status,
     list_documents,
+    lock_document_for_mutation,
     update_document_status,
     upload_document,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "upload_document",
     "get_document",
     "list_documents",
+    "lock_document_for_mutation",
     "get_document_status",
     "update_document_status",
     "delete_document",

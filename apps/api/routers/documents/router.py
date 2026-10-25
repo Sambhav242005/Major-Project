@@ -1,7 +1,9 @@
 """Documents endpoints — upload, list, status, chunks, entities, delete, retry, stream."""
 
 import asyncio
+import logging
 import uuid
+from urllib.parse import quote
 from contextlib import aclosing
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +15,6 @@ from core.security import User, get_current_user
 from core.security_utils import sanitize_filename
 from core.sse import format_sse, KEEPALIVE_TIMEOUT
 from starlette.responses import StreamingResponse
-from db.models import Document
 from db.session import async_session_factory, get_db
 from schemas import DocumentListResponse, DocumentOut, DocumentStatusResponse, DocumentUploadResponse
 from services import documents as doc_service
@@ -23,6 +24,53 @@ from .ingestion_tasks import _doc_subscribers, _start_ingestion
 from .validation import ALLOWED_TYPES, MAX_FILE_SIZE
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _finish_mutation(operation):
+    """Finish storage/SQL changes before request cancellation closes the session."""
+    task = asyncio.create_task(operation)
+    cancellation = None
+    while True:
+        try:
+            result = await asyncio.shield(task)
+            break
+        except asyncio.CancelledError as exc:
+            cancellation = exc
+            if task.done():
+                if not task.cancelled():
+                    try:
+                        task.result()
+                    except Exception:
+                        logger.exception("Document mutation failed during request cancellation")
+                break
+        except Exception:
+            if cancellation is None:
+                raise
+            logger.exception("Document mutation failed during request cancellation")
+            break
+    if cancellation is not None:
+        # Repeated caller cancellation must not stop a threaded filesystem write,
+        # its compensation, or the commit followed by ingestion launch.
+        raise cancellation
+    return result
+
+
+async def _compensate(operation):
+    """Attempt every recovery step without masking the triggering failure."""
+    try:
+        await operation
+    except Exception:
+        logger.exception("Document mutation recovery failed")
+
+
+async def _mark_interrupted_delete(db, document_id, project_id):
+    doc = await doc_service.lock_document_for_mutation(db, document_id, project_id)
+    if doc is not None:
+        doc.status = "failed"
+        doc.processed_at = None
+        doc.error_message = "Deletion was interrupted after evidence cleanup. Retry this document to restore searchable evidence from its original file."
+        await db.commit()
 
 
 @router.post("", status_code=202, response_model=DocumentUploadResponse)
@@ -38,11 +86,18 @@ async def upload_document(request: Request, response: Response, file: UploadFile
     doc_id = str(uuid.uuid4())
     safe_filename = sanitize_filename(file.filename or "unnamed")
     storage_path = f"projects/{project_id}/documents/{doc_id}/{safe_filename}"
-    result = await doc_service.upload_document(db=db, user=user, filename=safe_filename, file_type=file.content_type, storage_path=storage_path, project_id=project_id)
-    await write_audit_log(db=db, project_id=project_id, actor_id=user.id, action="document.uploaded", resource_type="document", resource_id=result["id"], meta={"filename": result["filename"]})
-    await asyncio.to_thread(save_original, project_id, result["id"], content)
-    await db.commit()
-    _start_ingestion(async_session_factory, result["id"], content)
+    result = await doc_service.upload_document(db=db, user=user, filename=safe_filename, file_type=file.content_type, storage_path=storage_path, project_id=project_id, document_id=doc_id)
+    async def _persist():
+        try:
+            await write_audit_log(db=db, project_id=project_id, actor_id=user.id, action="document.uploaded", resource_type="document", resource_id=result["id"], meta={"filename": result["filename"]})
+            await asyncio.to_thread(save_original, project_id, result["id"], content)
+            await db.commit()
+        except Exception:
+            await _compensate(db.rollback())
+            await _compensate(asyncio.to_thread(delete_original, project_id, result["id"]))
+            raise
+        _start_ingestion(async_session_factory, result["id"], content)
+    await _finish_mutation(_persist())
     return DocumentUploadResponse(id=result["id"], filename=result["filename"], status="pending", message="Document uploaded and queued for processing")
 
 
@@ -58,6 +113,35 @@ async def get_document(document_id: str, project_id: str = Depends(get_project_i
     if not doc:
         raise DocumentNotFoundError()
     return DocumentOut(**doc)
+
+
+@router.get("/{document_id}/original")
+async def get_document_original(document_id: str, download: bool = True, project_id: str = Depends(get_project_id), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    # Authorize using metadata, never by accepting a storage path from a caller.
+    try:
+        uuid.UUID(document_id)
+    except ValueError:
+        raise DocumentNotFoundError()
+    doc = await doc_service.get_document(db, document_id, project_id)
+    if not doc:
+        raise DocumentNotFoundError()
+    try:
+        content = await asyncio.to_thread(load_original, project_id, document_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Original file unavailable for this document")
+    file_type = doc["file_type"]
+    # Never render uploaded active formats in the application's origin.
+    preview_types = {"application/pdf", "text/plain", "image/png", "image/jpeg", "image/tiff", "image/bmp", "image/webp"}
+    if file_type in {"text/markdown", "text/csv"}:
+        file_type = "text/plain"
+    disposition = "inline" if not download and file_type in preview_types else "attachment"
+    filename = quote(sanitize_filename(doc["filename"]) or "document", safe="")
+    return Response(content, media_type=file_type, headers={
+        "Content-Disposition": f"{disposition}; filename*=utf-8''{filename}",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "sandbox; default-src 'none'",
+    })
 
 
 @router.get("/{document_id}/status", response_model=DocumentStatusResponse)
@@ -88,24 +172,46 @@ async def get_document_entities(document_id: str, project_id: str = Depends(get_
 
 @router.delete("/{document_id}")
 async def delete_document(document_id: str, project_id: str = Depends(get_project_id), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    status = await doc_service.get_document_status(db, document_id, project_id)
-    if status and status["status"] in ("pending", "processing"):
-        raise HTTPException(status_code=409, detail="Wait for processing to finish before deleting this document")
-    deleted = await doc_service.delete_document(db, document_id, project_id)
-    if not deleted:
+    doc = await doc_service.lock_document_for_mutation(db, document_id, project_id)
+    if doc is None:
         raise DocumentNotFoundError()
-    await write_audit_log(db=db, project_id=project_id, actor_id=user.id, action="document.deleted", resource_type="document", resource_id=document_id)
-    await db.commit()
-    await asyncio.to_thread(delete_original, project_id, document_id)
+    if doc.status in ("pending", "processing"):
+        raise HTTPException(status_code=409, detail="Wait for processing to finish before deleting this document")
+    async def _delete():
+        original = None
+        evidence_removal_started = False
+        try:
+            try:
+                original = await asyncio.to_thread(load_original, project_id, document_id)
+            except FileNotFoundError:
+                pass  # Older uploads may have no saved original.
+            # Detect a storage failure before removing searchable vector evidence.
+            await asyncio.to_thread(delete_original, project_id, document_id)
+            evidence_removal_started = True
+            deleted = await doc_service.delete_document(db, document_id, project_id)
+            if not deleted:
+                raise DocumentNotFoundError()
+            await write_audit_log(db=db, project_id=project_id, actor_id=user.id, action="document.deleted", resource_type="document", resource_id=document_id)
+            await db.commit()
+        except Exception:
+            await _compensate(db.rollback())
+            if original is not None:
+                await _compensate(asyncio.to_thread(save_original, project_id, document_id, original))
+            if evidence_removal_started:
+                # SQL rollback cannot restore vectors already removed externally.
+                # Make surviving metadata visibly retryable instead of processed.
+                await _compensate(_mark_interrupted_delete(db, document_id, project_id))
+            raise
+    await _finish_mutation(_delete())
     return {"deleted": True}
 
 
 @router.post("/{document_id}/retry", status_code=202)
 async def retry_document(document_id: str, request: Request, response: Response, project_id: str = Depends(get_project_id), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    status = await doc_service.get_document_status(db, document_id, project_id)
-    if not status:
+    doc = await doc_service.lock_document_for_mutation(db, document_id, project_id)
+    if doc is None:
         raise DocumentNotFoundError()
-    if status["status"] != "failed":
+    if doc.status != "failed":
         raise HTTPException(status_code=409, detail="Only failed documents can be retried")
     form = await request.form()
     file = form.get("file")
@@ -122,15 +228,34 @@ async def retry_document(document_id: str, request: Request, response: Response,
         raise HTTPException(status_code=400, detail="Empty document")
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File exceeds 25MB limit")
-    doc = await db.get(Document, uuid.UUID(document_id))
-    if doc:
-        if file is not None and file.content_type != doc.file_type:
-            raise HTTPException(status_code=400, detail="Retry file must use the original document type")
-        await asyncio.to_thread(save_original, project_id, document_id, content)
-        doc.status = "pending"
-        doc.error_message = None
-        await db.commit()
-    _start_ingestion(async_session_factory, document_id, content)
+    if file is not None and file.content_type != doc.file_type:
+        raise HTTPException(status_code=400, detail="Retry file must use the original document type")
+    # File-free retries keep the durable original unchanged. A supplied replacement
+    # is restored if the metadata transaction fails.
+    async def _retry():
+        previous = None
+        if file is not None:
+            try:
+                previous = await asyncio.to_thread(load_original, project_id, document_id)
+            except FileNotFoundError:
+                pass
+        try:
+            if file is not None:
+                await asyncio.to_thread(save_original, project_id, document_id, content)
+            doc.status = "pending"
+            doc.error_message = None
+            doc.processed_at = None
+            await db.commit()
+        except Exception:
+            await _compensate(db.rollback())
+            if file is not None:
+                if previous is None:
+                    await _compensate(asyncio.to_thread(delete_original, project_id, document_id))
+                else:
+                    await _compensate(asyncio.to_thread(save_original, project_id, document_id, previous))
+            raise
+        _start_ingestion(async_session_factory, document_id, content)
+    await _finish_mutation(_retry())
     return {"id": document_id, "status": "pending", "message": "Document queued for reprocessing"}
 
 

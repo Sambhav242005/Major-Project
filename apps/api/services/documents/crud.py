@@ -32,9 +32,10 @@ async def upload_document(
     file_type: str,
     storage_path: str,
     project_id: str,
+    document_id: str | None = None,
 ) -> dict:
     """Insert document row with pending status."""
-    doc_id = uuid.uuid4()
+    doc_id = uuid.UUID(document_id) if document_id else uuid.uuid4()
     doc = Document(
         id=doc_id,
         project_id=uuid.UUID(project_id),
@@ -61,6 +62,26 @@ async def get_document(db: AsyncSession, document_id: str, project_id: str) -> d
     if not doc:
         return None
     return _doc_to_dict(doc)
+
+
+async def lock_document_for_mutation(db: AsyncSession, document_id: str, project_id: str) -> Document | None:
+    """Serialize retry/delete through commit on PostgreSQL and SQLite.
+
+    A no-op UPDATE takes a writer lock on SQLite, where SELECT FOR UPDATE is
+    ignored. RETURNING reads the current status after the lock is acquired.
+    """
+    try:
+        identifier, project = uuid.UUID(document_id), uuid.UUID(project_id)
+    except (ValueError, TypeError):
+        return None
+    result = await db.execute(
+        update(Document)
+        .where(Document.id == identifier, Document.project_id == project)
+        .values(status=Document.status)
+        .returning(Document)
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
 
 
 async def list_documents(db: AsyncSession, project_id: str, limit: int = 100, offset: int = 0) -> list[dict]:
