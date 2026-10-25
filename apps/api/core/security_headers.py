@@ -30,15 +30,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Content security policy (basic)
         if request.url.path.startswith("/docs") or request.url.path.startswith("/redoc"):
             # Allow Swagger UI resources
-            response.headers["Content-Security-Policy"] = (
+            response.headers.setdefault("Content-Security-Policy", (
                 "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
                 "style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
-            )
+            ))
         else:
             connect_sources = " ".join(["'self'", *settings.CORS_ORIGINS])
-            response.headers["Content-Security-Policy"] = (
+            response.headers.setdefault("Content-Security-Policy", (
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                 f"img-src 'self' data:; connect-src {connect_sources};"
-            )
+            ))
 
         return response

@@ -460,8 +460,13 @@ tests, actual ingestion/model calls, and a database backup restoration check.
     complete. To roll back, restore a compatible image/configuration and database
     backup together. Do not use `docker compose down -v`: it deletes AKGB data.
 
-The isolated stack does not complete durable raw-upload storage, restart-safe
-background jobs, real MCP transport, meeting-to-KB ingestion or the research-only
+Original uploads are stored privately in `document_originals` beside `CHROMA_PATH`
+(for `/data/chroma`, originals live in `/data/document_originals`). Include this
+directory in API-volume backups alongside vectors and the database; older uploads
+without saved originals still require re-uploading for retry.
+
+The isolated stack does not complete restart-safe background jobs, real MCP
+transport, meeting-to-KB ingestion or the research-only
 verification policy. Uploaded meeting analysis now honors the configured audio
 directory; live transcription still requires a separate integration check.
 

@@ -14,6 +14,7 @@ def _get_engine():
         _engine = create_async_engine(
             settings.DATABASE_URL,
             echo=settings.ENVIRONMENT == "development" and not is_sqlite,
+            hide_parameters=True,  # SQL diagnostics must not expose webhook/auth secrets.
             pool_pre_ping=not is_sqlite,
             connect_args={"check_same_thread": False} if is_sqlite else {},
         )

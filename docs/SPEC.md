@@ -40,7 +40,7 @@ Authoritative spec of what the system actually is, how it's built, and every del
 | File parsing | PyMuPDF (PDF), python-docx (DOCX), Tesseract OCR (images) | `apps/api/pipelines/parser.py` |
 | Webhooks | HTTP outbound with retry table (`webhook_deliveries`) | `apps/api/services/webhooks/` |
 
-> **Documented but NOT implemented:** Prisma (see §5), Supabase Storage (TODO in code), Redis/queue (documented upgrade path only), Vitest/React Testing Library (devDependency only, no tests).
+> **Implementation boundaries:** Prisma was removed (see §5). Originals use private local storage rather than Supabase Storage. Redis remains an upgrade path. Frontend utility unit tests exist; React Testing Library component coverage remains pending.
 
 ---
 
@@ -188,7 +188,7 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 |---|---|---|---|
 | 1 | "SQLite (local dev for Prisma)" + `apps/web/prisma/` structure | Prisma deleted in `8c72299`; no `schema.prisma` anywhere | **Stale docs** |
 | 2 | `DATABASE_URL` env var for frontend | No consumer in `apps/web/src` | **Stale env** |
-| 3 | "Supabase Storage" for files (`storage_path`) | `storage_path` is just a generated path string; `documents.py` has `# TODO: Upload to Supabase Storage` — files live only in request memory; retry requires re-uploading | **Not implemented** |
+| 3 | Durable original files | Private UUID-scoped originals beside `CHROMA_PATH`; authorized download/limited inline preview, file-free retry, serialized mutations, cancellation and rollback compensation. Recovery preserves concurrent winners; interrupted evidence deletion marks surviving metadata failed/retryable. No cross-store hard-crash atomicity; frontend original buttons remain a follow-up. | **Offline regression/review complete; live checks pending** |
 | 4 | Backend LLM: OpenAI / Ollama | `apps/api/.env` uses **Groq** (OpenAI-compatible) with model `qwen/qwen3.8-27b` (`LLM_CHAT_MODEL`/`LLM_EXTRACT_MODEL`, PR #3); embeddings `qwen3-embedding:4b`; embeddings additionally support Gemini via `EMBEDDING_PROVIDER=gemini` (issue #6) | **Differs from README defaults** (code supports both; env differs) |
 | 5 | ChromaDB "on disk, no separate service" | True — `PersistentClient(path=CHROMA_PATH)` | ✅ Matches |
 | 6 | Postgres + NetworkX over Neo4j | True — ADR-0001, `services/knowledge/` | ✅ Matches |
@@ -197,7 +197,7 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 9 | Chat streaming over SSE with citations | True — `services/chat/` + `app/(app)/chat/page.tsx`. Chat UI selects server configuration, OpenAI API, Groq, OpenRouter, Google Gemini (OpenAI-compatible streaming), or server-connected ChatGPT and accepts an exact model ID. Overrides are immutable per message; hosted API keys stay in page/request memory and are never persisted. Fixed hosted endpoints prevent arbitrary URL overrides. Extraction, meetings and embeddings retain server settings. | ✅ Matches; provider/model controls covered offline, live provider access unverified |
 | 10 | Background tasks via FastAPI BackgroundTasks (brief §2) | Actually `asyncio.create_task` + strong refs (`documents.py`, `task_queue.py`) — deliberate fix for middleware dropping BackgroundTasks | **Deviation, documented in code comments** |
 | 11 | Testing: Vitest + RTL frontend | Vitest/RTL in devDependencies; `npm run test` wired up with `vitest.config.ts` (#29) and unit tests started in `src/lib/utils.test.ts` — still no RTL component tests | **Partial (#29)** |
-| 12 | Alembic migrations path | Present (`migrations/001_initial_schema.py`) but dev uses `init_db.py` `create_all` | ✅ Present / dev shortcut |
+| 12 | Alembic migrations path | Linear revisions 001–010 represent all 26 ORM tables; 009 preserves legacy audit details, 010 adds a persistent document mutation version for retry compensation. Dev `create_all` does not migrate existing tables; apply schema upgrades before use. | **Offline schema/data checks pass; PostgreSQL runtime check pending** |
 | 13 | Frontend graph lib "React Flow" (brief) | Actually **reagraph** | **Deviation** |
 | 14 | LLM model `llama3.1` / `gpt-4o-mini` (README) | Configurable via `LLM_CHAT_MODEL` / `LLM_EXTRACT_MODEL` (default `qwen/qwen3.8-27b`); PR #3 fixed hardcode `llama-3.3-70b-versatile` | ✅ Fixed (PR #3) / README still stale |
 | 15 | Rate limiting on upload/chat | Yes — slowapi: uploads 30/min, chat 60/min | ✅ Matches |
@@ -255,7 +255,7 @@ All under `apps/api/routers/`, prefix per `main.py`:
 | Router | Prefix | Notable endpoints |
 |---|---|---|
 | auth | `/auth` | `GET /me`, `POST /mock-login` (dev only) |
-| documents | `/documents` | `POST` (upload, 202, rate-limited), `GET`, `GET /{id}`, `GET /{id}/status`, `GET /{id}/chunks`, `GET /{id}/entities`, `DELETE /{id}`, `POST /{id}/retry`, `GET /{id}/stream` (SSE) |
+| documents | `/documents` | `POST` (upload, 202, rate-limited), `GET`, `GET /{id}`, `GET /{id}/original` (private download; `download=false` for safe inline formats), `GET /{id}/status`, `GET /{id}/chunks`, `GET /{id}/entities`, `DELETE /{id}`, `POST /{id}/retry`, `GET /{id}/stream` (SSE) |
 | kb | `/kb` | `GET /search`, `GET /entities/{id}`, `GET /entities/{id}/chunks`, `GET /graph` (depth 1–3) |
 | chat | `/chat` | `POST /sessions`, `GET /sessions`, `GET /sessions/{id}`, `POST /sessions/{id}/messages` (SSE, 60/min) |
 | dashboard | `/dashboard` | `GET /summary` |
@@ -306,17 +306,17 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 | **Fixed — rate limiter now reads `user_id`:** `core/rate_limit.py::_rate_limit_key` now correctly reads `request.state.user_id` (PR #1 `a030a0d`); falls back to `ip:` only for anon | ✅ Fixed PR #1 | `core/rate_limit.py:16` + `tests/test_rate_limit.py` |
 | **Nits:** `demo-login/route.ts` sets `mock-session` with `httpOnly:false`; `supabase/server.ts` mock user id is `"mock-user-001"` while backend mock id is `"a0eebc99-…"` — cosmetic mismatch, works because backend mock accepts any token | ⚠️ | `src/app/auth/demo-login/route.ts`, `src/lib/supabase/server.ts` |
 
-### 12.2 Webhooks — ⚠️ outbound built, **scheduler missing, inbound half-broken**
+### 12.2 Webhooks — signed inbound requests and scheduled retries
 
 | Piece | Status | Evidence |
 |---|---|---|
 | Outbound: subscriptions CRUD, `fire_event` on document.processed/failed, chat.completed, agent.completed/failed, entity.extracted | ✅ | `services/webhooks.py`, `routers/webhooks.py`; fired from `ingestion.py`, `chat.py`, `task_queue.py`, `entity_extraction.py` |
 | HMAC-SHA256 signing + verification | ✅ | `_sign_payload`, `verify_inbound_signature` |
-| Delivery log + retry schedule (1m/5m/30m, 3 attempts) | ✅ | `webhook_deliveries`, `dispatch_delivery` |
-| **`dispatch_pending_deliveries` is never scheduled** — only a manual `POST /webhooks/retry-pending` (admin endpoint, no auth). Retries only happen when someone calls it | ⚠️ | callers = router only |
-| **Inbound `ingest_document` handler is a stub** — downloads the file, then returns without creating a document or ingesting | ❌ | `_handle_ingest_document` (`# simplified for now`) |
+| Delivery log + retries | Three total attempts; delays 60s then 300s; terminal retry timestamp cleared. Bounded response reads and request timeouts. | `services/webhooks/dispatch.py` |
+| Lifespan retry scheduler | 30s polling, 25-delivery batches, owned sessions and transaction-scoped process lock; PostgreSQL row locks; strong task ref and awaited cancellation. Manual retries require project owner/editor. SQLite assumes one process. | `app/factory.py`, `services/webhooks/dispatch.py`, `routers/webhooks.py` |
+| Inbound document ingestion | Validated HTTPS/public-address source, no redirects, bounded size/type/time; saves original and commits a document in the webhook's project before launching normal ingestion. No payload-controlled project/uploader. | `services/webhooks/inbound.py` |
 | Inbound `mcp_receive` handler is functional (creates virtual doc → chunks → Chroma) | ✅ | `_handle_mcp_receive` |
-| Inbound endpoint `POST /webhooks/inbound/{slug}` — **public, signature never verified in the router** (`verify_inbound_signature` exists but is unused), `mcp_receive`/`trigger_agent` accept any unauthenticated POST | ⚠️ | `routers/webhooks.py:inbound_webhook` |
+| Inbound authentication | Only single-slug POST bypasses JWT, requiring exact-byte HMAC before JSON/handlers. Body capped at 64KB while streaming. Startup persists a distinct 256-bit random secret for existing rows lacking a valid secret, preserves existing keys/config, and uses conditional updates against concurrent startup. Provisioning failure aborts startup; SQL bind logging hides values. Operators retrieve stored keys privately to configure senders; rows added after startup require provisioning before use. No configuration UI/API, replay deduplication or timestamp requirement yet. Shared DNS validation still has a check/re-resolution gap. | `core/auth_middleware.py`, `services/webhooks/provisioning.py`, `services/webhooks/signing.py`, `tests/test_webhook_provisioning.py`, `tests/test_webhook_security_retries.py` |
 
 ### 12.3 Agents, Memory & Refinement — ✅ fully built
 
@@ -351,8 +351,8 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 
 | Piece | Status | Evidence |
 |---|---|---|
-| Alembic: config + `001_initial_schema.py` exist | ✅ | `migrations/` |
-| **Alembic migration drift** — `001_initial_schema.py` is frozen at first-commit state; new tables (`agent_memory`, `agent_checkpoints`, `agent_skills`, `agent_run_traces`, `mcp_auth_tokens`, `webhook_*`, `project_memory_shares`, `inbound_webhooks`, `refinement_*`, `mcp_connections` changes) **were never added as migrations**; dev works only via `init_db.py` `create_all`, prod SQLite-vs-Postgres drift risk. **Blocks `TODO §2.22–§2.28` health schema** | ⚠️ | `migrations/versions/001_initial_schema.py` vs `db/models.py` |
+| Alembic revisions 001–010 | Offline PostgreSQL SQL and declaration checks pass for all 26 ORM tables. 009 restores legacy audit details; 010 initializes persistent mutation versions on existing documents. Retries/recovery increment the marker so repeated failed states cannot impersonate an older run. PostgreSQL runtime execution/reflection remains pending. | `migrations/versions/`, `tests/test_migration_schema.py`, `tests/test_release_document_workflows.py` |
+| Separate Supabase SQL bootstrap | `infra/schema.sql` remains 21 tables, missing `agent_memory`, `agent_checkpoints`, `project_memory_shares`, `mcp_auth_tokens`, `local_accounts`; use Alembic for current app deployment. Supabase identity FK/trigger intentionally differs from local identity support. Migration-only indexes/defaults and deprecated audit `metadata` remain intentional differences. | `infra/schema.sql`, `db/models.py` |
 | **`structlog` in requirements but unused** — no `request_id` threading anywhere (grep: zero imports); Sentry not configured; `api.log` exists | ⚠️ | `requirements.txt`, `main.py` |
 | `core/errors.py` AppError hierarchy + handler | ✅ | used by routers |
 

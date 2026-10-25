@@ -30,6 +30,7 @@ create table documents (
   file_type text not null,
   storage_path text not null,
   status text check (status in ('pending','processing','processed','failed')) default 'pending',
+  mutation_version int not null default 0,
   page_count int,
   error_message text,
   uploaded_at timestamptz default now(),
@@ -221,7 +222,8 @@ create table audit_log (
   action text not null,
   resource_type text,
   resource_id uuid,
-  metadata jsonb,
+  metadata jsonb, -- legacy audit details retained by Alembic revision 009
+  meta jsonb,
   created_at timestamptz default now()
 );
 

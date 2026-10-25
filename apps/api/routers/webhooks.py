@@ -8,12 +8,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.deps import get_db, get_project_id
+from core.deps import get_db, get_project_id, _user_uuid
 from core.security import User, get_current_user
-from db.models import WebhookSubscription, WebhookDelivery
+from db.models import WebhookSubscription, WebhookDelivery, ProjectMember
 from services.webhooks import (
-    fire_event, dispatch_delivery, verify_inbound_signature,
-    handle_inbound, dispatch_pending_deliveries,
+    fire_event,
+    handle_inbound, dispatch_pending_deliveries, MAX_PAYLOAD_SIZE,
 )
 from core.outbound import validate_public_https_url
 
@@ -198,15 +198,14 @@ async def inbound_webhook(
     db: AsyncSession = Depends(get_db),
 ):
     """Receive an inbound webhook POST."""
-    body = await request.body()
-    try:
-        payload = await request.json()
-    except Exception:
-        payload = {"raw": body.decode("utf-8", errors="replace")}
-
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_PAYLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="Webhook payload exceeds maximum size")
+        body.extend(chunk)
     headers = dict(request.headers)
 
-    result = await handle_inbound(db=db, slug=slug, payload=payload, headers=headers)
+    result = await handle_inbound(db=db, slug=slug, payload=bytes(body), headers=headers)
     return result
 
 
@@ -216,7 +215,14 @@ async def inbound_webhook(
 async def retry_pending(
     project_id: str = Depends(get_project_id),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    """Retry all pending webhook deliveries (admin endpoint)."""
+    """Retry due deliveries for this project (owner/editor only)."""
+    member = (await db.execute(select(ProjectMember).where(
+        ProjectMember.project_id == uuid.UUID(project_id),
+        ProjectMember.user_id == _user_uuid(user.id),
+    ))).scalar_one_or_none()
+    if not member or member.role not in {"owner", "editor"}:
+        raise HTTPException(status_code=403, detail="Only project editors can retry webhooks")
     dispatched = await dispatch_pending_deliveries(db, project_id)
     return {"dispatched": dispatched}

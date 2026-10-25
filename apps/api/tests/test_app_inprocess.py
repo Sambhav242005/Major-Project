@@ -6,9 +6,19 @@ Supabase account, database contents, or running backend is required.
 """
 
 import pytest
+from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
 from core.config import settings
+
+
+@pytest.fixture(autouse=True)
+def isolate_startup_database_work(monkeypatch):
+    # These middleware tests intentionally have no database. Real provisioning
+    # and scheduler lifecycle behavior have dedicated integration tests.
+    from services.webhooks import provisioning, dispatch
+    monkeypatch.setattr(provisioning, "ensure_inbound_webhook_secrets", AsyncMock(return_value=0))
+    monkeypatch.setattr(dispatch, "run_retry_scheduler", AsyncMock())
 
 
 @pytest.fixture

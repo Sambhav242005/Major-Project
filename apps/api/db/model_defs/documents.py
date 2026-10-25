@@ -13,6 +13,7 @@ class Document(Base):
     file_type = Column(Text, nullable=False)
     storage_path = Column(Text, nullable=False)
     status = Column(String(20), default="pending")
+    mutation_version = Column(Integer, nullable=False, default=0, server_default="0")
     page_count = Column(Integer)
     error_message = Column(Text)
     uploaded_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
