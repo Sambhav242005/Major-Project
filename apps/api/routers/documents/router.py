@@ -64,13 +64,26 @@ async def _compensate(operation):
         logger.exception("Document mutation recovery failed")
 
 
-async def _mark_interrupted_delete(db, document_id, project_id):
+def _recovery_state(doc):
+    return doc.status, doc.processed_at, doc.error_message
+
+
+async def _recover_original(db, document_id, project_id, original, expected_state, *, evidence_removed=False):
+    # Rollback released the previous writer lock. Another delete or retry may
+    # already have won; reacquire before touching either bytes or metadata.
     doc = await doc_service.lock_document_for_mutation(db, document_id, project_id)
-    if doc is not None:
+    if doc is None or doc.status in ("pending", "processing") or _recovery_state(doc) != expected_state:
+        return
+    if original is None:
+        await asyncio.to_thread(delete_original, project_id, document_id)
+    else:
+        await asyncio.to_thread(save_original, project_id, document_id, original)
+    if evidence_removed:
         doc.status = "failed"
         doc.processed_at = None
         doc.error_message = "Deletion was interrupted after evidence cleanup. Retry this document to restore searchable evidence from its original file."
-        await db.commit()
+    # Keep the lock through the filesystem restoration and its SQL state update.
+    await db.commit()
 
 
 @router.post("", status_code=202, response_model=DocumentUploadResponse)
@@ -177,6 +190,7 @@ async def delete_document(document_id: str, project_id: str = Depends(get_projec
         raise DocumentNotFoundError()
     if doc.status in ("pending", "processing"):
         raise HTTPException(status_code=409, detail="Wait for processing to finish before deleting this document")
+    recovery_state = _recovery_state(doc)
     async def _delete():
         original = None
         evidence_removal_started = False
@@ -195,12 +209,10 @@ async def delete_document(document_id: str, project_id: str = Depends(get_projec
             await db.commit()
         except Exception:
             await _compensate(db.rollback())
-            if original is not None:
-                await _compensate(asyncio.to_thread(save_original, project_id, document_id, original))
-            if evidence_removal_started:
+            if original is not None or evidence_removal_started:
                 # SQL rollback cannot restore vectors already removed externally.
-                # Make surviving metadata visibly retryable instead of processed.
-                await _compensate(_mark_interrupted_delete(db, document_id, project_id))
+                # Restore only if no newer mutation won the released row lock.
+                await _compensate(_recover_original(db, document_id, project_id, original, recovery_state, evidence_removed=evidence_removal_started))
             raise
     await _finish_mutation(_delete())
     return {"deleted": True}
@@ -213,6 +225,7 @@ async def retry_document(document_id: str, request: Request, response: Response,
         raise DocumentNotFoundError()
     if doc.status != "failed":
         raise HTTPException(status_code=409, detail="Only failed documents can be retried")
+    recovery_state = _recovery_state(doc)
     form = await request.form()
     file = form.get("file")
     if file is None:
@@ -249,10 +262,7 @@ async def retry_document(document_id: str, request: Request, response: Response,
         except Exception:
             await _compensate(db.rollback())
             if file is not None:
-                if previous is None:
-                    await _compensate(asyncio.to_thread(delete_original, project_id, document_id))
-                else:
-                    await _compensate(asyncio.to_thread(save_original, project_id, document_id, previous))
+                await _compensate(_recover_original(db, document_id, project_id, previous, recovery_state))
             raise
         _start_ingestion(async_session_factory, document_id, content)
     await _finish_mutation(_retry())

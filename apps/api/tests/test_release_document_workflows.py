@@ -281,7 +281,7 @@ async def test_retry_replacement_failure_restores_original(original_routes, monk
     routes = original_routes
     project, document = str(uuid.uuid4()), str(uuid.uuid4())
     save_original(project, document, b"source")
-    monkeypatch.setattr(routes.doc_service, "lock_document_for_mutation", AsyncMock(return_value=Document(status="failed", file_type="text/plain")))
+    monkeypatch.setattr(routes.doc_service, "lock_document_for_mutation", AsyncMock(side_effect=[Document(status="failed", file_type="text/plain"), Document(status="failed", file_type="text/plain")]))
     started = MagicMock()
     monkeypatch.setattr(routes, "_start_ingestion", started)
     db = MagicMock(commit=AsyncMock(side_effect=RuntimeError("commit failed")), rollback=AsyncMock())
@@ -291,6 +291,81 @@ async def test_retry_replacement_failure_restores_original(original_routes, monk
         await routes.retry_document(document, request, Response(), project, MagicMock(), db)
     assert load_original(project, document) == b"source"
     started.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("loser", ["delete", "retry"])
+@pytest.mark.parametrize("winner", ["delete", "retry", "completed_retry"])
+@pytest.mark.parametrize("has_original", [False, True])
+async def test_rollback_recovery_preserves_winning_mutation(original_routes, tmp_path, monkeypatch, loser, winner, has_original):
+    from datetime import datetime, timezone
+    from io import BytesIO
+    from starlette.datastructures import Headers, UploadFile
+    routes = original_routes
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'recovery.db'}")
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    project, document = uuid.uuid4(), uuid.uuid4()
+    if has_original:
+        save_original(str(project), str(document), b"initial source")
+    monkeypatch.setattr("pipelines.embeddings.delete_document_chunks", MagicMock())
+    monkeypatch.setattr(routes, "write_audit_log", AsyncMock())
+    started = MagicMock()
+    monkeypatch.setattr(routes, "_start_ingestion", started)
+
+    def replacement(content):
+        file = UploadFile(BytesIO(content), filename="source.txt", headers=Headers({"content-type": "text/plain"}))
+        return MagicMock(form=AsyncMock(return_value={"file": file}))
+
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with sessions() as db:
+            db.add(Document(id=document, project_id=project, filename="source.txt", file_type="text/plain", storage_path="test", status="failed"))
+            await db.commit()
+            real_rollback = db.rollback
+            interleaved = False
+
+            async def rollback_then_winner():
+                nonlocal interleaved
+                await real_rollback()
+                if interleaved:
+                    return
+                interleaved = True
+                # This request wins the lock released by the losing rollback,
+                # before the losing request begins its compensation.
+                async with sessions() as winning_db:
+                    if winner == "delete":
+                        await routes.delete_document(str(document), str(project), MagicMock(), winning_db)
+                    else:
+                        await routes.retry_document(str(document), replacement(b"winning source"), Response(), str(project), MagicMock(), winning_db)
+                        if winner == "completed_retry":
+                            row = await winning_db.get(Document, document)
+                            row.status = "processed"
+                            row.processed_at = datetime.now(timezone.utc)
+                            await winning_db.commit()
+
+            monkeypatch.setattr(db, "rollback", rollback_then_winner)
+            monkeypatch.setattr(db, "commit", AsyncMock(side_effect=RuntimeError("losing commit failed")))
+            with pytest.raises(RuntimeError, match="losing commit failed"):
+                if loser == "delete":
+                    await routes.delete_document(str(document), str(project), MagicMock(), db)
+                else:
+                    await routes.retry_document(str(document), replacement(b"losing source"), Response(), str(project), MagicMock(), db)
+            assert interleaved
+        async with sessions() as db:
+            row = await db.get(Document, document)
+            if winner == "delete":
+                assert row is None
+                assert not original_path(str(project), str(document)).exists()
+                started.assert_not_called()
+            else:
+                assert row.status == ("processed" if winner == "completed_retry" else "pending")
+                assert row.error_message is None
+                assert load_original(str(project), str(document)) == b"winning source"
+                started.assert_called_once()
+                assert started.call_args.args[2] == b"winning source"
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
