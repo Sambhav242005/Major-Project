@@ -355,7 +355,7 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 | Piece | Status | Evidence |
 |---|---|---|
 | Alembic revisions 001–012 | Offline PostgreSQL SQL and declaration checks cover all 27 ORM tables. 009 restores legacy audit details; 010 initializes persistent mutation versions on existing documents. Retries/recovery increment the marker so repeated failed states cannot impersonate an older run. PostgreSQL runtime execution/reflection remains pending. | `migrations/versions/`, `tests/test_migration_schema.py`, `tests/test_release_document_workflows.py` |
-| Separate Supabase SQL bootstrap | `infra/schema.sql` remains 21 tables, missing `agent_memory`, `agent_checkpoints`, `project_memory_shares`, `mcp_auth_tokens`, `local_accounts`; use Alembic for current app deployment. Supabase identity FK/trigger intentionally differs from local identity support. Migration-only indexes/defaults and deprecated audit `metadata` remain intentional differences. | `infra/schema.sql`, `db/models.py` |
+| Separate Supabase SQL bootstrap | `infra/schema.sql` contains 22 tables, missing `agent_memory`, `agent_checkpoints`, `project_memory_shares`, `mcp_auth_tokens`, `local_accounts`; use Alembic for current app deployment. Supabase identity FK/trigger intentionally differs from local identity support. Migration-only indexes/defaults and deprecated audit `metadata` remain intentional differences. | `infra/schema.sql`, `db/models.py` |
 | **`structlog` in requirements but unused** — no `request_id` threading anywhere (grep: zero imports); Sentry not configured; `api.log` exists | ⚠️ | `requirements.txt`, `main.py` |
 | `core/errors.py` AppError hierarchy + handler | ✅ | used by routers |
 

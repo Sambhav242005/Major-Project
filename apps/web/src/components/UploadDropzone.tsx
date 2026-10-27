@@ -115,4 +115,3 @@ export function UploadDropzone({ onUpload, disabled }: UploadDropzoneProps) {
     </div>
   );
 }
-     
