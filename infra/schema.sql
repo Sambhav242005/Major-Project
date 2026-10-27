@@ -94,6 +94,8 @@ create table chat_messages (
   role text check (role in ('user','assistant')) not null,
   content text not null,
   citations jsonb,
+  generation_provider varchar(50),
+  generation_model varchar(200),
   created_at timestamptz default now()
 );
 
