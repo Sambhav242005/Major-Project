@@ -240,11 +240,13 @@ async def chat_completion_stream(
             resp.raise_for_status()
             thinking = ""  # buffer for the hidden reasoning blocks
             in_think = False
+            provider_completed = False
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
                     continue
                 payload = line[6:]
                 if payload.strip() == "[DONE]":
+                    provider_completed = True
                     break
                 chunk = json.loads(payload)
                 delta = chunk["choices"][0].get("delta", {})
@@ -282,5 +284,9 @@ async def chat_completion_stream(
             capture.mark_failed(summarize_failure(exc))
         raise
     if capture:
-        # Stream fully consumed, including the provider's [DONE] marker.
-        capture.mark_sent()
+        # Record only the provider's own success marker as "sent"; a stream
+        # that ended without it is an incomplete/failed request.
+        if provider_completed:
+            capture.mark_sent()
+        else:
+            capture.mark_failed("provider stream ended without the [DONE] completion marker")

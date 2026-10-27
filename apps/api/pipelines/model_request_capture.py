@@ -45,23 +45,43 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def _redact_binary(value: Any) -> Any:
+def _decode_length(payload: str) -> int:
+    """Best-effort byte count of a base64/data-uri payload."""
+    try:
+        return len(base64.b64decode(payload + "===", validate=False))
+    except Exception:
+        return 0
+
+
+def _redact_binary(value):
     """Describe binary attachment values without copying their bytes."""
-    if not isinstance(value, str):
-        return value
-    mime = ""
-    payload = value
-    if value.startswith("data:"):
-        header, _, payload = value.partition(",")
-        mime = header[5:].partition(";")[0]
-    byte_count = len(base64.b64decode(payload + "===" , validate=False)) if payload else 0
-    return {
-        "content": "(binary data withheld from snapshot)",
-        "encoding": "data_uri" if mime else "base64",
-        "mime_type": mime or "application/octet-stream",
-        "bytes": byte_count,
-        "characters_in_payload": len(value),
-    }
+    if isinstance(value, str):
+        mime = ""
+        payload = value
+        if value.startswith("data:"):
+            header, _, payload = value.partition(",")
+            mime = header[5:].partition(";")[0]
+        return {
+            "content": "(binary data withheld from snapshot)",
+            "encoding": "data_uri" if value.startswith("data:") else "base64",
+            "mime_type": mime or "application/octet-stream",
+            "bytes": _decode_length(payload) if value.startswith("data:") else 0,
+            "characters_in_payload": len(value),
+        }
+    if isinstance(value, dict):
+        # Attachment metadata objects: only well-known payload keys are
+        # withheld; descriptive metadata (format, filename, mime) survives.
+        attachment_value_keys = {"data", "url", "b64_json", "file_data"}
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            if isinstance(item, str) and (
+                item.startswith("data:") or str(key).lower() in attachment_value_keys
+            ):
+                redacted[str(key)] = _redact_binary(item)
+            else:
+                redacted[str(key)] = item
+        return redacted
+    return value
 
 
 def sanitize_payload(value: Any) -> Any:
@@ -230,7 +250,7 @@ class ModelRequestCapture:
             "request": self.transport,
             "token_counts": {
                 "estimate": True,
-                "method": "chars/4 over JSON-encoded message fields; provider tokens may differ",
+                "method": "chars/4 rough estimate over JSON-encoded message fields; provider tokens may differ",
                 "total": total,
                 "by_message": per_message,
                 "request_body_characters": body_chars,
