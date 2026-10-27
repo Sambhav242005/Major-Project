@@ -2,7 +2,19 @@
 
 import { useCallback, useState } from "react";
 import { Upload, FileText, Loader2 } from "lucide-react";
-import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from "@/lib/types";
+import { ACCEPTED_FORMATS_MESSAGE, ALLOWED_FILE_TYPES, IMAGE_MAX_FILE_SIZE, MAX_FILE_SIZE, NOT_YET_SUPPORTED_MESSAGE, sizeLimitMessage } from "@/lib/types";
+
+function rejectionReason(file: File): string | null {
+  if (!ALLOWED_FILE_TYPES.includes(file.type as (typeof ALLOWED_FILE_TYPES)[number])) {
+    if (file.type.startsWith("audio/")) return NOT_YET_SUPPORTED_MESSAGE;
+    if (file.type.startsWith("video/")) return NOT_YET_SUPPORTED_MESSAGE;
+    return `${file.name}: unknown file type. ${ACCEPTED_FORMATS_MESSAGE}`;
+  }
+  if (file.size > (file.type.startsWith("image/") ? IMAGE_MAX_FILE_SIZE : MAX_FILE_SIZE)) {
+    return sizeLimitMessage(file.type, file.name);
+  }
+  return null;
+}
 
 interface DocumentUploadCardProps {
   onUpload: (files: File[]) => Promise<void>;
@@ -11,13 +23,19 @@ interface DocumentUploadCardProps {
 
 export function DocumentUploadCard({ onUpload, isUploading }: DocumentUploadCardProps) {
   const [dragOver, setDragOver] = useState(false);
+  const [rejections, setRejections] = useState<string[]>([]);
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files) return;
-      const valid = Array.from(files).filter(
-        (f) => f.size <= MAX_FILE_SIZE && (ALLOWED_FILE_TYPES as readonly string[]).includes(f.type)
-      );
+      const rejected: string[] = [];
+      const valid: File[] = [];
+      Array.from(files).forEach((file) => {
+        const reason = rejectionReason(file);
+        if (reason) rejected.push(reason);
+        else valid.push(file);
+      });
+      setRejections(rejected);
       if (valid.length > 0) onUpload(valid);
     },
     [onUpload]
@@ -63,8 +81,19 @@ export function DocumentUploadCard({ onUpload, isUploading }: DocumentUploadCard
           />
         </label>
         <p className="text-[10px] text-app-muted mt-2">
-          PDF, TXT, MD, DOCX, CSV • Max {Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB
+          PDF, TXT, MD, DOCX, CSV, and images &bull; up to {Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB ({Math.round(IMAGE_MAX_FILE_SIZE / 1024 / 1024)}MB images)
         </p>
+        <p className="text-[10px] text-app-muted">
+          Audio and video are not searchable sources yet.
+        </p>
+        {rejections.length > 0 && (
+          <div className="mt-2 text-rust text-xs" role="alert">
+            {rejections.slice(0, 3).map((reason) => (
+              <p key={reason}>{reason}</p>
+            ))}
+            {rejections.length > 3 && <p>+{rejections.length - 3} more rejected</p>}
+          </div>
+        )}
       </div>
     </div>
   );
