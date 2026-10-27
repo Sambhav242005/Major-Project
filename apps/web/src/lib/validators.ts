@@ -11,6 +11,7 @@ export const ALLOWED_FILE_TYPES = [
   "image/tiff",
   "image/bmp",
   "image/webp",
+  "audio/wav", "audio/x-wav", "audio/mpeg", "audio/flac", "video/mp4", "video/webm",
 ] as const;
 
 // Mirrors routers/documents/validation.py — changed together (SPEC §8.25).
@@ -20,10 +21,10 @@ export const IMAGE_MAX_FILE_SIZE = 15 * 1024 * 1024;
 const IMAGE_TYPES = new Set<string>(["image/png", "image/jpeg", "image/tiff", "image/bmp", "image/webp"]);
 
 export const ACCEPTED_FORMATS_MESSAGE =
-  "Accepted knowledge sources: PDF, DOCX, TXT, Markdown, and CSV documents plus PNG, JPEG, TIFF, BMP, and WebP images";
+  "Accepted knowledge sources: PDF, DOCX, TXT, Markdown, CSV, images, WAV/MP3/FLAC audio and MP4/WebM video";
 
 export const NOT_YET_SUPPORTED_MESSAGE =
-  "Audio and video are not searchable knowledge sources yet — use the Meetings page for meeting audio";
+  "Audio/video requires operator-configured Whisper and video vision models";
 
 function isImageFileType(fileType: string): boolean {
   return IMAGE_TYPES.has(fileType);

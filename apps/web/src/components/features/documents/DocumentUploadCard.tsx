@@ -81,10 +81,10 @@ export function DocumentUploadCard({ onUpload, isUploading }: DocumentUploadCard
           />
         </label>
         <p className="text-[10px] text-app-muted mt-2">
-          PDF, TXT, MD, DOCX, CSV, and images &bull; up to {Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB ({Math.round(IMAGE_MAX_FILE_SIZE / 1024 / 1024)}MB images)
+          Documents, images, WAV/MP3/FLAC audio, MP4/WebM video &bull; up to {Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB ({Math.round(IMAGE_MAX_FILE_SIZE / 1024 / 1024)}MB images)
         </p>
         <p className="text-[10px] text-app-muted">
-          Audio and video are not searchable sources yet.
+          Audio/video requires configured Whisper and vision models.
         </p>
         {rejections.length > 0 && (
           <div className="mt-2 text-rust text-xs" role="alert">

@@ -69,6 +69,18 @@ def chunk_pages(pages: list[dict], max_tokens: int = 600, overlap_tokens: int = 
         if not page_text:
             continue
 
+        if page.get("source_location"):
+            # Media segments keep their own evidence span; never merge distinct
+            # timestamps into an ordinary document page.
+            if buffer:
+                all_chunks.extend(chunk_text(buffer, max_tokens, overlap_tokens, buffer_page))
+                buffer = ""
+                buffer_page = None
+            for chunk in chunk_text(page_text, max_tokens, overlap_tokens, page_num):
+                chunk["source_location"] = dict(page["source_location"])
+                all_chunks.append(chunk)
+            continue
+
         if buffer:
             combined = buffer + "\n\n" + page_text
         else:

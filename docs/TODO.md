@@ -34,7 +34,8 @@ checks and the explicitly listed operational limitations remain pending.
 PRs #46 through #49 are combined on `feat/integrate-reviewed-features`: header model
 selection, short-lived model request inspection, public repository import, and
 the multimedia format registry. Apply migration **011** for answer generation
-metadata and **012** for repository provenance before using the backend; existing
+metadata, **012** for repository provenance and **013** for media source locations
+before using the backend; existing
 SQLite tables are not upgraded by `create_all`.
 
 Integration fixes bind snapshots to stable answer IDs, exclude URL credentials
@@ -54,7 +55,7 @@ avoids the installed nemo_toolkit package shadowing repository test imports;
 no global packages were changed. Live generation/browser behavior, PostgreSQL
 runtime migrations, and operator-managed OCR/provider checks remain pending.
 GitHub re-sync, pinned-line citation navigation, private repositories, the repo
-picker, and audio/video knowledge ingestion remain follow-ups; Phase 1 does not
+picker, raw-media embedding and direct multimodal chat remain follow-ups; Phase 1 does not
 claim the full feature's Done when criteria.
 
 Chat now offers per-message provider/model selection (server configuration,
@@ -243,8 +244,8 @@ These are user-facing capabilities or integrations that are incomplete.
 - **Phase 3, private repositories:** add explicit authenticated access with least-privilege repository permissions and server-side credential protection; verify access at import/re-sync and prevent cross-project leakage. Scheduled sync and submodules are deferred.
 - **Done when:** a small fixture repository imports once, answers cite the correct commit/path/lines, re-import is idempotent, changed/deleted files reconcile correctly, limits/cancellation work, and private credentials never enter model requests or traces.
 
-### 2.26 Multimedia support `[PHASE 1 FOUNDATION IMPLEMENTED]` — P1 foundation, P2 advanced
-- **Delivered:** supported-format inventory, document/image size caps and MIME/byte validation shared by upload, retry and webhook ingestion; upload UI reports rejections. Existing image OCR remains available; new audio/video parsers, duration checks and direct multimodal chat are deferred.
+### 2.26 Multimedia support `[AUDIO/VIDEO INGESTION IMPLEMENTED; LIVE CHECK PENDING]` — P1 foundation, P2 advanced
+- **Delivered:** opt-in WAV/MP3/FLAC transcription through a Whisper-compatible service and MP4/WebM transcript plus Ollama VLM frame descriptions; ffmpeg/ffprobe enforce duration/size/frame limits. Media chunks preserve timestamp/model/machine-generated metadata through SQL, Chroma and chat citations (migration 013). Document detail loads authorized originals on demand, builds transcript captions and seeks to evidence times. Native Ollama /api/embed supports EmbeddingGemma 2 for document and derived media text, with count/dimension validation and existing fingerprint protection. Two concurrent media parsers maximum; decoder/model failures remain retryable failed documents. Services/models are provisioned by the operator; no downloads or lifecycle management are performed by ingestion. Native raw-media embeddings, diarization and direct multimodal chat remain deferred; live runtime checks remain pending.
 - **Scope:** support images, audio, and video as knowledge sources, with original previews and evidence citations. Track direct chat attachments separately from ingestion so users know whether an attachment becomes searchable project knowledge.
 - **Phase 1, inventory and storage:** inspect existing image/OCR and meeting transcription paths before adding parsers. Finish durable private source storage, authorized previews, MIME/content validation, size/duration limits, deletion, and retry cleanup. Display supported formats and processing status.
 - **Phase 2, images and audio:** extract OCR text from images; transcribe audio with timestamps and speaker labels when available. Feed derived text through normal ingestion while retaining its link to the original image/audio. Cite image regions/pages where available and audio time ranges; label machine-generated descriptions/transcripts and allow review of uncertain extraction.

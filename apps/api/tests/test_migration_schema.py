@@ -34,7 +34,7 @@ def test_postgresql_fresh_upgrade_and_existing_upgrade_render_offline():
         from alembic.config import Config
         from alembic.script import ScriptDirectory
         config = Config('alembic.ini')
-        assert ScriptDirectory.from_config(config).get_heads() == ['012']
+        assert ScriptDirectory.from_config(config).get_heads() == ['013']
         output = StringIO()
         config.output_buffer = output
         command.upgrade(config, 'head', sql=True)
@@ -45,7 +45,7 @@ def test_postgresql_fresh_upgrade_and_existing_upgrade_render_offline():
             assert 'CREATE TABLE ' + table + ' (' in sql, table
         assert 'UPDATE audit_log SET meta = metadata' in sql
         assert 'CAST(meta AS TEXT)' in sql
-        assert "SET version_num='012'" in sql
+        assert "SET version_num='013'" in sql
         assert 'ADD COLUMN mutation_version INTEGER DEFAULT' in sql
         assert 'ADD COLUMN generation_provider VARCHAR(50)' in sql
         assert 'ADD COLUMN generation_model VARCHAR(200)' in sql

@@ -116,7 +116,12 @@ def _format_source_block(
     filename: str,
     page_number: int,
     doc_id: str,
+    source_location: dict | None = None,
 ) -> str:
     """Format a source block for the LLM prompt."""
     header = f"[Source {index}] Document: {filename}, Page: {page_number or 'N/A'}"
+    if source_location:
+        header = (f"[Source {index}] Document: {filename}, "
+                  f"Time: {source_location['start_seconds']:.2f}-{source_location['end_seconds']:.2f}s, "
+                  f"Evidence: {source_location['kind']} (machine generated)")
     return f"{header}\n{text[:SOURCE_TEXT_TRUNCATE_CHARS]}"  # Truncate long chunks

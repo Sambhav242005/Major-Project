@@ -1,5 +1,6 @@
 "use client";
 
+import { sourceLabel, type SourceLocation } from "@/lib/source-location";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { chatAnswerLabel } from "@/lib/chat-selection";
@@ -10,7 +11,7 @@ export interface ChatMessage {
   id?: string;
   role: "user" | "assistant";
   content: string;
-  citations?: { index: number; filename: string; page_number: number }[];
+  citations?: { index: number; filename: string; page_number: number; document_id?: string; source_location?: SourceLocation }[];
   /** The generation the backend resolved for this answer; set once announced. */
   generation?: { provider: string; model: string } | null;
   feedback?: "up" | "down";
@@ -62,7 +63,7 @@ export function ChatBubble({ message, onFeedback, isStreaming }: ChatBubbleProps
                   key={j}
                   className="text-xs bg-app-surface text-app-muted px-1.5 py-0.5 rounded font-mono"
                 >
-                  [{c.index}] {c.filename} p.{c.page_number}
+                  [{c.index}] {c.source_location && c.document_id ? <a className="underline" href={`/documents/${encodeURIComponent(c.document_id)}#t=${c.source_location.start_seconds}`}>{c.filename} {sourceLabel(c.source_location)}</a> : `${c.filename} p.${c.page_number}`}
                 </span>
               ))}
             </div>

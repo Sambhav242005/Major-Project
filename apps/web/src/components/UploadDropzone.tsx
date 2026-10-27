@@ -81,7 +81,7 @@ export function UploadDropzone({ onUpload, disabled }: UploadDropzoneProps) {
           ref={inputRef}
           type="file"
           className="hidden"
-          accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp"
+          accept=".pdf,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.tiff,.bmp,.webp,.wav,.mp3,.flac,.mp4,.webm"
           onChange={handleChange}
           disabled={disabled || uploading}
         />
@@ -97,7 +97,7 @@ export function UploadDropzone({ onUpload, disabled }: UploadDropzoneProps) {
               Drop your documents here
             </p>
             <p className="text-muted-foreground text-sm mb-1">
-              PDF, DOCX, TXT, MD, CSV, and images — up to 25MB (15MB for images)
+              Documents, images, audio and video — up to 25MB (15MB for images)
             </p>
             <p className="text-muted-foreground text-xs mb-4">
               {NOT_YET_SUPPORTED_MESSAGE}.

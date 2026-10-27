@@ -1,6 +1,7 @@
 """ChromaDB similarity query."""
 
 import asyncio
+import json
 from functools import partial
 
 from pipelines.embeddings.embedding_function import (
@@ -82,5 +83,10 @@ async def query_chunks(
                 "score": results["distances"][0][i] if results.get("distances") else 0,
                 "filename": doc_filename_map.get(doc_id, "unknown"),
             })
+            if meta.get("source_location"):
+                try:
+                    output[-1]["source_location"] = json.loads(meta["source_location"])
+                except (ValueError, TypeError):
+                    pass
 
     return output

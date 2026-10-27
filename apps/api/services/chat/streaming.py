@@ -111,6 +111,7 @@ async def send_message(
             filename=r.get("filename", "unknown"),
             page_number=r.get("page_number", 0),
             doc_id=r.get("document_id", ""),
+            source_location=r.get("source_location"),
         )
         source_blocks.append(block)
         citations.append({
@@ -131,6 +132,9 @@ async def send_message(
             "truncated": truncated,
             "original_characters": len(r["text"]),
         })
+        if r.get("source_location"):
+            citations[-1]["source_location"] = r["source_location"]
+            snapshot_sources[-1]["source_location"] = r["source_location"]
 
     # Step 5: Build entity context for prompt
     entity_context = build_entity_context(entities, expanded)

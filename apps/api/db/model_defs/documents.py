@@ -1,5 +1,5 @@
 from datetime import timezone
-from db.model_defs.base import Base, Column, DateTime, ForeignKey, Integer, String, Text, Uuid, datetime, gen_uuid, relationship
+from db.model_defs.base import Base, Column, DateTime, ForeignKey, Integer, JSON, String, Text, Uuid, datetime, gen_uuid, relationship
 
 
 class Document(Base):
@@ -57,6 +57,7 @@ class DocumentChunk(Base):
     section_index = Column(Integer, default=0)
     text = Column(Text, nullable=False)
     token_count = Column(Integer)
+    source_location = Column(JSON)
     chroma_id = Column(Text, nullable=False)
 
     document = relationship("Document", back_populates="chunks")

@@ -63,6 +63,7 @@ create table document_chunks (
   section_index int default 0,
   text text not null,
   token_count int,
+  source_location jsonb,
   chroma_id text not null
 );
 

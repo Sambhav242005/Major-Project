@@ -69,6 +69,10 @@ def parse_document(file_content: bytes, filename: str, file_type: str) -> list[d
     """
     ext = Path(filename).suffix.lower()
 
+    if file_type.startswith(("audio/", "video/")):
+        from pipelines.media import parse_media
+        return parse_media(file_content, filename, file_type)
+
     if ext == ".pdf":
         return parse_pdf(file_content)
     elif ext == ".docx":

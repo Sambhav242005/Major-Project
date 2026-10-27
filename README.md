@@ -150,6 +150,37 @@ EMBEDDING_BASE_URL=http://localhost:11434/v1
 
 Embeddings are chosen with `EMBEDDING_PROVIDER`.
 
+Native Ollama support includes `embeddinggemma-2`: set
+`EMBEDDING_PROVIDER=ollama`, `OLLAMA_BASE_URL=http://localhost:11434` and
+`EMBEDDING_MODEL=embeddinggemma-2:740m`. The adapter calls `/api/embed` in
+batches with `truncate=false`, validates one finite vector per input, and
+supports optional `EMBEDDING_OUTPUT_DIM` (128/256/512/768 for EmbeddingGemma 2).
+This path embeds text, including transcripts and frame descriptions; raw
+multimodal embeddings are not assumed. Changing the provider, model or
+dimension requires the existing re-embedding procedure below.
+
+Audio/video knowledge ingestion is opt-in. Install ffmpeg/ffprobe and provision
+a Whisper-compatible transcription service supporting `verbose_json` segments
+and an Ollama vision model separately; this application never starts services
+or downloads those models. Set `MEDIA_INGESTION_ENABLED=true`,
+`WHISPER_BASE_URL` to the service's API root (for example a local `/v1` root),
+`WHISPER_MODEL` to its installed Whisper model ID, and `VLM_MODEL` to the
+installed Ollama vision tag. Optional `WHISPER_API_KEY` authenticates the service.
+Do not point at a paid provider without configuring it intentionally.
+
+WAV/MP3/FLAC audio and MP4/WebM video (25MB maximum) then use normal document
+upload, durable originals, retry and deletion. Whisper segments and sampled
+VLM frame descriptions retain their model, timestamps and machine-generated
+labels through chunking, retrieval and chat citations. Document detail offers
+an authorized playback load button, transcript captions and timestamp seeking.
+Apply migration **013** before using this backend on an existing database.
+The default limit is 600 seconds, up to 12 sampled frames and a 120-second
+processing budget including queue wait; at most two media jobs process at once.
+Video without audio uses frames only. Decoder/model failures use the ordinary
+failed-document state. Speaker diarization, native multimodal chat and direct
+raw-media embedding remain separate work. The Meetings analysis workflow is
+unchanged.
+
 ```bash
 # openai (default) — any OpenAI-compatible /embeddings endpoint
 EMBEDDING_PROVIDER=openai
@@ -584,9 +615,18 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | `EMBEDDING_API_KEY` | No | — | Embeddings API key (also fallback for `GEMINI_API_KEY`) |
 | `EMBEDDING_BASE_URL` | No | `http://localhost:11434/v1` | Embeddings base URL (OpenAI-compatible provider) |
 | `EMBEDDING_MODEL` | No | `qwen3-embedding:4b` | Embeddings model |
-| `EMBEDDING_PROVIDER` | No | `openai` | `openai`, `gemini`, or explicit `local` CPU MiniLM |
+| `EMBEDDING_PROVIDER` | No | `openai` | `openai`, `gemini`, `ollama` native embeddings, or explicit `local` CPU MiniLM |
 | `EMBEDDING_OUTPUT_DIM` | No | — | Truncated output dimensionality, e.g. `768`; changing it requires re-embedding |
 | `EMBEDDING_BATCH_SIZE` | No | `100` | Texts per Gemini `:batchEmbedContents` request |
+| `OLLAMA_BASE_URL` | No | `http://localhost:11434` | Native Ollama API root for embeddings and video vision |
+| `MEDIA_INGESTION_ENABLED` | No | `false` | Enable audio/video knowledge ingestion after runtimes are configured |
+| `WHISPER_BASE_URL` | For media | empty | Whisper-compatible API root; receives `/audio/transcriptions` requests |
+| `WHISPER_MODEL` | No | `whisper-1` | Installed Whisper model ID; must support timestamped `verbose_json` segments |
+| `WHISPER_API_KEY` | No | empty | Server-only transcription service credential |
+| `VLM_MODEL` | For video | empty | Installed Ollama vision model tag |
+| `MEDIA_MAX_DURATION_SECONDS` | No | `600` | Maximum accepted source duration, 1–3600 seconds |
+| `MEDIA_MAX_FRAMES` | No | `12` | Maximum sampled video frames, 1–60 |
+| `MEDIA_PROCESS_TIMEOUT_SECONDS` | No | `120` | Decoder/model processing budget including queue wait, 1–600 seconds |
 | `GEMINI_API_KEY` | No | — | Gemini API key (falls back to `EMBEDDING_API_KEY`) |
 | `GEMINI_BASE_URL` | No | `https://generativelanguage.googleapis.com/v1beta` | Gemini native API base URL |
 | `GITHUB_API_BASE_URL` | No | `https://api.github.com` | GitHub edition: API host; the only accepted value is the bare `https://api.github.com` origin |

@@ -58,10 +58,10 @@ def test_task_group_and_rejection_messages_are_actionable():
 def test_unsupported_media_types_name_the_path_forward():
     with pytest.raises(UploadValidationError) as audio:
         validate_upload(b"ID3", "voice.mp3", "audio/mpeg")
-    assert "Meetings page" in str(audio.value)
+    assert "disabled" in str(audio.value)
     with pytest.raises(UploadValidationError) as video:
         validate_upload(b"\x00\x00\x00 ftypisom", "clip.mp4", "video/mp4")
-    assert "Video is not searchable" in str(video.value)
+    assert "disabled" in str(video.value)
     with pytest.raises(UploadValidationError) as archive:
         validate_upload(b"PK\x03\x04", "bundle.zip", "application/zip")
     assert "not a supported knowledge source" in str(archive.value)
@@ -132,7 +132,7 @@ def test_unsupported_media_fails_clearly(upload_routes, monkeypatch, content_typ
     )
     assert response.status_code == 400
     detail = response.json()["detail"]
-    assert "not a supported knowledge source" in detail or "not searchable" in detail
+    assert "not a supported knowledge source" in detail or "disabled" in detail
     persisted.assert_not_awaited()
     started.assert_not_called()
 
@@ -200,10 +200,10 @@ def test_formats_inventory_lists_registry_and_future_categories(upload_routes):
     assert response.status_code == 200
     payload = response.json()
     listed = {fmt["content_type"] for fmt in payload["formats"]}
-    assert listed == set(validation.FORMATS_BY_TYPE)
+    assert listed == {fmt.content_type for fmt in validation.available_formats()}
     assert all(fmt["max_bytes"] == (validation.IMAGE_MAX_BYTES if fmt["category"] == "image" else validation.DOCUMENT_MAX_BYTES) for fmt in payload["formats"])
     assert {entry["category"] for entry in payload["not_yet_supported"]} == {"audio", "video"}
-    assert "Meetings page" in payload["not_yet_supported"][0]["message"]
+    assert "disabled" in payload["not_yet_supported"][0]["message"]
 
 
 def test_formats_is_parsed_as_a_route_not_a_document(upload_routes, monkeypatch):

@@ -53,6 +53,7 @@ export interface Chunk {
   page_number: number | null;
   text: string;
   text_truncated: boolean;
+  source_location?: import("./source-location").SourceLocation | null;
   token_count: number | null;
 }
 

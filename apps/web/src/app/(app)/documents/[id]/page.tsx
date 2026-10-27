@@ -8,6 +8,8 @@ import { useProjectStore } from "@/stores/project";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { MediaPreview } from "@/components/features/documents/MediaPreview";
+import { sourceLabel, type SourceLocation } from "@/lib/source-location";
 import { Badge } from "@/components/ui/badge";
 
 interface DocumentDetail {
@@ -25,6 +27,7 @@ interface Chunk {
   id: string;
   chunk_index: number;
   page_number: number | null;
+  source_location?: SourceLocation | null;
   text: string;
   text_truncated: boolean;
   token_count: number | null;
@@ -101,17 +104,12 @@ export default function DocumentDetailPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Your session expired. Sign in again.");
 
-      // Re-upload the original file — the backend doesn't persist bytes,
-      // so a retry needs the file re-submitted.
+      // A replacement is optional: the API can retry the saved private original.
       const file = fileInputRef.current?.files?.[0];
-      if (!file) {
-        setErrorMsg("Pick the original file to retry");
-        return;
-      }
       let res: Response;
       try {
         const formData = new FormData();
-        formData.append("file", file);
+        if (file) formData.append("file", file);
 
         res = await fetch(
           withProject(`/documents/${documentId}/retry`, activeProjectId),
@@ -160,6 +158,7 @@ export default function DocumentDetailPage() {
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         {errorMsg && <p role="alert" className="mb-4 text-sm text-red-400">{errorMsg}</p>}
+        {doc.file_type.startsWith("audio/") || doc.file_type.startsWith("video/") ? <MediaPreview key={`${activeProjectId}:${documentId}`} documentId={documentId} projectId={activeProjectId} fileType={doc.file_type} chunks={chunks} /> : null}
         {/* Document Info */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="stat-glow p-4">
@@ -197,7 +196,7 @@ export default function DocumentDetailPage() {
                   {doc.error_message ? "Processing Error" : doc.status === "pending" ? "Waiting to process" : "Processing failed"}
                 </p>
                 <p className="text-sm text-app-muted">
-                  {doc.error_message ?? (doc.status === "pending" ? "Queued for processing. Status refreshes automatically." : "Processing failed. Re-select the original file and retry.")}
+                  {doc.error_message ?? (doc.status === "pending" ? "Queued for processing. Status refreshes automatically." : "Processing failed. Retry the saved original, or select a replacement.")}
                 </p>
                 {errorMsg && <p className="text-xs text-red-600 dark:text-red-400 mt-1">{errorMsg}</p>}
               </div>
@@ -243,6 +242,7 @@ export default function DocumentDetailPage() {
                         <Badge variant="outline" className="text-xs">
                           #{chunk.chunk_index}
                         </Badge>
+                        {chunk.source_location && <a href={`#t=${chunk.source_location.start_seconds}`} className="text-xs underline text-brand-accent">{sourceLabel(chunk.source_location)}</a>}
                         {chunk.page_number && (
                           <Badge variant="outline" className="text-xs">
                             Page {chunk.page_number}

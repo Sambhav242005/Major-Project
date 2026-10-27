@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACCEPTED_FORMATS_MESSAGE,
   ALLOWED_FILE_TYPES,
   DocumentUploadSchema,
   IMAGE_MAX_FILE_SIZE,
@@ -17,12 +16,9 @@ describe("DocumentUploadSchema", () => {
     }
   });
 
-  it("rejects audio with the meetings-page hint instead of a raw enum error", () => {
+  it("accepts supported audio for server-side runtime validation", () => {
     const parsed = DocumentUploadSchema.safeParse({ filename: "voice.mp3", fileType: "audio/mpeg", size: 1024 });
-    expect(parsed.success).toBe(false);
-    if (!parsed.success) {
-      expect(parsed.error.issues[0].message).toContain(ACCEPTED_FORMATS_MESSAGE);
-    }
+    expect(parsed.success).toBe(true);
   });
 
   it("enforces the 15MB image cap and the 25MB document cap separately", () => {
@@ -68,7 +64,7 @@ describe("sizeLimitMessage", () => {
 });
 
 describe("future media categories", () => {
-  it("keeps the meetings-page fallback text in one place", () => {
-    expect(NOT_YET_SUPPORTED_MESSAGE).toContain("Meetings page");
+  it("explains that media requires configured runtimes", () => {
+    expect(NOT_YET_SUPPORTED_MESSAGE).toContain("Whisper");
   });
 });

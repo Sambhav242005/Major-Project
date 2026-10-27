@@ -21,7 +21,8 @@ from services import documents as doc_service
 from services.documents.storage import save_original, load_original, delete_original
 from services.audit import write_audit_log
 from .ingestion_tasks import _doc_subscribers, _start_ingestion
-from .validation import ALLOWED_TYPES, MAX_FILE_SIZE, ACCEPTED_SUMMARY, DOCUMENT_MAX_BYTES, IMAGE_MAX_BYTES, SUPPORTED_FORMATS, UploadValidationError, validate_upload
+from .validation import ALLOWED_TYPES, MAX_FILE_SIZE, ACCEPTED_SUMMARY, DOCUMENT_MAX_BYTES, IMAGE_MAX_BYTES, SUPPORTED_FORMATS, MEDIA_FORMATS, available_formats, UploadValidationError, validate_upload
+from pipelines.media import media_unavailable_reason
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -129,18 +130,11 @@ async def list_supported_formats(user: User = Depends(get_current_user)):
                 "max_bytes": fmt.max_bytes,
                 "inline_preview": fmt.inline_preview,
             }
-            for fmt in SUPPORTED_FORMATS
+            for fmt in available_formats()
         ],
-        "not_yet_supported": [
-            {
-                "category": "audio",
-                "message": "Audio is not searchable project knowledge yet. Use the Meetings page to transcribe and analyze meeting audio.",
-            },
-            {
-                "category": "video",
-                "message": "Video ingestion with time citations is planned for a later release.",
-            },
-        ],
+        "not_yet_supported": [{"category": category, "message": reason}
+                              for category in ("audio", "video")
+                              if (reason := media_unavailable_reason(category == "video"))],
     }
 
 
@@ -175,7 +169,7 @@ async def get_document_original(document_id: str, download: bool = True, project
     file_type = doc["file_type"]
     # Never render uploaded active formats in the application's origin; the
     # upload registry drives the inline-preview allowlist.
-    preview_types = {fmt.content_type for fmt in SUPPORTED_FORMATS if fmt.inline_preview}
+    preview_types = {fmt.content_type for fmt in SUPPORTED_FORMATS + MEDIA_FORMATS if fmt.inline_preview}
     if file_type in {"text/markdown", "text/csv"}:
         file_type = "text/plain"
     disposition = "inline" if not download and file_type in preview_types else "attachment"

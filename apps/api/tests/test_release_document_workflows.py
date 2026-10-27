@@ -105,6 +105,8 @@ def original_routes(tmp_path, monkeypatch):
     ("application/pdf", "inline", "application/pdf"),
     ("text/markdown", "inline", "text/plain"),
     ("image/png", "inline", "image/png"),
+    ("audio/wav", "inline", "audio/wav"),
+    ("video/mp4", "inline", "video/mp4"),
     ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "attachment", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
 ])
 def test_original_http_preview_keeps_sandbox(original_routes, monkeypatch, file_type, disposition, media_type):

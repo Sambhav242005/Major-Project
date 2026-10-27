@@ -5,11 +5,12 @@ project knowledge. The documents router validates uploads against it, the
 signed webhook ingestion path shares the derived constants, and
 `GET /documents/formats` publishes the inventory for the frontend.
 
-TODO 2.26 Phase 1: images (OCR) and documents ingest today; audio and video
-are rejected with actionable guidance until a transcription parser lands.
+Audio/video becomes available only after the operator configures the media
+runtimes; ordinary document/image ingestion does not require those services.
 """
 
 from dataclasses import dataclass
+from pipelines.media import media_unavailable_reason
 
 DOCUMENT_MAX_BYTES = 25 * 1024 * 1024  # PDF/DOCX/text — unchanged from the original cap
 IMAGE_MAX_BYTES = 15 * 1024 * 1024     # images are rasterized into memory during OCR
@@ -21,7 +22,7 @@ class UploadFormat:
 
     content_type: str
     label: str
-    category: str  # "document" | "image"
+    category: str  # "document" | "image" | "audio" | "video"
     max_bytes: int
     inline_preview: bool  # safe to serve inline from GET /{id}/original
 
@@ -45,8 +46,25 @@ FORMATS_BY_TYPE = {fmt.content_type: fmt for fmt in SUPPORTED_FORMATS}
 ALLOWED_TYPES = set(FORMATS_BY_TYPE)
 MAX_FILE_SIZE = DOCUMENT_MAX_BYTES
 
-ACCEPTED_SUMMARY = "PDF, DOCX, TXT, Markdown, and CSV documents plus PNG, JPEG, TIFF, BMP, and WebP images"
+ACCEPTED_SUMMARY = "PDF, DOCX, TXT, Markdown, CSV and images; WAV/MP3/FLAC audio and MP4/WebM video when configured"
 CATEGORY_NOUN = {"document": "documents", "image": "images"}
+
+MEDIA_FORMATS = (
+    UploadFormat("audio/wav", "WAV audio", "audio", DOCUMENT_MAX_BYTES, True),
+    UploadFormat("audio/x-wav", "WAV audio", "audio", DOCUMENT_MAX_BYTES, True),
+    UploadFormat("audio/mpeg", "MP3 audio", "audio", DOCUMENT_MAX_BYTES, True),
+    UploadFormat("audio/flac", "FLAC audio", "audio", DOCUMENT_MAX_BYTES, True),
+    UploadFormat("video/mp4", "MP4 video", "video", DOCUMENT_MAX_BYTES, True),
+    UploadFormat("video/webm", "WebM video", "video", DOCUMENT_MAX_BYTES, True),
+)
+FORMATS_BY_TYPE.update({fmt.content_type: fmt for fmt in MEDIA_FORMATS})
+ALLOWED_TYPES.update(fmt.content_type for fmt in MEDIA_FORMATS)
+CATEGORY_NOUN.update(audio="audio", video="video")
+
+
+def available_formats() -> tuple[UploadFormat, ...]:
+    return SUPPORTED_FORMATS + tuple(fmt for fmt in MEDIA_FORMATS
+                                    if media_unavailable_reason(fmt.category == "video") is None)
 
 
 class UploadValidationError(ValueError):
@@ -62,6 +80,16 @@ def _sniff_mismatch(content: bytes, fmt: UploadFormat) -> bool:
     (NUL bytes) are rejected instead.
     """
     head = content[:16]
+    if fmt.content_type in ("audio/wav", "audio/x-wav"):
+        return not (head[:4] == b"RIFF" and head[8:12] == b"WAVE")
+    if fmt.content_type == "audio/mpeg":
+        return not (head.startswith(b"ID3") or len(head) >= 2 and head[0] == 255 and head[1] & 224 == 224)
+    if fmt.content_type == "audio/flac":
+        return not head.startswith(b"fLaC")
+    if fmt.content_type == "video/mp4":
+        return head[4:8] != b"ftyp"
+    if fmt.content_type == "video/webm":
+        return not head.startswith(b"\x1aE\xdf\xa3")
     if fmt.content_type == "application/pdf":
         return b"%PDF-" not in content[:1024]  # spec allows up to 1KB of leading junk
     if fmt.content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -81,11 +109,9 @@ def _sniff_mismatch(content: bytes, fmt: UploadFormat) -> bool:
 
 def _unsupported_message(content_type: str) -> str:
     if content_type.startswith("audio/"):
-        return ("Audio is not searchable project knowledge yet. Use the Meetings page to transcribe and "
-                "analyze meeting audio; audio knowledge sources are planned for a later release.")
+        return "Unsupported audio format. Use WAV, MP3 or FLAC with configured media ingestion."
     if content_type.startswith("video/"):
-        return ("Video is not searchable project knowledge yet; video ingestion with time citations is "
-                "planned for a later release.")
+        return "Unsupported video format. Use MP4 or WebM with configured media ingestion."
     return (f"File type '{content_type or 'unknown'}' is not a supported knowledge source. "
             f"Accepted knowledge sources: {ACCEPTED_SUMMARY}.")
 
@@ -103,6 +129,10 @@ def validate_upload(content: bytes | bytearray, filename: str | None, content_ty
     fmt = FORMATS_BY_TYPE.get(normalized)
     if fmt is None:
         raise UploadValidationError(_unsupported_message(normalized))
+    if fmt.category in ("audio", "video"):
+        reason = media_unavailable_reason(fmt.category == "video")
+        if reason:
+            raise UploadValidationError(reason)
     if len(content) > fmt.max_bytes:
         limit_mb = fmt.max_bytes // (1024 * 1024)
         raise UploadValidationError(

@@ -1,6 +1,8 @@
+import type { SourceLocation } from "./source-location";
+
 export type ChatStreamEvent =
   | { type: "chunk"; content: string }
-  | { type: "citations"; citations: { index: number; filename: string; page_number: number }[] }
+  | { type: "citations"; citations: { index: number; filename: string; page_number: number; document_id?: string; source_location?: SourceLocation }[] }
   | { type: "generation"; provider: string; model: string }
   | { type: "done"; request_id?: string }
   | { type: "error"; error: string; request_id?: string };
