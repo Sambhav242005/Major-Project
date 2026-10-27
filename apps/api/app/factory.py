@@ -13,7 +13,7 @@ from core.config import settings
 from core.errors import AppError, app_error_handler
 from core.rate_limit import limiter
 from core.security_headers import SecurityHeadersMiddleware
-from routers import agents, auth, chat, dashboard, documents, kb, mcp, meetings, projects, sharing, webhooks
+from routers import agents, auth, chat, dashboard, documents, github, kb, mcp, meetings, projects, sharing, webhooks
 from routers import system as system_router
 
 
@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
     app.include_router(agents.router, prefix="/agents", tags=["agents"])
     app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
+    app.include_router(github.router, prefix="/github", tags=["github"])
     app.include_router(meetings.router, prefix="/meetings", tags=["meetings"])
     app.include_router(projects.router, prefix="/projects", tags=["projects"])
     app.include_router(sharing.router, prefix="/projects/{project_id}/shares", tags=["sharing"])
