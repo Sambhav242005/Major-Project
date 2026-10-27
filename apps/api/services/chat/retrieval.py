@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import DocumentChunk, Entity, EntityMention
 
+# Per-source block characters included in the prompt by _format_source_block.
+SOURCE_TEXT_TRUNCATE_CHARS = 800
+
 
 async def _get_entity_context(
     db: AsyncSession,
@@ -116,4 +119,4 @@ def _format_source_block(
 ) -> str:
     """Format a source block for the LLM prompt."""
     header = f"[Source {index}] Document: {filename}, Page: {page_number or 'N/A'}"
-    return f"{header}\n{text[:800]}"  # Truncate long chunks
+    return f"{header}\n{text[:SOURCE_TEXT_TRUNCATE_CHARS]}"  # Truncate long chunks
