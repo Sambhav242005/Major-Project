@@ -47,7 +47,7 @@ the registry limit. GitHub response bodies are bounded while reading; previews
 and rejected imports close their HTTP clients. Source-table RLS denies direct
 client access; the existing API enforces project membership.
 
-Combined local validation: 685 backend tests passed, 2 skipped; 85 frontend
+Combined local validation: 706 backend tests passed, 2 skipped; 88 frontend
 unit tests, lint, type checking and the production build passed. Local runs use
 Windows/Python 3.14.6 and Node 24.14.1; CI Linux/Python 3.11/Node 22 remains the
 authoritative compatibility check. A process-local scripts namespace workaround

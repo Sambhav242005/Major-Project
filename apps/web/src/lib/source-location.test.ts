@@ -14,4 +14,10 @@ describe("media source locations", () => {
     expect(captions).toContain("00:01:01.500 --> 00:01:03.000\nLaunch approved");
     expect(captions).not.toContain("Slide description");
   });
+  it("joins chunks of one transcript span into one caption cue", () => {
+    const captions = transcriptCaptions([{ text: "First part", source_location: location },
+      { text: "Second part", source_location: location }]);
+    expect(captions.match(/ --> /g)).toHaveLength(1);
+    expect(captions).toContain("First part Second part");
+  });
 });

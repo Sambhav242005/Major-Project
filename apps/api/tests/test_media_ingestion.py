@@ -1,6 +1,11 @@
 """Offline model/decoder contracts and media evidence lifecycle regressions."""
 import json
 import uuid
+import io
+import wave
+import shutil
+import time
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -54,9 +59,9 @@ def media_runtime(monkeypatch):
         assert payload["messages"][0]["images"]
         return httpx.Response(200, json={"done": config["done"], "message": {"content": "Launch slide visible"}})
 
-    client_type = httpx.Client
+    client_type = httpx.AsyncClient
     monkeypatch.setattr(media, "_run", decoder)
-    monkeypatch.setattr(media.httpx, "Client", lambda **kwargs: client_type(transport=httpx.MockTransport(handler), **kwargs))
+    monkeypatch.setattr(media.httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(handler), **kwargs))
     return config, calls, paths
 
 
@@ -96,6 +101,26 @@ def test_media_duration_limit_precedes_model_calls(media_runtime):
     with pytest.raises(media.MediaError, match="duration limit"):
         parse_document(b"audio", "a.wav", "audio/wav")
     assert calls == []
+
+
+async def test_model_deadline_interrupts_small_trickled_fragments(monkeypatch):
+    closed = []
+
+    class SlowBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for _ in range(100):
+                await asyncio.sleep(0.01)
+                yield b" "
+
+        async def aclose(self):
+            closed.append(True)
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(media.httpx, "AsyncClient", lambda **kwargs: client_type(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=SlowBody())), **kwargs))
+    with pytest.raises(media.MediaError, match="time limit"):
+        await media._request_json_async("http://offline.test", time.monotonic() + 0.03)
+    assert closed
 
 
 @pytest.mark.parametrize("segments", [None, [{"text": "bad", "start": -1, "end": 2}],
@@ -147,6 +172,14 @@ def test_ollama_embeddinggemma2_native_batch_contract(monkeypatch):
         embeddings.OllamaEmbeddingFunction()(["one"])
 
 
+@pytest.mark.parametrize("vector", [[True, False], [float("nan"), 1], [0, 0]])
+def test_ollama_rejects_invalid_vectors(monkeypatch, vector):
+    monkeypatch.setattr(settings, "EMBEDDING_OUTPUT_DIM", None)
+    monkeypatch.setattr(embeddings, "_post_json", lambda *args: {"embeddings": [vector]})
+    with pytest.raises(embeddings.EmbeddingError):
+        embeddings.OllamaEmbeddingFunction()(["one"])
+
+
 async def test_media_normal_pipeline_persists_source_locations(media_runtime, monkeypatch):
     from pipelines.ingestion.runner import ingest_document
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -171,3 +204,32 @@ async def test_media_normal_pipeline_persists_source_locations(media_runtime, mo
             assert captured[0]["source_location"] == chunks[0].source_location
     finally:
         await engine.dispose()
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"), reason="decoder binaries unavailable")
+@pytest.mark.parametrize("video", [False, True])
+def test_real_decoders_with_offline_model_responses(monkeypatch, video):
+    monkeypatch.setattr(settings, "MEDIA_INGESTION_ENABLED", True)
+    monkeypatch.setattr(settings, "WHISPER_BASE_URL", "http://whisper.test/v1")
+    monkeypatch.setattr(settings, "VLM_MODEL", "offline-vision")
+    monkeypatch.setattr(settings, "OLLAMA_BASE_URL", "http://ollama.test")
+    if video:
+        content = media._run([shutil.which("ffmpeg"), "-nostdin", "-v", "error", "-f", "lavfi",
+                              "-i", "color=c=blue:s=160x90:d=1", "-c:v", "mpeg4", "-movflags",
+                              "frag_keyframe+empty_moov", "-f", "mp4", "pipe:1"], time.monotonic() + 30)
+    else:
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as audio:
+            audio.setparams((1, 2, 16000, 16000, "NONE", "not compressed"))
+            audio.writeframes(b"\x00\x00" * 16000)
+        content = buffer.getvalue()
+
+    def respond(request):
+        if request.url.path.endswith("transcriptions"):
+            return httpx.Response(200, json={"segments": [{"text": "Offline transcript", "start": 0, "end": 0.8}]})
+        return httpx.Response(200, json={"done": True, "message": {"content": "Blue frame"}})
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(media.httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs))
+    pages = parse_document(content, "sample.mp4" if video else "sample.wav", "video/mp4" if video else "audio/wav")
+    assert pages[0]["source_location"]["kind"] == ("video_frame" if video else "transcript")

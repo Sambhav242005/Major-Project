@@ -7,6 +7,7 @@ from pipelines.embeddings.embedding_function import (
     EmbeddingError,
     GeminiEmbeddingFunction,
     OpenAICompatibleEmbeddingFunction,
+    OllamaEmbeddingFunction,
     get_embedding_function,
     reset_embedding_function_cache,
 )
@@ -20,6 +21,7 @@ from pipelines.embeddings.store import (
 
 __all__ = [
     "OpenAICompatibleEmbeddingFunction",
+    "OllamaEmbeddingFunction",
     "GeminiEmbeddingFunction",
     "EmbeddingError",
     "EmbeddingSpaceMismatchError",

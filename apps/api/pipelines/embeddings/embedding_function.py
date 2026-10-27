@@ -211,8 +211,8 @@ def _needs_manual_normalization() -> bool:
 
 
 def _l2_normalize(vector: list[float]) -> list[float]:
-    norm = math.sqrt(sum(value * value for value in vector))
-    if norm == 0.0:
+    norm = math.hypot(*vector)
+    if norm == 0.0 or not math.isfinite(norm):
         raise EmbeddingError("Embedding provider returned an all-zero vector")
     return [value / norm for value in vector]
 
@@ -294,7 +294,7 @@ class OllamaEmbeddingFunction(chromadb.EmbeddingFunction):
                 raise EmbeddingError("Ollama returned mismatched embedding counts")
             for vector in batch:
                 if (not isinstance(vector, list) or not vector
-                        or any(not isinstance(x, (int, float)) or not math.isfinite(x) for x in vector)
+                        or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in vector)
                         or (settings.EMBEDDING_OUTPUT_DIM and len(vector) != settings.EMBEDDING_OUTPUT_DIM)
                         or (vectors and len(vector) != len(vectors[0]))):
                     raise EmbeddingError("Ollama returned invalid embedding vectors")

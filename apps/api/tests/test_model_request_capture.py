@@ -450,6 +450,21 @@ def test_snapshot_excludes_url_credentials_and_signed_queries():
     assert snapshot["provider"]["endpoint"] == snapshot["request"]["url"] == expected
     assert "secret" not in json.dumps(snapshot)
 
+
+async def test_media_evidence_times_survive_chat_citations(chat_mocks, monkeypatch):
+    location = {"kind": "transcript", "start_seconds": 1.5, "end_seconds": 3.5,
+                "model": "whisper", "machine_generated": True}
+    monkeypatch.setattr(streaming, "query_chunks", AsyncMock(return_value=[{
+        "text": "Project approved", "filename": "meeting.wav", "document_id": PROJECT_UUID,
+        "chunk_id": "chunk", "source_location": location,
+    }]))
+    streaming_client(lambda request: httpx.Response(200, text=legacy_sse("Approved [1]")), monkeypatch)
+    events = await collect_events(chat_mocks)
+    citations = next(e["citations"] for e in events if e["type"] == "citations")
+    assert citations[0]["source_location"] == location
+    snapshot = list(store._entries.values())[0][1]
+    assert "Time: 1.50-3.50s" in json.dumps(snapshot["request"]["body"])
+
 @pytest.mark.asyncio
 async def test_snapshot_expires_after_ttl():
     store.register_snapshot({"request_id": "req-ttl", "project_id": PROJECT_UUID,
