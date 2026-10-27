@@ -21,8 +21,7 @@ from services import documents as doc_service
 from services.documents.storage import save_original, load_original, delete_original
 from services.audit import write_audit_log
 from .ingestion_tasks import _doc_subscribers, _start_ingestion
-from .validation import SUPPORTED_FORMATS
-from .validation import ALLOWED_TYPES, MAX_FILE_SIZE, UploadValidationError, validate_upload
+from .validation import ALLOWED_TYPES, MAX_FILE_SIZE, ACCEPTED_SUMMARY, DOCUMENT_MAX_BYTES, IMAGE_MAX_BYTES, SUPPORTED_FORMATS, UploadValidationError, validate_upload
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -118,7 +117,6 @@ async def upload_document(request: Request, response: Response, file: UploadFile
 @router.get("/formats")
 async def list_supported_formats(user: User = Depends(get_current_user)):
     """Machine-readable inventory of accepted knowledge-source formats (TODO 2.26 Phase 1)."""
-    from .validation import IMAGE_MAX_BYTES, DOCUMENT_MAX_BYTES, ACCEPTED_SUMMARY, SUPPORTED_FORMATS
     return {
         "accepted_summary": ACCEPTED_SUMMARY,
         "max_document_bytes": DOCUMENT_MAX_BYTES,

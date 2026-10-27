@@ -36,12 +36,12 @@ describe("DocumentUploadSchema", () => {
       expect(oversizedImage.error.issues[0].message).toContain("15MB limit for images");
     }
 
-    const leagueDocument = DocumentUploadSchema.safeParse({
+    const stillValidDocument = DocumentUploadSchema.safeParse({
       filename: "report.pdf",
       fileType: "application/pdf",
       size: IMAGE_MAX_FILE_SIZE + 1,
     });
-    expect(leagueDocument.success).toBe(true); // 15MB+1 is still a valid document
+    expect(stillValidDocument.success).toBe(true); // 15MB+1 is still a valid document
 
     const oversizedDocument = DocumentUploadSchema.safeParse({
       filename: "report.pdf",
