@@ -382,7 +382,7 @@ def _exclude_reason(
 
 
 def _is_allowed_format(name: str) -> bool:
-    if name in ALLOWED_BASENAMES:
+    if name in {basename.lower() for basename in ALLOWED_BASENAMES}:
         return True
     if "." not in name:
         return False

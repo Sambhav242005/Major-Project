@@ -6,7 +6,7 @@ Conventions follow the rest of the codebase:
   sessions die with the response).
 - Each file flows through the normal document pipeline: it becomes a regular
   ``documents`` row, its bytes are saved as a durable original, and
-  ``_start_ingestion`` runs parse → chunk → embed → extract per file.
+  the job awaits parse → chunk → embed → extract per file.
 - Repository text is untrusted retrieval content: it is never executed, and
   secret-looking content is refused before anything is stored.
 """
@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 
 from core.config import settings
 from core.security import User
-from db.models import DocumentSource
+from db.models import Document, DocumentSource
+from pipelines.ingestion.runner import ingest_document
 from services.documents import upload_document
 from services.documents.storage import save_original, delete_original
 
@@ -30,7 +31,7 @@ from .filters import (
     content_secret_scan,
     looks_binary_content,
 )
-from .service import PreviewResult
+from .service import ImportRejected, PreviewResult
 
 logger = logging.getLogger(__name__)
 
@@ -108,11 +109,12 @@ def request_cancel(job_id: str) -> bool:
 
 
 def _remember_job(job: ImportJobState) -> None:
+    while len(_jobs) >= MAX_TRACKED_JOBS:
+        oldest_finished = next((key for key, value in _jobs.items() if value.state != "running"), None)
+        if oldest_finished is None:
+            raise ImportRejected("Too many running imports; wait for a job to finish")
+        _jobs.pop(oldest_finished)
     _jobs[job.job_id] = job
-    while len(_jobs) > MAX_TRACKED_JOBS:
-        oldest = next(iter(_jobs))
-        if oldest != job.job_id:
-            _jobs.pop(oldest, None)
 
 
 def start_import_job(
@@ -159,34 +161,33 @@ async def _run_import(
     user_id: str,
 ):
     try:
-        async with session_factory() as db:
-            for decision in preview.files:
-                if job.cancel_requested and job.state == "running":
-                    job.state = "cancelled"
-                    job.message = "Cancelled before all files were processed"
-                    break
-                try:
-                    document_id = await _ingest_file(
-                        session_factory, client, job, decision, project_id, user_id
-                    )
-                    if document_id:
-                        job.processed_files += 1
-                        if len(job.document_ids) < 500:
-                            job.document_ids.append(document_id)
-                    else:
-                        job.failed_files += 1
-                except Exception as exc:
+        for decision in preview.files:
+            if job.cancel_requested and job.state == "running":
+                job.state = "cancelled"
+                job.message = "Cancelled before all files were processed"
+                break
+            try:
+                document_id = await _ingest_file(
+                    session_factory, client, job, decision, project_id, user_id
+                )
+                if document_id:
+                    job.processed_files += 1
+                    if len(job.document_ids) < 500:
+                        job.document_ids.append(document_id)
+                else:
                     job.failed_files += 1
-                    _record_error(job, decision.path, f"{type(exc).__name__}: {exc}")
-                    logger.warning(
-                        "GitHub import file failed: %s/%s %s (%s)",
-                        preview.owner, preview.repo, decision.path, type(exc).__name__,
-                    )
-            else:
-                if job.state == "running":
-                    job.state = "completed"
-                    suffix = f" ({job.failed_files} failed)" if job.failed_files else ""
-                    job.message = f"Imported {job.processed_files} file(s){suffix}"
+            except Exception as exc:
+                job.failed_files += 1
+                _record_error(job, decision.path, f"{type(exc).__name__}: {exc}")
+                logger.warning(
+                    "GitHub import file failed: %s/%s %s (%s)",
+                    preview.owner, preview.repo, decision.path, type(exc).__name__,
+                )
+        else:
+            if job.state == "running":
+                job.state = "completed"
+                suffix = f" ({job.failed_files} failed)" if job.failed_files else ""
+                job.message = f"Imported {job.processed_files} file(s){suffix}"
     except Exception as exc:
         job.state = "failed"
         job.message = f"Import failed: {type(exc).__name__}"
@@ -239,6 +240,14 @@ async def _ingest_file(
         session_factory, job, decision, project_id, user_id,
         document_id, filename, storage_uri, content_hash, blob,
     )
+    # One pipeline per job at a time. Completion means searchable evidence,
+    # rather than merely launching a detached task with unobserved failures.
+    await ingest_document(session_factory, created, bytes(blob))
+    async with session_factory() as db:
+        document = await db.get(Document, uuid.UUID(created))
+        if document is None or document.status != "processed":
+            _record_error(job, decision.path, "document_ingestion_failed; inspect document status")
+            return ""
     return created
 
 
@@ -254,7 +263,7 @@ async def _persist_document(
     content_hash: str,
     blob: bytes,
 ) -> str:
-    """Insert document + provenance, save the original, then start ingestion."""
+    """Insert document + provenance and save the original atomically."""
     line_count = blob.count(b"\n") + (0 if blob.endswith(b"\n") else 1) if blob else 0
     async with session_factory() as db:
         doc = await upload_document(
@@ -293,8 +302,4 @@ async def _persist_document(
                 logger.exception("Original cleanup failed after persistence error")
             raise
 
-    # Launch the normal per-file pipeline only after a durable commit.
-    from routers.documents.ingestion_tasks import _start_ingestion
-
-    _start_ingestion(session_factory, document_id, bytes(blob))
     return doc["id"]

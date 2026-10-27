@@ -16,6 +16,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 # Headers never recorded in snapshots. Their presence (name only) is kept so
 # the inspector can honestly show that an excluded secret header was sent.
@@ -36,6 +37,15 @@ BINARY_KEYS = frozenset({"image_url", "input_audio", "file_data", "b64_json", "a
 _BASE64_RE = __import__("re").compile(r"^[A-Za-z0-9+/\-_.:;=,]*$")
 
 TERMINAL_STATUSES = ("sent", "failed", "cancelled")
+
+
+def sanitize_endpoint(url: str) -> str:
+    """Keep routing information, excluding URL credentials and signed queries."""
+    try:
+        parts = urlsplit(url)
+        return urlunsplit((parts.scheme, parts.netloc.rsplit("@", 1)[-1], parts.path, "", ""))
+    except ValueError:
+        return "(invalid endpoint excluded from snapshot)"
 
 
 def estimate_tokens(text: str) -> int:
@@ -173,10 +183,10 @@ class ModelRequestCapture:
         self.provider = provider
         self.model = model
         self.request_shape = request_shape
-        self.endpoint = url
+        self.endpoint = sanitize_endpoint(url)
         self.transport = {
             "method": method,
-            "url": url,
+            "url": self.endpoint,
             "headers": sanitize_headers(headers),
             "body": sanitize_payload(body),
         }

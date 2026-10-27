@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attachModelRequest,
   downloadSnapshot,
   estimatedTokensLabel,
   providerLabel,
@@ -11,6 +12,27 @@ import {
   statusTone,
   type ModelRequestSnapshot,
 } from "./model-request";
+
+describe("snapshot ownership under delayed responses", () => {
+  it("attaches an earlier request to its answer after the next answer starts", async () => {
+    type Message = { id: string; role: string; model_request?: import("./model-request").ModelRequestMapping };
+    let messages: Message[] = [{ id: "first", role: "assistant" }];
+    const mapping = { requestId: "request-first", state: "fetched" as const, snapshot: { request_id: "request-first" } };
+    const delayed = Promise.resolve(mapping).then((result) => {
+      messages = attachModelRequest(messages, "first", result);
+    });
+    messages.push({ id: "second", role: "assistant" });
+    await delayed;
+    expect(messages[0].model_request).toEqual(mapping);
+    expect(messages[1].model_request).toBeUndefined();
+  });
+
+  it("ignores a snapshot whose message was removed by a session or project switch", () => {
+    const messages = [{ id: "new-session-answer", role: "assistant" }];
+    const mapping = { requestId: "old-request", state: "missing" as const, snapshot: null };
+    expect(attachModelRequest(messages, "old-answer", mapping)).toEqual(messages);
+  });
+});
 
 const base: ModelRequestSnapshot = {
   schema: "model_request.snapshot.v1",

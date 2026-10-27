@@ -66,7 +66,7 @@ def _blob_payload(sha: str, content: bytes) -> dict:
     return {
         "sha": sha,
         "encoding": "base64",
-        "content": base64.b64encode(content).decode("ascii"),
+        "content": base64.encodebytes(content).decode("ascii"),
         "size": len(content),
     }
 
@@ -364,6 +364,51 @@ def test_blob_fixture_is_committed_and_realistic():
     assert b"# Sample Knowledge Base Repository" in decoded
 
 
+def test_extensionless_build_files_are_included():
+    outcome = filter_tree([entry("Dockerfile", 10, README_SHA), entry("Makefile", 10, DOCS_SHA)])
+    assert [item.path for item in outcome.included] == ["Dockerfile", "Makefile"]
+
+
+async def test_client_stops_reading_oversized_response(monkeypatch):
+    from services.github_import import client as client_module
+    monkeypatch.setattr(client_module, "MAX_RESPONSE_BYTES", 4)
+    closed = []
+
+    class Body(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"x" * (64 * 1024)
+            pytest.fail("oversized response must not be read to EOF")
+
+        async def aclose(self):
+            closed.append(True)
+
+    client = HttpxGitHubClient(http=httpx.AsyncClient(
+        base_url="https://api.github.com",
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=Body())),
+    ))
+    try:
+        with pytest.raises(GitHubUnavailableError, match="size limit"):
+            await client.get_repository("ok-org", "ok-repo")
+        assert closed
+    finally:
+        await client.aclose()
+
+
+def test_registry_keeps_running_jobs_cancellable_at_capacity(monkeypatch):
+    monkeypatch.setattr(import_jobs, "_jobs", {})
+    monkeypatch.setattr(import_jobs, "MAX_TRACKED_JOBS", 1)
+    first = import_jobs.ImportJobState("first", "project", "owner", "repo", "main", COMMIT_SHA)
+    second = import_jobs.ImportJobState("second", "project", "owner", "repo", "main", COMMIT_SHA)
+    import_jobs._remember_job(first)
+    with pytest.raises(ImportRejected, match="running imports"):
+        import_jobs._remember_job(second)
+    assert import_jobs.request_cancel("first")
+    first.state = "cancelled"
+    import_jobs._remember_job(second)
+    assert import_jobs.get_job("second") is second
+    assert import_jobs.get_job("first") is None
+
+
 # ---------------------------------------------------------------------------
 # Service: preview
 # ---------------------------------------------------------------------------
@@ -476,10 +521,13 @@ async def job_env(tmp_path, monkeypatch):
 
     launched: list[tuple] = []
 
-    def _record_start(session_factory_, document_id, content):
-        launched.append((session_factory_, document_id, content))
+    from pipelines.ingestion.runner import ingest_document
 
-    monkeypatch.setattr("routers.documents.ingestion_tasks._start_ingestion", _record_start)
+    async def _record_ingest(session_factory_, document_id, content):
+        launched.append((session_factory_, document_id, content))
+        await ingest_document(session_factory_, document_id, content)
+
+    monkeypatch.setattr(import_jobs, "ingest_document", _record_ingest)
 
     yield factory, launched
     await engine.dispose()
@@ -495,8 +543,6 @@ async def _await_job(job, timeout: float = 5.0):
 
 async def test_job_imports_files_with_provenance_via_normal_pipeline(job_env):
     factory, launched = job_env
-    from pipelines.ingestion.runner import ingest_document
-
     readme_content = base64.b64decode(_fixture("blob_readme.json")["content"])
     blobs = {
         README_SHA: readme_content,
@@ -514,10 +560,6 @@ async def test_job_imports_files_with_provenance_via_normal_pipeline(job_env):
     assert job.processed_files == 3 and job.failed_files == 0 and job.errors == []
     assert set(job.document_ids) == {args[1] for args in launched}
     assert len(launched) == 3
-
-    # Replay the real pipeline body (parse → chunk → embed → extract → persist).
-    for session_factory_, document_id, content in launched:
-        await ingest_document(session_factory_, document_id, content)
 
     async with factory() as db:
         docs = (await db.execute(select(Document))).scalars().all()
@@ -566,6 +608,33 @@ async def test_job_records_per_file_error_and_finishes_remaining(job_env):
     assert [e["path"] for e in job.errors] == ["src/main.py"]
     assert "blob unavailable" in job.errors[0]["reason"]
     assert len(launched) == 2
+
+
+async def test_job_waits_for_ingestion_and_reports_pipeline_failure(job_env, monkeypatch):
+    factory, _ = job_env
+    entered, release = asyncio.Event(), asyncio.Event()
+    real_ingest = import_jobs.ingest_document
+
+    async def delayed_ingest(*args):
+        entered.set()
+        await release.wait()
+        await real_ingest(*args)
+
+    monkeypatch.setattr(import_jobs, "ingest_document", delayed_ingest)
+    entries = [entry("empty.md", 2, README_SHA), entry("guide.md", 8, DOCS_SHA)]
+    job = import_jobs.start_import_job(
+        factory, FakeClient(entries=entries, blobs={README_SHA: b" \n", DOCS_SHA: b"# guide\n"}),
+        _preview(filter_tree(entries)), str(uuid.uuid4()), str(uuid.uuid4()),
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        assert job.state == "running" and job.processed_files == 0
+    finally:
+        release.set()
+        await _await_job(job)
+    assert job.processed_files == 1 and job.failed_files == 1
+    assert job.errors[0]["path"] == "empty.md"
+    assert "ingestion_failed" in job.errors[0]["reason"]
 
 
 async def test_job_rejects_secret_content_and_oversized_blobs(job_env, monkeypatch):
@@ -659,7 +728,8 @@ def _asgi(app) -> httpx.AsyncClient:
 
 async def test_preview_endpoint_lists_files_with_pinned_commit(github_app, monkeypatch):
     app, github_router, _ = github_app
-    monkeypatch.setattr(github_router, "_client_factory", lambda: _fixture_client())
+    client = _fixture_client()
+    monkeypatch.setattr(github_router, "_client_factory", lambda: client)
     async with _asgi(app) as http:
         response = await http.post(
             "/github/import/preview",
@@ -677,6 +747,7 @@ async def test_preview_endpoint_lists_files_with_pinned_commit(github_app, monke
     reasons = {e["path"]: e["reason"] for e in payload["excluded"]}
     assert reasons[".env"] == "secret_like"
     assert reasons["package-lock.json"] == "lockfile"
+    assert client._http is None  # previews own and close their HTTP client
 
 
 async def test_preview_endpoint_blocks_cross_host_redirect(github_app, monkeypatch):
@@ -739,7 +810,6 @@ async def import_backend(monkeypatch, tmp_path):
         "pipelines.entity_extraction.extract_entities_from_chunks", AsyncMock(return_value=1)
     )
     monkeypatch.setattr("services.webhooks.fire_event", AsyncMock(return_value=None))
-    monkeypatch.setattr("routers.documents.ingestion_tasks._start_ingestion", lambda *args: None)
     return engine
 
 

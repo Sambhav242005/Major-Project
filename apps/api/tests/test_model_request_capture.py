@@ -297,7 +297,7 @@ async def test_full_flow_capture_matches_wire_and_records_truncation(chat_mocks,
 
     events = await collect_events(db, message="Summarize the report")
 
-    assert [e["type"] for e in events] == ["chunk", "citations", "done"]
+    assert [e["type"] for e in events] == ["generation", "chunk", "citations", "done"]
     request_id = events[-1]["request_id"]
     assert request_id
     assert len(wire_requests) == 1
@@ -379,8 +379,8 @@ async def test_failed_generation_recorded_and_readable(chat_mocks, monkeypatch):
 
     streaming_client(handler, monkeypatch)
     events = await collect_events(chat_mocks)
-    assert [e["type"] for e in events] == ["error"]
-    request_id = events[0]["request_id"]
+    assert [e["type"] for e in events] == ["generation", "error"]
+    request_id = events[-1]["request_id"]
     assert request_id
 
     snapshot = await store.get_snapshot_for_project(
@@ -406,6 +406,8 @@ async def test_cancelled_generation_recorded(chat_mocks, monkeypatch):
         project_id=PROJECT_UUID,
         actor_id="550e8400-e29b-41d4-a716-446655440000",
     )
+    first = await generator.__anext__()
+    assert first["type"] == "generation"
     first = await generator.__anext__()
     assert first["type"] == "chunk"
     # Closing the pipeline at the yield point must complete without raising;
@@ -435,6 +437,18 @@ async def test_stream_without_completion_marker_is_not_recorded_as_sent(chat_moc
 
 
 # --- retention and access control ---
+
+def test_snapshot_excludes_url_credentials_and_signed_queries():
+    capture = llm_client.ModelRequestCapture(request_id="url-privacy")
+    capture.mark_transport(
+        provider="openai", model="test", request_shape="chat_completions", method="POST",
+        url="https://operator:gateway-secret@example.test/v1/chat/completions?api_key=query-secret#fragment-secret",
+        headers={"Authorization": "Bearer header-secret"}, body={"messages": []},
+    )
+    snapshot = capture.snapshot()
+    expected = "https://example.test/v1/chat/completions"
+    assert snapshot["provider"]["endpoint"] == snapshot["request"]["url"] == expected
+    assert "secret" not in json.dumps(snapshot)
 
 @pytest.mark.asyncio
 async def test_snapshot_expires_after_ttl():

@@ -15,7 +15,7 @@ import {
   validateChatSelection,
   type ChatProviderAvailability,
 } from "@/lib/chat-selection";
-import type { ModelRequestMapping, ModelRequestSnapshot } from "@/lib/model-request";
+import { attachModelRequest, type ModelRequestMapping, type ModelRequestSnapshot } from "@/lib/model-request";
 import type { SystemStatus } from "@/lib/system-status";
 
 export default function ChatPage() {
@@ -34,6 +34,8 @@ export default function ChatPage() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamBufferRef = useRef("");
+  const streamingAssistantRef = useRef<string | null>(null);
+  const sessionVersionRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const { projects, activeProjectId } = useProjectStore();
@@ -68,6 +70,11 @@ export default function ChatPage() {
 
   const createSession = useCallback(async () => {
     abortRef.current?.abort();
+    abortRef.current = null;
+    streamBufferRef.current = "";
+    streamingAssistantRef.current = null;
+    setStreaming(false);
+    const version = ++sessionVersionRef.current;
     setLoading(true);
     setMessages([]);
     setSessionId(null);
@@ -86,13 +93,15 @@ export default function ChatPage() {
         body: { title: "New Chat" },
       });
 
-      if (mountedRef.current) {
+      if (mountedRef.current && sessionVersionRef.current === version) {
         setSessionId(data.id);
       }
     } catch (e) {
-      setSessionError(e instanceof Error ? e.message : "Failed to create chat session");
+      if (mountedRef.current && sessionVersionRef.current === version) {
+        setSessionError(e instanceof Error ? e.message : "Failed to create chat session");
+      }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && sessionVersionRef.current === version) {
         setLoading(false);
       }
     }
@@ -111,14 +120,10 @@ export default function ChatPage() {
     const buffer = streamBufferRef.current;
     if (!buffer) return;
     streamBufferRef.current = "";
-    setMessages((prev) => {
-      const updated = [...prev];
-      const last = updated[updated.length - 1];
-      if (last && last.role === "assistant") {
-        updated[updated.length - 1] = { ...last, content: last.content + buffer };
-      }
-      return updated;
-    });
+    const messageId = streamingAssistantRef.current;
+    setMessages((prev) => prev.map((item) => item.id === messageId && item.role === "assistant"
+      ? { ...item, content: item.content + buffer }
+      : item));
   }, []);
 
   /**
@@ -142,15 +147,10 @@ export default function ChatPage() {
     }
   }, [supabase.auth, activeProjectId]);
 
-  const patchLastAssistant = useCallback((patch: Partial<ChatMessage>) => {
-    setMessages((prev) => {
-      const updated = [...prev];
-      const last = updated[updated.length - 1];
-      if (last && last.role === "assistant") {
-        updated[updated.length - 1] = { ...last, ...patch };
-      }
-      return updated;
-    });
+  const patchAssistant = useCallback((messageId: string, patch: Partial<ChatMessage>) => {
+    setMessages((prev) => prev.map((item) => item.id === messageId && item.role === "assistant"
+      ? { ...item, ...patch }
+      : item));
   }, []);
 
   const handleSend = useCallback(async (e?: React.FormEvent) => {
@@ -163,11 +163,13 @@ export default function ChatPage() {
     }
     selection_.setGenerationError(null);
     const userMessage = message.trim();
+    const assistantId = crypto.randomUUID();
+    streamingAssistantRef.current = assistantId;
     setMessage("");
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: userMessage },
-      { role: "assistant", content: "" },
+      { id: crypto.randomUUID(), role: "user", content: userMessage },
+      { id: assistantId, role: "assistant", content: "" },
     ]);
     setStreaming(true);
     streamBufferRef.current = "";
@@ -198,37 +200,45 @@ export default function ChatPage() {
       if (!res.body) throw new Error("No response stream received");
       let chunkCount = 0;
       for await (const data of readChatStream(res.body)) {
+        if (controller.signal.aborted || abortRef.current !== controller) break;
         if (data.type === "chunk") {
           streamBufferRef.current += data.content;
           chunkCount++;
           if (chunkCount % 10 === 0) flushBuffer();
         } else if (data.type === "citations") {
           flushBuffer();
-          patchLastAssistant({ citations: data.citations });
+          patchAssistant(assistantId, { citations: data.citations });
         } else if (data.type === "generation") {
           // Label this answer with the model the backend actually used, so
           // later header changes cannot mislabel it.
-          patchLastAssistant({ generation: { provider: data.provider, model: data.model } });
+          patchAssistant(assistantId, { generation: { provider: data.provider, model: data.model } });
         } else if (data.type === "done" && data.request_id) {
           requestRecordId = data.request_id;
         }
       }
-      flushBuffer();
+      if (abortRef.current === controller) flushBuffer();
     } catch (err) {
-      if (mountedRef.current) {
+      if (mountedRef.current && abortRef.current === controller) {
         console.error("Chat error:", err);
         streamBufferRef.current = "";
         if (err instanceof ChatStreamError && err.requestId) requestRecordId = err.requestId;
-        patchLastAssistant({
+        patchAssistant(assistantId, {
           content: controller.signal.aborted ? "Response stopped before completion. Send the question again to retry." : err instanceof Error ? err.message : "Failed to get a complete response. Please try again.",
           citations: [],
         });
       }
     } finally {
-      if (mountedRef.current) setStreaming(false);
-      abortRef.current = null;
+      if (mountedRef.current && abortRef.current === controller) {
+        setStreaming(false);
+        if (requestRecordId) {
+          void loadRequestRecord(requestRecordId).then((mapping) => {
+            if (mountedRef.current) setMessages((prev) => attachModelRequest(prev, assistantId, mapping));
+          });
+        }
+      }
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [message, streaming, sessionId, flushBuffer, patchLastAssistant, supabase, activeProjectId, selection_, providerAvailability, loadRequestRecord]);
+  }, [message, streaming, sessionId, flushBuffer, patchAssistant, supabase, activeProjectId, selection_, providerAvailability, loadRequestRecord]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();
@@ -273,7 +283,7 @@ export default function ChatPage() {
           ) : (
             messages.map((msg, i) => (
               <ChatBubble
-                key={i}
+                key={msg.id ?? i}
                 message={msg}
                 isStreaming={streaming}
                 onFeedback={

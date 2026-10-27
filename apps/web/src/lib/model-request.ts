@@ -107,6 +107,17 @@ export interface ModelRequestMapping {
   snapshot: ModelRequestSnapshot | null;
 }
 
+/** Ignore stale fetch results when their originating answer is no longer shown. */
+export function attachModelRequest<T extends { id?: string; role: string; model_request?: ModelRequestMapping }>(
+  messages: T[],
+  messageId: string,
+  mapping: ModelRequestMapping,
+): T[] {
+  return messages.map((message) => message.id === messageId && message.role === "assistant"
+    ? { ...message, model_request: mapping }
+    : message);
+}
+
 export interface ModelRequestSection {
   id: "messages" | "retrieval" | "graph" | "history" | "settings" | "transport" | "privacy";
   title: string;

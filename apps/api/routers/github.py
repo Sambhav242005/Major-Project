@@ -63,6 +63,15 @@ def _from_rejection(exc: Exception) -> GitHubImportBlocked:
     return GitHubImportBlocked("Repository preview failed")
 
 
+async def _close_client(client) -> None:
+    close = getattr(client, "aclose", None)
+    if close is not None:
+        try:
+            await close()
+        except Exception:
+            logger.exception("GitHub preview client close failed")
+
+
 @router.post("/import/preview", response_model=GitHubPreviewResponse)
 @limiter.limit("10/minute")
 async def preview_repository(
@@ -74,6 +83,7 @@ async def preview_repository(
     db: AsyncSession = Depends(get_db),
 ):
     """Resolve the ref to a commit SHA and list the files that would import."""
+    client = None
     try:
         target = resolve_repository(
             payload.repo_url,
@@ -87,6 +97,9 @@ async def preview_repository(
         raise _from_rejection(exc) from None
     except Exception as exc:
         raise _from_rejection(exc) from exc
+    finally:
+        if client is not None:
+            await _close_client(client)
     return GitHubPreviewResponse(
         owner=preview.owner,
         repo=preview.repo,
@@ -124,26 +137,23 @@ async def import_repository(
     """
     from db.session import async_session_factory
 
+    client = None
     try:
-        target = resolve_repository(
-            payload.repo_url,
-            payload.ref,
-            payload.include,
-            payload.exclude,
-        )
+        target = resolve_repository(payload.repo_url, payload.ref, payload.include, payload.exclude)
         client = _client_factory()
         preview = await build_preview(client, target)
-    except ImportRejected as exc:
+        if not preview.files:
+            raise ImportRejected("No files match the import policy")
+        job = import_jobs.start_import_job(
+            async_session_factory, client, preview, project_id, user.id
+        )
+    except BaseException as exc:
+        if client is not None:
+            await _close_client(client)
+        if not isinstance(exc, Exception):
+            raise
         raise _from_rejection(exc) from None
-    except Exception as exc:
-        raise _from_rejection(exc) from exc
 
-    if not preview.files:
-        raise GitHubImportBlocked("No files match the import policy")
-
-    job = import_jobs.start_import_job(
-        async_session_factory, client, preview, project_id, user.id
-    )
     try:
         await write_audit_log(
             db=db,

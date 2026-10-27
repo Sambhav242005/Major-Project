@@ -140,7 +140,8 @@ def parse_blob(payload: dict) -> bytes:
     if payload.get("encoding") != "base64" or not isinstance(payload.get("content"), str):
         raise GitHubUnavailableError("Unexpected blob payload from GitHub")
     try:
-        return base64.b64decode(payload["content"], validate=True)
+        # GitHub wraps base64 at fixed-width lines, including a final newline.
+        return base64.b64decode("".join(payload["content"].split()), validate=True)
     except ValueError as exc:
         raise GitHubUnavailableError("Blob payload is not valid base64") from exc
 
@@ -170,24 +171,26 @@ class HttpxGitHubClient:
     async def _request_json(self, url_path: str, params: dict | None = None) -> dict:
         client = self._client()
         try:
-            response = await client.get(url_path, params=params, headers=_json_headers())
+            async with client.stream("GET", url_path, params=params, headers=_json_headers()) as response:
+                if response.is_redirect:
+                    raise GitHubRedirectBlocked("GitHub API redirects are not followed")
+                if response.status_code == 401:
+                    raise GitHubAuthError("GitHub authentication failed; configure a repository token")
+                if response.status_code == 404:
+                    raise GitHubNotFoundError("Repository, ref or object not found (or private)")
+                if response.status_code in (403, 429):
+                    raise GitHubRateLimitError("GitHub rate limit reached or access forbidden")
+                if response.status_code >= 400:
+                    raise GitHubUnavailableError(f"GitHub responded with status {response.status_code}")
+                if (response.url.host or "").lower() != ALLOWED_API_HOST:
+                    raise GitHubRedirectBlocked("GitHub API responded from an unexpected host")
+                content = bytearray()
+                async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+                    if len(content) + len(chunk) > MAX_RESPONSE_BYTES:
+                        raise GitHubUnavailableError("GitHub response exceeds the accepted size limit")
+                    content.extend(chunk)
         except httpx.HTTPError as exc:
             raise GitHubUnavailableError(f"GitHub request failed: {type(exc).__name__}") from exc
-        if response.is_redirect:
-            raise GitHubRedirectBlocked("GitHub API redirects are not followed")
-        if response.status_code == 401:
-            raise GitHubAuthError("GitHub authentication failed; configure a repository token")
-        if response.status_code == 404:
-            raise GitHubNotFoundError("Repository, ref or object not found (or private)")
-        if response.status_code in (403, 429):
-            raise GitHubRateLimitError("GitHub rate limit reached or access forbidden")
-        if response.status_code >= 400:
-            raise GitHubUnavailableError(f"GitHub responded with status {response.status_code}")
-        if (response.url.host or "").lower() != ALLOWED_API_HOST:
-            raise GitHubRedirectBlocked("GitHub API responded from an unexpected host")
-        content = response.content
-        if len(content) > MAX_RESPONSE_BYTES:
-            raise GitHubUnavailableError("GitHub response exceeds the accepted size limit")
         try:
             payload = json.loads(content)
         except (ValueError, UnicodeDecodeError) as exc:

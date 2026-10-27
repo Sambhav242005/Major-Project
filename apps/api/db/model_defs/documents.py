@@ -28,8 +28,8 @@ class DocumentSource(Base):
     __table_args__ = {"extend_existing": True}
 
     id = Column(Uuid(), primary_key=True, default=gen_uuid)
-    document_id = Column(Uuid(), ForeignKey("documents.id"), nullable=False)
-    project_id = Column(Uuid(), ForeignKey("projects.id"), nullable=False)
+    document_id = Column(Uuid(), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Uuid(), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     source_type = Column(String(32), nullable=False, default="github")
 
     # GitHub provenance (Phase 1: public repositories). Retained so citations

@@ -29,19 +29,28 @@ cancellation-safe persistence, restrictive preview CSP and concurrent recovery.
 No servers were managed; no push or main merge performed. Browser/live PostgreSQL
 checks and the explicitly listed operational limitations remain pending.
 
-### Today's focus and new feature plan (2026-10-25)
+### Reviewed feature integration (2026-10-27)
 
-**Recommended task today: 2.23, model selection from the top header.** Reuse the
-existing per-message provider/model controls, make the displayed model actionable,
-and verify that the next message uses the selected model. This is a bounded,
-visible improvement; do not attempt all four new features in one day. If time
-remains, trace the final chat request assembly to prepare 2.24. Durable storage
-and webhook security remain release priorities.
+PRs #46 through #49 are combined on `feat/integrate-reviewed-features`: header model
+selection, short-lived model request inspection, public repository import, and
+the multimedia format registry. Apply migration **011** for answer generation
+metadata and **012** for repository provenance before using the backend; existing
+SQLite tables are not upgraded by `create_all`.
 
-**New feature sequence:** `2.23 Header model selector → 2.24 Model request
-inspector → 2.25 GitHub repository ingestion → 2.26 Multimedia ingestion`.
-Storage and deletion/retry cleanup must be ready before promising durable source
-previews or reliable re-ingestion. These are planned items, not completed work.
+Integration fixes bind snapshots to stable answer IDs, exclude URL credentials
+and query strings, reject incomplete provider streams, accept GitHub's wrapped
+base64, clean provenance during deletion, and await each file's normal ingestion
+before counting it as processed. Imports process one file at a time per job;
+failed documents remain retryable, and active jobs stay visible/cancellable at
+the registry limit. GitHub response bodies are bounded while reading; previews
+and rejected imports close their HTTP clients. Source-table RLS denies direct
+client access; the existing API enforces project membership.
+
+Offline checks cover these paths. Live generation/browser behavior, PostgreSQL
+runtime migrations, and operator-managed OCR/provider checks remain pending.
+GitHub re-sync, pinned-line citation navigation, private repositories, the repo
+picker, and audio/video knowledge ingestion remain follow-ups; Phase 1 does not
+claim the full feature's Done when criteria.
 
 Chat now offers per-message provider/model selection (server configuration,
 OpenAI API, Groq, OpenRouter, Google Gemini, or server-connected ChatGPT). Gemini
@@ -205,20 +214,23 @@ These are user-facing capabilities or integrations that are incomplete.
 - **Open:** legacy collections (created before fingerprints) adopt the current fingerprint on the `openai` provider for backward compatibility; switching provider on such a collection is refused and needs the documented re-embed. Because a pre-fingerprint collection records nothing about which model wrote its vectors, adoption is an *assumption* (logged as a warning): a model change shipped in the same deploy as this upgrade would go undetected. The fingerprint cannot detect it — only provider switches are guaranteed to be caught.
 - **Effort:** medium — completed.
 
-### 2.23 Change chat model from the top header `[MISSING]` — P1, today's task
+### 2.23 Change chat model from the top header `[IMPLEMENTED; LIVE CHECK PENDING]` — P1
+- **Delivered:** header selector shares validation/send state; resolved generation is stored per answer. Live user-managed generation and browser keyboard checks remain pending.
 - **Goal:** clicking the provider/model displayed in the top header opens a selector; the user can change the model before sending the next message.
 - **Plan:** locate the header and existing per-message controls; share their selection state and provider validation rather than adding a second routing path. Show the active provider/model, configured default, and unavailable-provider reasons. Keep credentials in page/request memory under the existing policy; do not persist keys in browser storage or logs.
 - **Behavior:** selection applies to subsequent sends; an in-flight answer keeps its original model. Preserve the chosen model while navigating within the current chat view where practical; cross-navigation/account persistence is a separate decision. Record the resolved provider/model on each answer so later header changes do not mislabel old responses.
 - **Done when:** mouse and keyboard selection work, the header matches the next request's resolved model, default/custom models validate correctly, and switching during streaming does not change the running request. Check credential isolation and concurrent requests; complete a live generation with an available provider using user-managed services.
 
-### 2.24 Inspect the data sent to the chat model `[MISSING]` — P1
+### 2.24 Inspect the data sent to the chat model `[PHASE 1 IMPLEMENTED]` — P1
+- **Delivered:** sanitized transport capture, authorized in-memory snapshots and read-only inspector with copy/download. Stable answer IDs prevent delayed fetch misattribution. URL authentication and signed queries are excluded; incomplete streams roll back. Binary previews, multi-call inspection and request IDs on client abort remain deferred.
 - **Goal:** a per-message “Model request” view shows what the application actually supplied to the generation provider.
 - **Phase 1:** trace retrieval, prompt construction, provider adaptation, and the final outbound request. Capture a sanitized snapshot at the final application transport boundary, tied to the assistant message/request ID. Show ordered system/user/assistant messages, included history, retrieved chunk text and source IDs, graph context, attachments, tool definitions/results if present, resolved provider/model, generation settings, truncation decisions, and estimated token counts clearly labeled as estimates.
 - **Phase 2:** add the read-only inspector with expandable sections and copy/download of the sanitized payload. Show text exactly as sent; represent binary/base64 attachments with MIME type, size, and a permission-checked preview instead of dumping binary data. Distinguish a draft preview from an actual sent request, and show failed/cancelled attempts accurately. For multi-call flows, show each outbound request separately.
 - **Privacy:** exclude authorization headers, API keys, OAuth tokens, signed-URL secrets, and hidden reasoning. Restrict snapshots to authorized project/chat access; prefer short-lived snapshots initially and define explicit retention/deletion before persistent storage. The view covers application-visible outbound data; provider-internal processing is outside its scope.
 - **Done when:** a transport-level test compares the sanitized captured payload with the outbound request, including history/context truncation, provider-specific adaptation, attachments, and failure cases; verify another account cannot read it. Embedding/extraction request inspection can follow as a separately labeled extension.
 
-### 2.25 Ingest a GitHub repository into the knowledge base `[MISSING]` — P1
+### 2.25 Ingest a GitHub repository into the knowledge base `[PHASE 1 API IMPLEMENTED]` — P1
+- **Delivered:** public-repository preview/import/status/cancel API, durable originals and provenance (migration 012), sequential awaited ingestion with per-file failures, wrapped-base64 decoding and deletion cleanup. Frontend picker, pinned commit/line citation links, re-sync/idempotence and private access remain deferred.
 - **Goal:** import repository documentation and source files into a selected project's normal document/chunk/entity pipeline with traceable citations.
 - **Phase 1, public repositories:** accept a GitHub repository URL and optional branch/ref plus include/exclude paths. Resolve the ref to a commit SHA, show a preview of files/count/bytes, and import an explicit allowlist of text/code formats. Exclude binaries, generated/build/vendor directories, dependency caches, secret-like files, and oversized files; enforce repository/file/count limits. Validate hosts and redirects; do not execute imported code, hooks, installers, or repository instructions.
 - **Provenance:** retain owner/repository, commit SHA, path, content hash, and line ranges; citations open the pinned commit/file lines. Track an import job with progress, per-file errors, cancellation, and source metadata. Preserve project membership checks and treat repository text as untrusted retrieval content.
@@ -226,7 +238,8 @@ These are user-facing capabilities or integrations that are incomplete.
 - **Phase 3, private repositories:** add explicit authenticated access with least-privilege repository permissions and server-side credential protection; verify access at import/re-sync and prevent cross-project leakage. Scheduled sync and submodules are deferred.
 - **Done when:** a small fixture repository imports once, answers cite the correct commit/path/lines, re-import is idempotent, changed/deleted files reconcile correctly, limits/cancellation work, and private credentials never enter model requests or traces.
 
-### 2.26 Multimedia support `[MISSING]` — P1 foundation, P2 advanced
+### 2.26 Multimedia support `[PHASE 1 FOUNDATION IMPLEMENTED]` — P1 foundation, P2 advanced
+- **Delivered:** supported-format inventory, document/image size caps and MIME/byte validation shared by upload, retry and webhook ingestion; upload UI reports rejections. Existing image OCR remains available; new audio/video parsers, duration checks and direct multimodal chat are deferred.
 - **Scope:** support images, audio, and video as knowledge sources, with original previews and evidence citations. Track direct chat attachments separately from ingestion so users know whether an attachment becomes searchable project knowledge.
 - **Phase 1, inventory and storage:** inspect existing image/OCR and meeting transcription paths before adding parsers. Finish durable private source storage, authorized previews, MIME/content validation, size/duration limits, deletion, and retry cleanup. Display supported formats and processing status.
 - **Phase 2, images and audio:** extract OCR text from images; transcribe audio with timestamps and speaker labels when available. Feed derived text through normal ingestion while retaining its link to the original image/audio. Cite image regions/pages where available and audio time ranges; label machine-generated descriptions/transcripts and allow review of uncertain extraction.

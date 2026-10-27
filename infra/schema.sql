@@ -37,6 +37,24 @@ create table documents (
   processed_at timestamptz
 );
 
+create table document_sources (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid not null references documents(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  source_type varchar(32) not null default 'github',
+  repo_owner varchar(255) not null,
+  repo_name varchar(255) not null,
+  commit_sha varchar(40) not null,
+  file_path text not null,
+  blob_sha varchar(40),
+  content_sha256 varchar(64),
+  line_start integer,
+  line_end integer,
+  created_at timestamptz default now()
+);
+create index ix_document_sources_document_id on document_sources(document_id);
+create index ix_document_sources_project_id on document_sources(project_id);
+
 create table document_chunks (
   id uuid primary key default gen_random_uuid(),
   document_id uuid references documents(id) on delete cascade,
@@ -234,6 +252,7 @@ alter table profiles enable row level security;
 alter table projects enable row level security;
 alter table project_members enable row level security;
 alter table documents enable row level security;
+alter table document_sources enable row level security;
 alter table document_chunks enable row level security;
 alter table entities enable row level security;
 alter table entity_mentions enable row level security;

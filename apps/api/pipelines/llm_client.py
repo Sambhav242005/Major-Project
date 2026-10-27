@@ -187,7 +187,10 @@ async def chat_completion(
             json=body,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        content = resp.json()["choices"][0]["message"]["content"]
+        if capture:
+            capture.mark_sent()
+        return content
     except Exception as exc:
         if capture and not capture.terminal:
             capture.mark_failed(summarize_failure(exc))
@@ -287,10 +290,10 @@ async def chat_completion_stream(
         if capture:
             capture.mark_failed(summarize_failure(exc))
         raise
+    if not provider_completed:
+        reason = "provider stream ended without the [DONE] completion marker"
+        if capture:
+            capture.mark_failed(reason)
+        raise RuntimeError(reason)
     if capture:
-        # Record only the provider's own success marker as "sent"; a stream
-        # that ended without it is an incomplete/failed request.
-        if provider_completed:
-            capture.mark_sent()
-        else:
-            capture.mark_failed("provider stream ended without the [DONE] completion marker")
+        capture.mark_sent()
