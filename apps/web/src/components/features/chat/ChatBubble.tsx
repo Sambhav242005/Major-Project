@@ -1,11 +1,14 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import { chatAnswerLabel } from "@/lib/chat-selection";
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   citations?: { index: number; filename: string; page_number: number }[];
+  /** The generation the backend resolved for this answer; set once announced. */
+  generation?: { provider: string; model: string } | null;
   feedback?: "up" | "down";
 }
 
@@ -16,7 +19,7 @@ interface ChatBubbleProps {
 }
 
 export function ChatBubble({ message, onFeedback, isStreaming }: ChatBubbleProps) {
-  const { role, content, citations, feedback } = message;
+  const { role, content, citations, generation, feedback } = message;
   const isUser = role === "user";
 
   return (
@@ -58,6 +61,12 @@ export function ChatBubble({ message, onFeedback, isStreaming }: ChatBubbleProps
               ))}
             </div>
           </div>
+        )}
+
+        {!isUser && content && generation && (
+          <p className="mt-2 text-[11px] text-app-muted font-mono">
+            via {chatAnswerLabel(generation.provider, generation.model)}
+          </p>
         )}
 
         {!isUser && content && !isStreaming && onFeedback && (

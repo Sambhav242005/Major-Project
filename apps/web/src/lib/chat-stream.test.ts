@@ -22,4 +22,12 @@ describe("chat stream terminal handling", () => {
     const consume = async () => { for await (const event of readChatStream(stream('data: {"type":"chunk","content":"partial"}\n'))) void event; };
     await expect(consume()).rejects.toThrow("interrupted");
   });
+  it("passes the resolved generation event through for answer labels", async () => {
+    const events = [];
+    for await (const event of readChatStream(stream(
+      'data: {"type":"generation","provider":"groq","model":"selected-model"}\n\n' +
+      'data: {"type":"chunk","content":"Hi"}\n\ndata: {"type":"done"}\n\n',
+    ))) events.push(event);
+    expect(events[0]).toEqual({ type: "generation", provider: "groq", model: "selected-model" });
+  });
 });
