@@ -69,6 +69,13 @@ async def get_session(
                 "role": m.role,
                 "content": m.content,
                 "citations": m.citations or [],
+                # Which generation produced this answer; user messages and
+                # pre-011 assistant rows have none and must not be mislabeled.
+                "generation": (
+                    {"provider": m.generation_provider, "model": m.generation_model}
+                    if m.role == "assistant" and m.generation_provider and m.generation_model
+                    else None
+                ),
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in messages

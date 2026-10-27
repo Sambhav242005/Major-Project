@@ -25,6 +25,10 @@ class ChatMessage(Base):
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     citations = Column(JSON)
+    # Resolved generation recorded on assistant answers so later header/model
+    # changes cannot mislabel stored responses. Never stores credentials.
+    generation_provider = Column(String(50))
+    generation_model = Column(String(200))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     session = relationship("ChatSession", back_populates="messages")

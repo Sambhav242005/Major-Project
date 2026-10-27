@@ -59,5 +59,7 @@ async def system_status():
             "mcp_connection_management": True,
             "mcp_connection_check": True,
             "webhooks": True,
+            # Server-connected ChatGPT availability for the chat model selector.
+            "chatgpt": bool(settings.CHATGPT_CREDENTIALS_PATH),
         },
     }

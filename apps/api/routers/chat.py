@@ -39,13 +39,13 @@ class GenerationSelection(BaseModel):
     def resolve(self) -> GenerationConfig:
         if self.provider == "configured":
             return GenerationConfig(settings.LLM_PROVIDER, self.model or settings.LLM_CHAT_MODEL,
-                                    settings.LLM_BASE_URL, settings.LLM_API_KEY)
+                                    settings.LLM_BASE_URL, settings.LLM_API_KEY, self.provider)
         if not self.model:
             raise HTTPException(422, "Enter a model ID for the selected provider")
         if self.provider == "chatgpt":
             if not settings.CHATGPT_CREDENTIALS_PATH:
                 raise HTTPException(422, "ChatGPT is not connected on the server")
-            return GenerationConfig("chatgpt", self.model)
+            return GenerationConfig("chatgpt", self.model, requested_provider=self.provider)
         key = self.api_key.get_secret_value().strip() if self.api_key else ""
         if not key or any(ord(char) < 32 or ord(char) > 126 for char in key):
             raise HTTPException(422, "Enter an API key for the selected provider")
@@ -55,7 +55,7 @@ class GenerationSelection(BaseModel):
             "openrouter": "https://openrouter.ai/api/v1",
             "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
         }
-        return GenerationConfig("openai", self.model, endpoints[self.provider], key)
+        return GenerationConfig("openai", self.model, endpoints[self.provider], key, self.provider)
 
 
 class SendMessageRequest(BaseModel):

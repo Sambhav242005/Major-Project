@@ -31,6 +31,7 @@ async def send_message(
     """Stream assistant response with RAG retrieval.
 
     Async generator that yields SSE-formatted events:
+    - {"type": "generation", "provider": "...", "model": "..."} — resolved generation for this answer
     - {"type": "chunk", "content": "..."} — incremental text
     - {"type": "citations", "citations": [...]} — source citations
     - {"type": "done"} — stream complete
@@ -52,6 +53,21 @@ async def send_message(
     )
     db.add(user_msg)
     await db.flush()
+
+    # Announce the resolved generation before retrieval and streaming so the
+    # client labels this answer even if the user switches models mid-stream.
+    resolved_provider = (
+        generation.requested_provider
+        if generation and generation.requested_provider
+        else ("configured" if generation is None else generation.provider)
+    )
+    resolved_model = generation.model if generation else settings.LLM_CHAT_MODEL
+    resolved_generation = {
+        "type": "generation",
+        "provider": resolved_provider,
+        "model": resolved_model,
+    }
+    yield resolved_generation
 
     # Step 1: Retrieve relevant chunks via ChromaDB
     search_results = await query_chunks(query=message, project_id=project_id, top_k=8, db_session=db)
@@ -142,6 +158,9 @@ async def send_message(
         role="assistant",
         content=full_response,
         citations=citations,
+        # Record only the resolved provider/model — never credentials.
+        generation_provider=resolved_generation["provider"],
+        generation_model=resolved_generation["model"],
         created_at=datetime.now(timezone.utc),
     )
     db.add(assistant_msg)

@@ -20,6 +20,10 @@ class GenerationConfig:
     model: str
     base_url: str = ""
     api_key: str = field(default="", repr=False)
+    # User-facing provider selection recorded on answers ("gemini" stays
+    # "gemini" even though streaming adapts it to an OpenAI-compatible wire
+    # provider). Empty for internal callers that never carried a selection.
+    requested_provider: str = ""
 
 
 def _get_client() -> httpx.AsyncClient:
