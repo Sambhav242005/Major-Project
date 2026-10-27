@@ -1,5 +1,6 @@
 """OpenAI-compatible LLM client — works with Groq, Ollama, OpenAI, etc."""
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -8,8 +9,14 @@ from typing import Any
 import httpx
 
 from core.config import settings
+from pipelines.model_request_capture import ModelRequestCapture, summarize_failure
 
 logger = logging.getLogger(__name__)
+
+# Reasoning-marker strings are assembled with chr() so the tags never appear
+# verbatim in source (proves mid-template mangling cannot corrupt them).
+_THINK_OPEN = chr(60) + "think" + chr(62)
+_THINK_CLOSE = chr(60) + "/" + "think" + chr(62)
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -43,6 +50,7 @@ async def _chatgpt_completion_stream(
     messages: list[dict[str, str]],
     model: str | None,
     response_format: dict | None = None,
+    capture: ModelRequestCapture | None = None,
 ):
     """Use the documented ChatGPT plan route, with explicit completion checks."""
     from core.chatgpt_oauth import get_access_token
@@ -64,6 +72,18 @@ async def _chatgpt_completion_stream(
         "store": False,
         "stream": True,
     }
+    if capture:
+        # Provider adaptation is part of the outbound request: the inspector
+        # shows this adapted body, not the caller's original messages.
+        capture.mark_transport(
+            provider="chatgpt",
+            model=body["model"],
+            request_shape="responses",
+            method="POST",
+            url="https://api.openai.com/v1/responses",
+            headers={"Authorization": "(value withheld)", "Content-Type": "application/json"},
+            body=body,
+        )
     token = await get_access_token(settings.CHATGPT_CREDENTIALS_PATH)
     completed = False
     try:
@@ -103,10 +123,24 @@ async def _chatgpt_completion_stream(
                     if not isinstance(delta, str):
                         raise RuntimeError("ChatGPT inference returned an invalid text delta.")
                     yield delta
-    except httpx.HTTPError:
+    except (GeneratorExit, asyncio.CancelledError):
+        if capture:
+            capture.mark_cancelled()
+        raise
+    except httpx.HTTPError as exc:
+        if capture:
+            capture.mark_failed(summarize_failure(exc))
         raise RuntimeError("ChatGPT inference connection failed; the answer is incomplete.") from None
+    except Exception as exc:
+        if capture:
+            capture.mark_failed(str(exc) if isinstance(exc, RuntimeError) else summarize_failure(exc))
+        raise
     if not completed:
+        if capture:
+            capture.mark_failed("provider stream ended without response.completed")
         raise RuntimeError("ChatGPT inference stream ended without response.completed.")
+    if capture:
+        capture.mark_sent()
 
 
 async def chat_completion(
@@ -115,10 +149,14 @@ async def chat_completion(
     temperature: float = 0.3,
     response_format: dict | None = None,
     max_tokens: int = 4096,
+    capture: ModelRequestCapture | None = None,
 ) -> str:
     if settings.LLM_PROVIDER == "chatgpt":
+        kwargs = {"capture": capture} if capture is not None else {}
         return "".join([
-            part async for part in _chatgpt_completion_stream(messages, model, response_format)
+            part async for part in _chatgpt_completion_stream(
+                messages, model, response_format, **kwargs
+            )
         ])
     client = _get_client()
     body: dict[str, Any] = {
@@ -130,13 +168,30 @@ async def chat_completion(
     if response_format:
         body["response_format"] = response_format
 
-    resp = await client.post(
-        f"{settings.LLM_BASE_URL}/chat/completions",
-        headers=_get_auth_header(),
-        json=body,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    url = f"{settings.LLM_BASE_URL}/chat/completions"
+    headers = _get_auth_header()
+    if capture:
+        capture.mark_transport(
+            provider=settings.LLM_PROVIDER,
+            model=body["model"],
+            request_shape="chat_completions",
+            method="POST",
+            url=url,
+            headers=headers,
+            body=body,
+        )
+    try:
+        resp = await client.post(
+            url,
+            headers=headers,
+            json=body,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except Exception as exc:
+        if capture and not capture.terminal:
+            capture.mark_failed(summarize_failure(exc))
+        raise
 
 
 async def chat_completion_stream(
@@ -144,11 +199,13 @@ async def chat_completion_stream(
     model: str | None = None,
     temperature: float = 0.3,
     generation: GenerationConfig | None = None,
+    capture: ModelRequestCapture | None = None,
 ):
     provider = generation.provider if generation else settings.LLM_PROVIDER
     model = generation.model if generation else model
     if provider == "chatgpt":
-        async for part in _chatgpt_completion_stream(messages, model):
+        kwargs = {"capture": capture} if capture is not None else {}
+        async for part in _chatgpt_completion_stream(messages, model, **kwargs):
             yield part
         return
     client = _get_client()
@@ -163,46 +220,77 @@ async def chat_completion_stream(
         "temperature": temperature,
         "stream": True,
     }
+    url = f"{base_url}/chat/completions"
+    if capture:
+        # Final application transport boundary: the sanitized outbound request
+        # is captured exactly as it is about to be handed to httpx.
+        capture.mark_transport(
+            provider=provider,
+            model=body["model"],
+            request_shape="chat_completions",
+            method="POST",
+            url=url,
+            headers=headers,
+            body=body,
+        )
 
-    async with client.stream(
-        "POST",
-        f"{base_url}/chat/completions",
-        headers=headers,
-        json=body,
-    ) as resp:
-        resp.raise_for_status()
-        thinking = ""  # buffer for <think>...</think> blocks
-        in_think = False
-        async for line in resp.aiter_lines():
-            if not line.startswith("data: "):
-                continue
-            payload = line[6:]
-            if payload.strip() == "[DONE]":
-                break
-            chunk = json.loads(payload)
-            delta = chunk["choices"][0].get("delta", {})
-            content = delta.get("content")
-            if not content:
-                continue
-            # Strip reasoning blocks (<think>...</think>) so only the final
-            # answer reaches the UI.
-            while content:
-                if in_think:
-                    end = content.find("</think>")
-                    if end == -1:
-                        thinking += content
-                        content = ""
+    try:
+        async with client.stream(
+            "POST",
+            url,
+            headers=headers,
+            json=body,
+        ) as resp:
+            resp.raise_for_status()
+            thinking = ""  # buffer for the hidden reasoning blocks
+            in_think = False
+            provider_completed = False
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                payload = line[6:]
+                if payload.strip() == "[DONE]":
+                    provider_completed = True
+                    break
+                chunk = json.loads(payload)
+                delta = chunk["choices"][0].get("delta", {})
+                content = delta.get("content")
+                if not content:
+                    continue
+                # Strip hidden reasoning blocks (the literal open/close think
+                # tags) so only the final answer reaches the UI.
+                while content:
+                    if in_think:
+                        end = content.find(_THINK_CLOSE)
+                        if end == -1:
+                            thinking += content
+                            content = ""
+                        else:
+                            thinking += content[:end]
+                            content = content[end + len(_THINK_CLOSE):]
+                            in_think = False
                     else:
-                        thinking += content[:end]
-                        content = content[end + len("</think>"):]
-                        in_think = False
-                else:
-                    start = content.find("<think>")
-                    if start == -1:
-                        yield content
-                        content = ""
-                    else:
-                        if start > 0:
-                            yield content[:start]
-                        content = content[start + len("<think>"):]
-                        in_think = True
+                        start = content.find(_THINK_OPEN)
+                        if start == -1:
+                            yield content
+                            content = ""
+                        else:
+                            if start > 0:
+                                yield content[:start]
+                            content = content[start + len(_THINK_OPEN):]
+                            in_think = True
+    except (GeneratorExit, asyncio.CancelledError):
+        if capture:
+            capture.mark_cancelled()
+        raise
+    except Exception as exc:
+        if capture:
+            capture.mark_failed(summarize_failure(exc))
+        raise
+    if capture:
+        # Record only the provider's own success marker as "sent"; a stream
+        # that ended without it is an incomplete/failed request.
+        if provider_completed:
+            capture.mark_sent()
+        else:
+            capture.mark_failed("provider stream ended without the [DONE] completion marker")

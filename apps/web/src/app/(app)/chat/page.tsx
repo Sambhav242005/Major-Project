@@ -7,7 +7,7 @@ import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { useProjectStore } from "@/stores/project";
 import { ChatBubble, ChatSuggestions, ChatInput, ChatHeader } from "@/components/features/chat";
 import type { ChatMessage } from "@/components/features/chat";
-import { readChatStream } from "@/lib/chat-stream";
+import { readChatStream, ChatStreamError } from "@/lib/chat-stream";
 import {
   buildGenerationPayload,
   defaultChatProviderAvailability,
@@ -15,6 +15,7 @@ import {
   validateChatSelection,
   type ChatProviderAvailability,
 } from "@/lib/chat-selection";
+import type { ModelRequestMapping, ModelRequestSnapshot } from "@/lib/model-request";
 import type { SystemStatus } from "@/lib/system-status";
 
 export default function ChatPage() {
@@ -120,6 +121,27 @@ export default function ChatPage() {
     });
   }, []);
 
+  /**
+   * Load the sanitized "Model request" snapshot for one assistant turn.
+   * Unknown ids, expired 30-minute records and cross-project asks all
+   * resolve to the same "unavailable" mapping — nothing about them leaks.
+   */
+  const loadRequestRecord = useCallback(async (requestId: string): Promise<ModelRequestMapping> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !activeProjectId) {
+        return { requestId, state: "missing", snapshot: null };
+      }
+      const snapshot = await apiFetch<ModelRequestSnapshot>(
+        `/chat/model-requests/${encodeURIComponent(requestId)}`,
+        { token: session.access_token, projectId: activeProjectId },
+      );
+      return { requestId, state: "fetched", snapshot };
+    } catch {
+      return { requestId, state: "missing", snapshot: null };
+    }
+  }, [supabase.auth, activeProjectId]);
+
   const patchLastAssistant = useCallback((patch: Partial<ChatMessage>) => {
     setMessages((prev) => {
       const updated = [...prev];
@@ -151,6 +173,7 @@ export default function ChatPage() {
     streamBufferRef.current = "";
     const controller = new AbortController();
     abortRef.current = controller;
+    let requestRecordId: string | null = null;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Your session expired. Sign in again.");
@@ -186,6 +209,8 @@ export default function ChatPage() {
           // Label this answer with the model the backend actually used, so
           // later header changes cannot mislabel it.
           patchLastAssistant({ generation: { provider: data.provider, model: data.model } });
+        } else if (data.type === "done" && data.request_id) {
+          requestRecordId = data.request_id;
         }
       }
       flushBuffer();
@@ -193,6 +218,7 @@ export default function ChatPage() {
       if (mountedRef.current) {
         console.error("Chat error:", err);
         streamBufferRef.current = "";
+        if (err instanceof ChatStreamError && err.requestId) requestRecordId = err.requestId;
         patchLastAssistant({
           content: controller.signal.aborted ? "Response stopped before completion. Send the question again to retry." : err instanceof Error ? err.message : "Failed to get a complete response. Please try again.",
           citations: [],
@@ -202,7 +228,7 @@ export default function ChatPage() {
       if (mountedRef.current) setStreaming(false);
       abortRef.current = null;
     }
-  }, [message, streaming, sessionId, flushBuffer, patchLastAssistant, supabase, activeProjectId, selection_, providerAvailability]);
+  }, [message, streaming, sessionId, flushBuffer, patchLastAssistant, supabase, activeProjectId, selection_, providerAvailability, loadRequestRecord]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();

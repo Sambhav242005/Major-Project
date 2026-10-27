@@ -11,6 +11,7 @@ from core.security_utils import sanitize_input
 from core.sse import generator_sse_stream
 from db.session import get_db
 from services import chat as chat_service
+from services.chat.request_capture import get_snapshot_for_project
 from core.config import settings
 from pipelines.llm_client import GenerationConfig
 
@@ -129,3 +130,22 @@ async def send_message(
             **({"generation": generation} if generation else {}),
         )
     )
+
+
+@router.get("/model-requests/{request_id}")
+async def get_model_request(
+    request_id: str,
+    project_id: str = Depends(get_project_id),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read-only sanitized snapshot of what was sent to the chat model.
+
+    Returns one request tied to a chat turn. Unknown/expired snapshots and
+    snapshots owned by another project are both 404, so a caller cannot probe
+    for other accounts' requests by id.
+    """
+    snapshot = await get_snapshot_for_project(db, request_id, project_id)
+    if snapshot is None:
+        raise NotFoundError("Model request snapshot not found or expired")
+    return snapshot
