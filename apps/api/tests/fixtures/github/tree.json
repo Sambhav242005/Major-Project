@@ -1,0 +1,90 @@
+{
+  "sha": "tree5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a",
+  "url": "https://api.github.com/repos/ok-org/ok-repo/git/trees/a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e",
+  "truncated": false,
+  "tree": [
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c1aa1aa2bb2cc3dd4ee5ff60001112223334455a",
+      "size": 2231
+    },
+    {
+      "path": "docs/guide.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d2bb2cc3dd4ee5f6001122334455aabbccddeeff",
+      "size": 1245
+    },
+    {
+      "path": "src/main.py",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e3cc3dd4ee5f6001122334455aabbccddeeff00a",
+      "size": 828
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f4dd4ee5f6001122334455aabbccddeeff00aa11b",
+      "size": 35147
+    },
+    {
+      "path": "logo.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a5ee5f6001122334455aabbccddeeff00aa11bb22",
+      "size": 18220
+    },
+    {
+      "path": ".env",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b6ff5f6001122334455aabbccddeeff00aa11bb33",
+      "size": 240
+    },
+    {
+      "path": "server.key",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c7001122334455aabbccddeeff00aa11bb33cc44",
+      "size": 3272
+    },
+    {
+      "path": "package-lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d81122334455aabbccddeeff00aa11bb33cc44d55",
+      "size": 120384
+    },
+    {
+      "path": "node_modules/react/index.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e922334455aabbccddeeff00aa11bb33cc44d55e6",
+      "size": 7430
+    },
+    {
+      "path": "dist/bundle.min.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f0aa22334455aabbccddeeff00aa11bb33cc44d55",
+      "size": 240000
+    },
+    {
+      "path": "design/mockup.psd",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1bb22334455aabbccddeeff00aa11bb33cc44d55",
+      "size": 9485740
+    },
+    {
+      "path": "src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b2cc22334455aabbccddeeff00aa11bb33cc44d55"
+    }
+  ]
+}

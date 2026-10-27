@@ -1,0 +1,21 @@
+{
+  "sha": "tree5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a",
+  "url": "https://api.github.com/repos/huge-org/huge-repo/git/trees/a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e",
+  "truncated": true,
+  "tree": [
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c1aa1aa2bb2cc3dd4ee5ff60001112223334455a",
+      "size": 2231
+    },
+    {
+      "path": "docs/missing_entries_because_of_truncation.log",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b1aa1aa2bb2cc3dd4ee5ff60001112223334455b",
+      "size": 1500
+    }
+  ]
+}
