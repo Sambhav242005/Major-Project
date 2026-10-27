@@ -21,7 +21,7 @@ from services import documents as doc_service
 from services.documents.storage import save_original, load_original, delete_original
 from services.audit import write_audit_log
 from .ingestion_tasks import _doc_subscribers, _start_ingestion
-from .validation import ALLOWED_TYPES, MAX_FILE_SIZE
+from .validation import ALLOWED_TYPES, MAX_FILE_SIZE, ACCEPTED_SUMMARY, DOCUMENT_MAX_BYTES, IMAGE_MAX_BYTES, SUPPORTED_FORMATS, UploadValidationError, validate_upload
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -90,13 +90,11 @@ async def _recover_original(db, document_id, project_id, original, expected_stat
 @router.post("", status_code=202, response_model=DocumentUploadResponse)
 @limiter.limit("30/minute")
 async def upload_document(request: Request, response: Response, file: UploadFile = File(...), project_id: str = Depends(get_project_id), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail=f"File type '{file.content_type}' not allowed. Accepted: PDF, DOCX, TXT, images")
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty document")
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File exceeds 25MB limit")
+    try:
+        validate_upload(content, file.filename, file.content_type)
+    except UploadValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     doc_id = str(uuid.uuid4())
     safe_filename = sanitize_filename(file.filename or "unnamed")
     storage_path = f"projects/{project_id}/documents/{doc_id}/{safe_filename}"
@@ -113,6 +111,37 @@ async def upload_document(request: Request, response: Response, file: UploadFile
         _start_ingestion(async_session_factory, result["id"], content)
     await _finish_mutation(_persist())
     return DocumentUploadResponse(id=result["id"], filename=result["filename"], status="pending", message="Document uploaded and queued for processing")
+
+
+# Registered before the parametrized /{document_id} routes on purpose.
+@router.get("/formats")
+async def list_supported_formats(user: User = Depends(get_current_user)):
+    """Machine-readable inventory of accepted knowledge-source formats (TODO 2.26 Phase 1)."""
+    return {
+        "accepted_summary": ACCEPTED_SUMMARY,
+        "max_document_bytes": DOCUMENT_MAX_BYTES,
+        "max_image_bytes": IMAGE_MAX_BYTES,
+        "formats": [
+            {
+                "content_type": fmt.content_type,
+                "label": fmt.label,
+                "category": fmt.category,
+                "max_bytes": fmt.max_bytes,
+                "inline_preview": fmt.inline_preview,
+            }
+            for fmt in SUPPORTED_FORMATS
+        ],
+        "not_yet_supported": [
+            {
+                "category": "audio",
+                "message": "Audio is not searchable project knowledge yet. Use the Meetings page to transcribe and analyze meeting audio.",
+            },
+            {
+                "category": "video",
+                "message": "Video ingestion with time citations is planned for a later release.",
+            },
+        ],
+    }
 
 
 @router.get("", response_model=DocumentListResponse)
@@ -144,8 +173,9 @@ async def get_document_original(document_id: str, download: bool = True, project
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Original file unavailable for this document")
     file_type = doc["file_type"]
-    # Never render uploaded active formats in the application's origin.
-    preview_types = {"application/pdf", "text/plain", "image/png", "image/jpeg", "image/tiff", "image/bmp", "image/webp"}
+    # Never render uploaded active formats in the application's origin; the
+    # upload registry drives the inline-preview allowlist.
+    preview_types = {fmt.content_type for fmt in SUPPORTED_FORMATS if fmt.inline_preview}
     if file_type in {"text/markdown", "text/csv"}:
         file_type = "text/plain"
     disposition = "inline" if not download and file_type in preview_types else "attachment"
@@ -237,13 +267,17 @@ async def retry_document(document_id: str, request: Request, response: Response,
     else:
         if not hasattr(file, "read") or file.content_type not in ALLOWED_TYPES:
             raise HTTPException(status_code=400, detail="Unsupported retry file")
+        if file.content_type != doc.file_type:
+            raise HTTPException(status_code=400, detail="Retry file must use the original document type")
         content = await file.read()
+        try:
+            validate_upload(content, getattr(file, "filename", None), file.content_type)
+        except UploadValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not content:
         raise HTTPException(status_code=400, detail="Empty document")
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File exceeds 25MB limit")
-    if file is not None and file.content_type != doc.file_type:
-        raise HTTPException(status_code=400, detail="Retry file must use the original document type")
     # File-free retries keep the durable original unchanged. A supplied replacement
     # is restored if the metadata transaction fails.
     async def _retry():

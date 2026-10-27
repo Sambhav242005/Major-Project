@@ -210,6 +210,7 @@ Cross-checked `README.md`, `BUILD_BRIEF.md`, `CONTEXT.md`, `docs/adr/*`, `.env.e
 | 22 | Personal ChatGPT OAuth and CPU embeddings | Fresh PKCE registration with ID-token validation, protected Unix credentials and serialized rotation; inference uses Responses with explicit completion checks. Local MiniLM pools all token windows into 384 dimensions. A changed vector space requires a fresh index; frozen research sources and artifact hashes are preserved. | **Offline-tested; selected-account model access and Pi runtime remain unverified** |
 | 23 | Completed chat means completed generation | Provider failure, incomplete response or interrupted stream produces a terminal `error`, rolls back the failed turn, and skips assistant persistence, citations, `done` and `chat.completed`. Successful streams retain normal completion behavior. | **Fixed in PR #34 review** |
 | 24 | Deployment origins and browser auth routes | API CSP connection sources follow `CORS_ORIGINS`; standalone sign-out redirects to `NEXT_PUBLIC_APP_URL`. The API's CSP does not configure the frontend's document policy. | **Fixed in PR #34 review** |
+| 25 | Multimedia support (TODO 2.26) | Phase 1 footprint: structured upload registry with per-category size caps and magic-byte sniffing (`routers/documents/validation.py`, enforced on upload, retry and webhook ingestion), `GET /documents/formats` inventory endpoint, upload UI mirrors the inventory. Image OCR is already real (`pipelines/parser.py` pytesseract) and runs inside normal ingestion; meeting speech-to-text stays analysis-only (`routers/meetings.py`) and never enters the KB. Audio/video ingestion is deferred (Phases 2–3) and rejected with guidance ("not searchable yet", Meetings-page pointer). Current status values unchanged; `infra/schema.sql` has a CHECK constraint on `documents.status`, so new values would need a migration. Derived-text contract: parsers return `[{text, page_number}]` consumed by `chunk_pages`; a future transcription parser plugs in as a new `parse_*` + `parse_document` branch, encoding time ranges in `page_number` until citation spans gain richer storage. | **Foundation offline-tested** |
 
 **Stale-doc cleanup TODO:** `README.md` Prisma/model fixes done (this sync); `apps/web/.env.example` + `.gitignore` Prisma `DATABASE_URL` removed; `root akgb.db` verified absent (gitignored `*.db`, no committed file).
 
@@ -255,7 +256,7 @@ All under `apps/api/routers/`, prefix per `main.py`:
 | Router | Prefix | Notable endpoints |
 |---|---|---|
 | auth | `/auth` | `GET /me`, `POST /mock-login` (dev only) |
-| documents | `/documents` | `POST` (upload, 202, rate-limited), `GET`, `GET /{id}`, `GET /{id}/original` (private download; `download=false` for safe inline formats), `GET /{id}/status`, `GET /{id}/chunks`, `GET /{id}/entities`, `DELETE /{id}`, `POST /{id}/retry`, `GET /{id}/stream` (SSE) |
+| documents | `/documents` | `POST` (upload, 202, rate-limited), `GET`, `GET /formats` (supported-formats inventory), `GET /{id}`, `GET /{id}/original` (private download; `download=false` for safe inline formats), `GET /{id}/status`, `GET /{id}/chunks`, `GET /{id}/entities`, `DELETE /{id}`, `POST /{id}/retry`, `GET /{id}/stream` (SSE) |
 | kb | `/kb` | `GET /search`, `GET /entities/{id}`, `GET /entities/{id}/chunks`, `GET /graph` (depth 1–3) |
 | chat | `/chat` | `POST /sessions`, `GET /sessions`, `GET /sessions/{id}`, `POST /sessions/{id}/messages` (SSE, 60/min) |
 | dashboard | `/dashboard` | `GET /summary` |
@@ -274,7 +275,7 @@ Plus public: `GET /health`, `GET /system/status`.
 
 - **Auth**: JWT (RS256, audience `authenticated`) validated against Supabase JWKS, cached in memory (`core/security.py`). Mock mode accepts any token — **rejected at startup in production**.
 - **Authorization**: project membership + role via `project_members` (checked in `get_project_id`, `assert_agent_in_project` uses 404 to avoid probing). Note: **RLS exists in `infra/schema.sql` but is not enforced locally** — SQLite dev ignores it; defense-in-depth is the FastAPI layer.
-- **Input**: sanitization (`sanitize_input`, filename sanitization), prompt-injection pattern detection (`detect_injection`), MIME allowlist + 25 MB cap on uploads.
+- **Input**: sanitization (`sanitize_input`, filename sanitization), prompt-injection pattern detection (`detect_injection`), MIME allowlist with magic-byte checks and per-category size caps (documents 25 MB, images 15 MB) on uploads and webhook ingestion (`routers/documents/validation.py`).
 - **Rate limiting**: slowapi (30/min upload, 60/min chat, 10/min mock-login).
 - **Secrets**: env files gitignored; service-role key never reaches the frontend bundle.
 - **CORS**: explicit origins list (default `localhost:3000`).

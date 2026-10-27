@@ -13,16 +13,42 @@ export const ALLOWED_FILE_TYPES = [
   "image/webp",
 ] as const;
 
+// Mirrors routers/documents/validation.py — changed together (SPEC §8.25).
 export const MAX_FILE_SIZE = 25 * 1024 * 1024;
+export const IMAGE_MAX_FILE_SIZE = 15 * 1024 * 1024;
+
+const IMAGE_TYPES = new Set<string>(["image/png", "image/jpeg", "image/tiff", "image/bmp", "image/webp"]);
+
+export const ACCEPTED_FORMATS_MESSAGE =
+  "Accepted knowledge sources: PDF, DOCX, TXT, Markdown, and CSV documents plus PNG, JPEG, TIFF, BMP, and WebP images";
+
+export const NOT_YET_SUPPORTED_MESSAGE =
+  "Audio and video are not searchable knowledge sources yet — use the Meetings page for meeting audio";
+
+function isImageFileType(fileType: string): boolean {
+  return IMAGE_TYPES.has(fileType);
+}
+
+export function sizeLimitMessage(fileType: string, filename?: string): string {
+  const limitMb = Math.round((isImageFileType(fileType) ? IMAGE_MAX_FILE_SIZE : MAX_FILE_SIZE) / 1024 / 1024);
+  const target = filename ? `${filename}: ` : "";
+  // The backend (routers/documents/validation.py) rejects the same bytes with the same rule.
+  return `${target}the file exceeds the ${limitMb}MB limit for ${isImageFileType(fileType) ? "images" : "documents"}`;
+}
 
 // Document schemas
 export const DocumentUploadSchema = z.object({
   filename: z.string().min(1, "Filename is required"),
-  fileType: z.enum(ALLOWED_FILE_TYPES).refine(
-    (val) => ALLOWED_FILE_TYPES.includes(val),
-    { message: "File type not allowed. Accepted: PDF, DOCX, TXT, images" }
-  ),
-  size: z.number().max(MAX_FILE_SIZE, "File exceeds 25MB limit"),
+  fileType: z.enum(ALLOWED_FILE_TYPES, { message: `${ACCEPTED_FORMATS_MESSAGE}.` }),
+  size: z.number().min(1, "The file is empty"),
+}).superRefine((upload, ctx) => {
+  if (upload.size > (isImageFileType(upload.fileType) ? IMAGE_MAX_FILE_SIZE : MAX_FILE_SIZE)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["size"],
+      message: sizeLimitMessage(upload.fileType),
+    });
+  }
 });
 
 export const DocumentStatusSchema = z.enum([
