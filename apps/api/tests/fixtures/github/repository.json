@@ -1,0 +1,12 @@
+{
+  "id": 123456789,
+  "name": "ok-repo",
+  "full_name": "ok-org/ok-repo",
+  "private": false,
+  "owner": {
+    "login": "ok-org",
+    "type": "Organization"
+  },
+  "default_branch": "main",
+  "default_branch_protected": false
+}

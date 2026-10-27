@@ -17,6 +17,7 @@ __all__ = [
     "ChatSession",
     "Document",
     "DocumentChunk",
+    "DocumentSource",
     "Entity",
     "EntityMention",
     "InboundWebhook",

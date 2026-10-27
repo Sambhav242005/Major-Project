@@ -100,6 +100,14 @@ class Settings(BaseSettings):
     MEET_SAMPLE_RATE: int = 44100
     MEET_MAX_AUDIO_BYTES: int = 20 * 1024 * 1024
 
+    # GitHub repository ingestion (Phase 1: public repositories)
+    # Only https://github.com is accepted as the repository web host and only
+    # api.github.com as the API host; redirects to other hosts are blocked.
+    GITHUB_API_BASE_URL: str = "https://api.github.com"
+    GITHUB_IMPORT_MAX_TOTAL_BYTES: int = 50 * 1024 * 1024
+    GITHUB_IMPORT_MAX_FILES: int = 2000
+    GITHUB_IMPORT_MAX_FILE_BYTES: int = 2 * 1024 * 1024
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 

@@ -589,6 +589,10 @@ See Vercel's [monorepo setup](https://vercel.com/docs/monorepos) and
 | `EMBEDDING_BATCH_SIZE` | No | `100` | Texts per Gemini `:batchEmbedContents` request |
 | `GEMINI_API_KEY` | No | — | Gemini API key (falls back to `EMBEDDING_API_KEY`) |
 | `GEMINI_BASE_URL` | No | `https://generativelanguage.googleapis.com/v1beta` | Gemini native API base URL |
+| `GITHUB_API_BASE_URL` | No | `https://api.github.com` | GitHub edition: API host; the only accepted value is the bare `https://api.github.com` origin |
+| `GITHUB_IMPORT_MAX_TOTAL_BYTES` | No | `52428800` | GitHub edition: total bytes an import may accept across all files (50 MB) |
+| `GITHUB_IMPORT_MAX_FILES` | No | `2000` | GitHub edition: maximum files per import |
+| `GITHUB_IMPORT_MAX_FILE_BYTES` | No | `2097152` | GitHub edition: maximum bytes for a single file (2 MB) |
 | `CORS_ORIGINS` | No | `localhost:3000` | Allowed CORS origins (JSON array) |
 
 \* Required for the Supabase deployment path when `AUTH_PROVIDER=supabase` and `MOCK_AUTH=false`; local accounts do not require a Supabase account.

@@ -23,6 +23,29 @@ class Document(Base):
     chunks = relationship("DocumentChunk", back_populates="document")
 
 
+class DocumentSource(Base):
+    __tablename__ = "document_sources"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Uuid(), primary_key=True, default=gen_uuid)
+    document_id = Column(Uuid(), ForeignKey("documents.id"), nullable=False)
+    project_id = Column(Uuid(), ForeignKey("projects.id"), nullable=False)
+    source_type = Column(String(32), nullable=False, default="github")
+
+    # GitHub provenance (Phase 1: public repositories). Retained so citations
+    # can name the pinned owner/repo@commit and Phase 2 re-sync can compare
+    # content hashes instead of re-downloading everything.
+    repo_owner = Column(String(255), nullable=False)
+    repo_name = Column(String(255), nullable=False)
+    commit_sha = Column(String(40), nullable=False)
+    file_path = Column(Text, nullable=False)
+    blob_sha = Column(String(40))
+    content_sha256 = Column(String(64))
+    line_start = Column(Integer)
+    line_end = Column(Integer)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
     __table_args__ = {"extend_existing": True}
@@ -39,4 +62,4 @@ class DocumentChunk(Base):
     document = relationship("Document", back_populates="chunks")
 
 
-__all__ = ["Document", "DocumentChunk"]
+__all__ = ["Document", "DocumentChunk", "DocumentSource"]
