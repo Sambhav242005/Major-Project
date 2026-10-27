@@ -21,6 +21,7 @@ from services import documents as doc_service
 from services.documents.storage import save_original, load_original, delete_original
 from services.audit import write_audit_log
 from .ingestion_tasks import _doc_subscribers, _start_ingestion
+from .validation import SUPPORTED_FORMATS
 from .validation import ALLOWED_TYPES, MAX_FILE_SIZE, UploadValidationError, validate_upload
 
 router = APIRouter()
@@ -113,6 +114,38 @@ async def upload_document(request: Request, response: Response, file: UploadFile
     return DocumentUploadResponse(id=result["id"], filename=result["filename"], status="pending", message="Document uploaded and queued for processing")
 
 
+# Registered before the parametrized /{document_id} routes on purpose.
+@router.get("/formats")
+async def list_supported_formats(user: User = Depends(get_current_user)):
+    """Machine-readable inventory of accepted knowledge-source formats (TODO 2.26 Phase 1)."""
+    from .validation import IMAGE_MAX_BYTES, DOCUMENT_MAX_BYTES, ACCEPTED_SUMMARY, SUPPORTED_FORMATS
+    return {
+        "accepted_summary": ACCEPTED_SUMMARY,
+        "max_document_bytes": DOCUMENT_MAX_BYTES,
+        "max_image_bytes": IMAGE_MAX_BYTES,
+        "formats": [
+            {
+                "content_type": fmt.content_type,
+                "label": fmt.label,
+                "category": fmt.category,
+                "max_bytes": fmt.max_bytes,
+                "inline_preview": fmt.inline_preview,
+            }
+            for fmt in SUPPORTED_FORMATS
+        ],
+        "not_yet_supported": [
+            {
+                "category": "audio",
+                "message": "Audio is not searchable project knowledge yet. Use the Meetings page to transcribe and analyze meeting audio.",
+            },
+            {
+                "category": "video",
+                "message": "Video ingestion with time citations is planned for a later release.",
+            },
+        ],
+    }
+
+
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(project_id: str = Depends(get_project_id), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     docs = await doc_service.list_documents(db, project_id)
@@ -142,8 +175,9 @@ async def get_document_original(document_id: str, download: bool = True, project
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Original file unavailable for this document")
     file_type = doc["file_type"]
-    # Never render uploaded active formats in the application's origin.
-    preview_types = {"application/pdf", "text/plain", "image/png", "image/jpeg", "image/tiff", "image/bmp", "image/webp"}
+    # Never render uploaded active formats in the application's origin; the
+    # upload registry drives the inline-preview allowlist.
+    preview_types = {fmt.content_type for fmt in SUPPORTED_FORMATS if fmt.inline_preview}
     if file_type in {"text/markdown", "text/csv"}:
         file_type = "text/plain"
     disposition = "inline" if not download and file_type in preview_types else "attachment"

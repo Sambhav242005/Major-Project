@@ -188,3 +188,30 @@ def test_rejected_upload_keeps_status_flow_untouched(upload_routes, monkeypatch)
     status_probe = AsyncMock(side_effect=AssertionError("no status rows should exist"))
     monkeypatch.setattr(routes.doc_service, "get_document_status", status_probe)
     persisted.assert_not_awaited()
+
+
+# --- Inventory endpoint: user-visible supported formats ---------------------
+
+
+def test_formats_inventory_lists_registry_and_future_categories(upload_routes):
+    from routers.documents import validation
+    routes, client = upload_routes
+    response = client.get("/documents/formats")
+    assert response.status_code == 200
+    payload = response.json()
+    listed = {fmt["content_type"] for fmt in payload["formats"]}
+    assert listed == set(validation.FORMATS_BY_TYPE)
+    assert all(fmt["max_bytes"] == (validation.IMAGE_MAX_BYTES if fmt["category"] == "image" else validation.DOCUMENT_MAX_BYTES) for fmt in payload["formats"])
+    assert {entry["category"] for entry in payload["not_yet_supported"]} == {"audio", "video"}
+    assert "Meetings page" in payload["not_yet_supported"][0]["message"]
+
+
+def test_formats_is_parsed_as_a_route_not_a_document(upload_routes, monkeypatch):
+    """Route ordering must keep /formats ahead of the /{document_id} probe."""
+    routes, client = upload_routes
+    resolve = AsyncMock(return_value={"id": str(uuid.uuid4()), "filename": "x", "file_type": "text/plain", "status": "pending", "page_count": None, "error_message": None, "uploaded_at": "2026-01-01T00:00:00Z", "processed_at": None})
+    monkeypatch.setattr(routes.doc_service, "get_document", resolve)
+    formats = client.get("/documents/formats")
+    assert formats.status_code == 200
+    resolve.assert_not_awaited()
+    assert client.get(f"/documents/{uuid.uuid4()}").status_code in (200, 404)
