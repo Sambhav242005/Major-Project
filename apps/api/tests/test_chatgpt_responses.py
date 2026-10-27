@@ -140,8 +140,16 @@ async def test_application_chat_failure_never_emits_completion(setup_client, mon
             db, "550e8400-e29b-41d4-a716-446655440002", "Hello",
             "550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440000",
         )]
-    assert [event["type"] for event in events] == ["chunk", "error"]
-    assert events[0]["content"] == "partial answer"
+    assert [event["type"] for event in events] == ["generation", "chunk", "error"]
+    assert events[1]["content"] == "partial answer"
+    # The attempted generation is announced up front; the failure still never
+    # completes, persists or announces the answer.
+    from core.config import settings as app_settings
+    assert events[0] == {
+        "type": "generation",
+        "provider": "configured",
+        "model": app_settings.LLM_CHAT_MODEL,
+    }
     assert "could not be completed" in events[-1]["error"]
     assert [call.args[0].role for call in db.add.call_args_list] == ["user"]
     db.rollback.assert_awaited_once()

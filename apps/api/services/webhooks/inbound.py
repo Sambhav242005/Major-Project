@@ -97,7 +97,7 @@ async def _handle_ingest_document(
         return {"error": "Missing file_url in payload"}
 
     try:
-        from routers.documents.validation import ALLOWED_TYPES, MAX_FILE_SIZE
+        from routers.documents.validation import ALLOWED_TYPES, MAX_FILE_SIZE, UploadValidationError, validate_upload
         await validate_public_https_url(file_url)
         async with asyncio.timeout(60), httpx.AsyncClient(timeout=60, follow_redirects=False, trust_env=False) as client:
             async with client.stream("GET", file_url) as resp:
@@ -114,6 +114,10 @@ async def _handle_ingest_document(
                         raise ValueError("Document exceeds 25MB limit")
                 if not file_content:
                     raise ValueError("Empty document")
+                try:
+                    validate_upload(bytes(file_content), filename, file_type)
+                except UploadValidationError as exc:
+                    raise ValueError(f"Document rejected: {exc}") from exc
     except Exception as e:
         return {"error": f"Failed to download file: {e}"}
 

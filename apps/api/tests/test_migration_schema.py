@@ -34,7 +34,7 @@ def test_postgresql_fresh_upgrade_and_existing_upgrade_render_offline():
         from alembic.config import Config
         from alembic.script import ScriptDirectory
         config = Config('alembic.ini')
-        assert ScriptDirectory.from_config(config).get_heads() == ['010']
+        assert ScriptDirectory.from_config(config).get_heads() == ['013']
         output = StringIO()
         config.output_buffer = output
         command.upgrade(config, 'head', sql=True)
@@ -45,13 +45,20 @@ def test_postgresql_fresh_upgrade_and_existing_upgrade_render_offline():
             assert 'CREATE TABLE ' + table + ' (' in sql, table
         assert 'UPDATE audit_log SET meta = metadata' in sql
         assert 'CAST(meta AS TEXT)' in sql
-        assert "SET version_num='010'" in sql
+        assert "SET version_num='013'" in sql
         assert 'ADD COLUMN mutation_version INTEGER DEFAULT' in sql
+        assert 'ADD COLUMN generation_provider VARCHAR(50)' in sql
+        assert 'ADD COLUMN generation_model VARCHAR(200)' in sql
         output.truncate(0)
         output.seek(0)
-        command.upgrade(config, '008:head', sql=True)
+        # 009→010 are data/column-only revisions; the new table is added by 012.
+        command.upgrade(config, '008:010', sql=True)
         assert 'UPDATE audit_log SET meta = metadata' in output.getvalue()
         assert 'CREATE TABLE' not in output.getvalue()
+        output.truncate(0)
+        output.seek(0)
+        command.upgrade(config, '010:head', sql=True)
+        assert 'CREATE TABLE document_sources' in output.getvalue()
         output.truncate(0)
         output.seek(0)
         command.downgrade(config, '009:008', sql=True)
@@ -114,6 +121,7 @@ def test_migration_operations_cover_current_orm_schema():
             'ix_agent_memory_agent_id', 'ix_agent_memory_project_id',
             'ix_agent_memory_type', 'ix_agent_checkpoints_agent_id',
             'ix_project_memory_shares_target', 'ix_mcp_auth_tokens_connection',
+            'ix_document_sources_document_id', 'ix_document_sources_project_id',
         }
         assert not schema.tables['profiles'].c.id.foreign_keys
         assert schema.tables['local_accounts'].c.id.foreign_keys

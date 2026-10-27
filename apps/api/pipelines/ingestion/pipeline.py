@@ -87,6 +87,7 @@ async def _ingest_document_body(db: AsyncSession, document_id: str, file_content
                 page_number=chunk.get("page_number"),
                 text=chunk["text"],
                 token_count=chunk["token_count"],
+                source_location=chunk.get("source_location"),
                 chroma_id=chroma_ids[i] if i < len(chroma_ids) else f"{document_id}_chunk_{i}",
             )
             db.add(db_chunk)

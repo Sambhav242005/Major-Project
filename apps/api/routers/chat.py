@@ -11,6 +11,7 @@ from core.security_utils import sanitize_input
 from core.sse import generator_sse_stream
 from db.session import get_db
 from services import chat as chat_service
+from services.chat.request_capture import get_snapshot_for_project
 from core.config import settings
 from pipelines.llm_client import GenerationConfig
 
@@ -39,13 +40,13 @@ class GenerationSelection(BaseModel):
     def resolve(self) -> GenerationConfig:
         if self.provider == "configured":
             return GenerationConfig(settings.LLM_PROVIDER, self.model or settings.LLM_CHAT_MODEL,
-                                    settings.LLM_BASE_URL, settings.LLM_API_KEY)
+                                    settings.LLM_BASE_URL, settings.LLM_API_KEY, self.provider)
         if not self.model:
             raise HTTPException(422, "Enter a model ID for the selected provider")
         if self.provider == "chatgpt":
             if not settings.CHATGPT_CREDENTIALS_PATH:
                 raise HTTPException(422, "ChatGPT is not connected on the server")
-            return GenerationConfig("chatgpt", self.model)
+            return GenerationConfig("chatgpt", self.model, requested_provider=self.provider)
         key = self.api_key.get_secret_value().strip() if self.api_key else ""
         if not key or any(ord(char) < 32 or ord(char) > 126 for char in key):
             raise HTTPException(422, "Enter an API key for the selected provider")
@@ -55,7 +56,7 @@ class GenerationSelection(BaseModel):
             "openrouter": "https://openrouter.ai/api/v1",
             "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
         }
-        return GenerationConfig("openai", self.model, endpoints[self.provider], key)
+        return GenerationConfig("openai", self.model, endpoints[self.provider], key, self.provider)
 
 
 class SendMessageRequest(BaseModel):
@@ -129,3 +130,22 @@ async def send_message(
             **({"generation": generation} if generation else {}),
         )
     )
+
+
+@router.get("/model-requests/{request_id}")
+async def get_model_request(
+    request_id: str,
+    project_id: str = Depends(get_project_id),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read-only sanitized snapshot of what was sent to the chat model.
+
+    Returns one request tied to a chat turn. Unknown/expired snapshots and
+    snapshots owned by another project are both 404, so a caller cannot probe
+    for other accounts' requests by id.
+    """
+    snapshot = await get_snapshot_for_project(db, request_id, project_id)
+    if snapshot is None:
+        raise NotFoundError("Model request snapshot not found or expired")
+    return snapshot

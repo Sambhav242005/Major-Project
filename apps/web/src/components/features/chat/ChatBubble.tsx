@@ -1,12 +1,21 @@
 "use client";
 
+import { sourceLabel, type SourceLocation } from "@/lib/source-location";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { chatAnswerLabel } from "@/lib/chat-selection";
+import { ModelRequestInspector } from "@/components/features/chat/ModelRequestInspector";
+import type { ModelRequestMapping } from "@/lib/model-request";
 
 export interface ChatMessage {
+  id?: string;
   role: "user" | "assistant";
   content: string;
-  citations?: { index: number; filename: string; page_number: number }[];
+  citations?: { index: number; filename: string; page_number: number; document_id?: string; source_location?: SourceLocation }[];
+  /** The generation the backend resolved for this answer; set once announced. */
+  generation?: { provider: string; model: string } | null;
   feedback?: "up" | "down";
+  model_request?: ModelRequestMapping;
 }
 
 interface ChatBubbleProps {
@@ -16,8 +25,9 @@ interface ChatBubbleProps {
 }
 
 export function ChatBubble({ message, onFeedback, isStreaming }: ChatBubbleProps) {
-  const { role, content, citations, feedback } = message;
+  const { role, content, citations, generation, feedback, model_request: modelRequest } = message;
   const isUser = role === "user";
+  const [showModelRequest, setShowModelRequest] = useState(false);
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -53,11 +63,17 @@ export function ChatBubble({ message, onFeedback, isStreaming }: ChatBubbleProps
                   key={j}
                   className="text-xs bg-app-surface text-app-muted px-1.5 py-0.5 rounded font-mono"
                 >
-                  [{c.index}] {c.filename} p.{c.page_number}
+                  [{c.index}] {c.source_location && c.document_id ? <a className="underline" href={`/documents/${encodeURIComponent(c.document_id)}#t=${c.source_location.start_seconds}`}>{c.filename} {sourceLabel(c.source_location)}</a> : `${c.filename} p.${c.page_number}`}
                 </span>
               ))}
             </div>
           </div>
+        )}
+
+        {!isUser && content && generation && (
+          <p className="mt-2 text-[11px] text-app-muted font-mono">
+            via {chatAnswerLabel(generation.provider, generation.model)}
+          </p>
         )}
 
         {!isUser && content && !isStreaming && onFeedback && (
@@ -86,6 +102,20 @@ export function ChatBubble({ message, onFeedback, isStreaming }: ChatBubbleProps
             >
               👎
             </button>
+          </div>
+        )}
+
+        {!isUser && content && !isStreaming && modelRequest && (
+          <div className="mt-2 pt-2 border-t border-app-border-strong">
+            <button
+              type="button"
+              aria-expanded={showModelRequest}
+              onClick={() => setShowModelRequest((open) => !open)}
+              className="text-xs text-app-muted underline hover:text-app-text"
+            >
+              {showModelRequest ? "Hide what was sent to the model" : "Model request"}
+            </button>
+            {showModelRequest && <ModelRequestInspector mapping={modelRequest} />}
           </div>
         )}
       </div>

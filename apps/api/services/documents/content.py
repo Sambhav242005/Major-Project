@@ -36,6 +36,7 @@ async def get_document_chunks(
                 "id": str(c.id),
                 "chunk_index": c.chunk_index,
                 "page_number": c.page_number,
+                "source_location": c.source_location,
                 "text": text,
                 "text_truncated": truncated,
                 "token_count": c.token_count,

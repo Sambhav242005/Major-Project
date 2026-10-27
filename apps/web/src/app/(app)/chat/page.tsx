@@ -7,18 +7,26 @@ import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { useProjectStore } from "@/stores/project";
 import { ChatBubble, ChatSuggestions, ChatInput, ChatHeader } from "@/components/features/chat";
 import type { ChatMessage } from "@/components/features/chat";
-import { readChatStream } from "@/lib/chat-stream";
+import { readChatStream, ChatStreamError } from "@/lib/chat-stream";
+import {
+  buildGenerationPayload,
+  defaultChatProviderAvailability,
+  useChatModelSelection,
+  validateChatSelection,
+  type ChatProviderAvailability,
+} from "@/lib/chat-selection";
+import { attachModelRequest, type ModelRequestMapping, type ModelRequestSnapshot } from "@/lib/model-request";
 import type { SystemStatus } from "@/lib/system-status";
 
 export default function ChatPage() {
   const [supabase] = useState(() => createClient());
 
   const [message, setMessage] = useState("");
-  const [provider, setProvider] = useState("configured");
-  const [model, setModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [generationError, setGenerationError] = useState<string | null>(null);
-  const [defaultModel, setDefaultModel] = useState("Server default");
+  const selection_ = useChatModelSelection();
+  const [defaultModel, setDefaultModel] = useState("");
+  const [providerAvailability, setProviderAvailability] = useState<ChatProviderAvailability>(
+    defaultChatProviderAvailability,
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -26,6 +34,8 @@ export default function ChatPage() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamBufferRef = useRef("");
+  const streamingAssistantRef = useRef<string | null>(null);
+  const sessionVersionRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const { projects, activeProjectId } = useProjectStore();
@@ -38,7 +48,13 @@ export default function ChatPage() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
         const status = await apiFetch<SystemStatus>("/system/status", { token: session.access_token });
-        if (active) setDefaultModel(`${status.llm.provider} / ${status.llm.model}`);
+        if (active) {
+          setDefaultModel(`${status.llm.provider} / ${status.llm.model}`);
+          setProviderAvailability({
+            serverLlmConfigured: status.llm.configured,
+            serverChatGptConnected: Boolean(status.capabilities.chatgpt),
+          });
+        }
       } catch { /* Sending still works with the server default. */ }
     })();
     return () => { active = false; };
@@ -54,6 +70,11 @@ export default function ChatPage() {
 
   const createSession = useCallback(async () => {
     abortRef.current?.abort();
+    abortRef.current = null;
+    streamBufferRef.current = "";
+    streamingAssistantRef.current = null;
+    setStreaming(false);
+    const version = ++sessionVersionRef.current;
     setLoading(true);
     setMessages([]);
     setSessionId(null);
@@ -72,13 +93,15 @@ export default function ChatPage() {
         body: { title: "New Chat" },
       });
 
-      if (mountedRef.current) {
+      if (mountedRef.current && sessionVersionRef.current === version) {
         setSessionId(data.id);
       }
     } catch (e) {
-      setSessionError(e instanceof Error ? e.message : "Failed to create chat session");
+      if (mountedRef.current && sessionVersionRef.current === version) {
+        setSessionError(e instanceof Error ? e.message : "Failed to create chat session");
+      }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && sessionVersionRef.current === version) {
         setLoading(false);
       }
     }
@@ -97,39 +120,62 @@ export default function ChatPage() {
     const buffer = streamBufferRef.current;
     if (!buffer) return;
     streamBufferRef.current = "";
-    setMessages((prev) => {
-      const updated = [...prev];
-      const last = updated[updated.length - 1];
-      if (last && last.role === "assistant") {
-        updated[updated.length - 1] = { ...last, content: last.content + buffer };
+    const messageId = streamingAssistantRef.current;
+    setMessages((prev) => prev.map((item) => item.id === messageId && item.role === "assistant"
+      ? { ...item, content: item.content + buffer }
+      : item));
+  }, []);
+
+  /**
+   * Load the sanitized "Model request" snapshot for one assistant turn.
+   * Unknown ids, expired 30-minute records and cross-project asks all
+   * resolve to the same "unavailable" mapping — nothing about them leaks.
+   */
+  const loadRequestRecord = useCallback(async (requestId: string): Promise<ModelRequestMapping> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !activeProjectId) {
+        return { requestId, state: "missing", snapshot: null };
       }
-      return updated;
-    });
+      const snapshot = await apiFetch<ModelRequestSnapshot>(
+        `/chat/model-requests/${encodeURIComponent(requestId)}`,
+        { token: session.access_token, projectId: activeProjectId },
+      );
+      return { requestId, state: "fetched", snapshot };
+    } catch {
+      return { requestId, state: "missing", snapshot: null };
+    }
+  }, [supabase.auth, activeProjectId]);
+
+  const patchAssistant = useCallback((messageId: string, patch: Partial<ChatMessage>) => {
+    setMessages((prev) => prev.map((item) => item.id === messageId && item.role === "assistant"
+      ? { ...item, ...patch }
+      : item));
   }, []);
 
   const handleSend = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!message.trim() || streaming || !sessionId) return;
-    if (provider !== "configured" && !model.trim()) {
-      setGenerationError("Enter the model ID supplied by your provider.");
+    const validationError = validateChatSelection(selection_.selection, providerAvailability);
+    if (validationError) {
+      selection_.setGenerationError(validationError);
       return;
     }
-    if (!["configured", "chatgpt"].includes(provider) && !apiKey.trim()) {
-      setGenerationError("Enter an API key for this provider.");
-      return;
-    }
-    setGenerationError(null);
+    selection_.setGenerationError(null);
     const userMessage = message.trim();
+    const assistantId = crypto.randomUUID();
+    streamingAssistantRef.current = assistantId;
     setMessage("");
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: userMessage },
-      { role: "assistant", content: "" },
+      { id: crypto.randomUUID(), role: "user", content: userMessage },
+      { id: assistantId, role: "assistant", content: "" },
     ]);
     setStreaming(true);
     streamBufferRef.current = "";
     const controller = new AbortController();
     abortRef.current = controller;
+    let requestRecordId: string | null = null;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Your session expired. Sign in again.");
@@ -140,13 +186,11 @@ export default function ChatPage() {
           Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
         },
+        // The payload is frozen from the selection at send time, so switching
+        // the header selector mid-stream cannot affect the running request.
         body: JSON.stringify({
           message: userMessage,
-          generation: {
-            provider,
-            ...(model.trim() ? { model: model.trim() } : {}),
-            ...(!["configured", "chatgpt"].includes(provider) ? { api_key: apiKey.trim() } : {}),
-          },
+          generation: buildGenerationPayload(selection_.selection),
         }),
       });
       if (!res.ok) {
@@ -156,45 +200,45 @@ export default function ChatPage() {
       if (!res.body) throw new Error("No response stream received");
       let chunkCount = 0;
       for await (const data of readChatStream(res.body)) {
+        if (controller.signal.aborted || abortRef.current !== controller) break;
         if (data.type === "chunk") {
           streamBufferRef.current += data.content;
           chunkCount++;
           if (chunkCount % 10 === 0) flushBuffer();
         } else if (data.type === "citations") {
           flushBuffer();
-          setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last && last.role === "assistant") {
-              updated[updated.length - 1] = { ...last, citations: data.citations };
-            }
-            return updated;
-          });
+          patchAssistant(assistantId, { citations: data.citations });
+        } else if (data.type === "generation") {
+          // Label this answer with the model the backend actually used, so
+          // later header changes cannot mislabel it.
+          patchAssistant(assistantId, { generation: { provider: data.provider, model: data.model } });
+        } else if (data.type === "done" && data.request_id) {
+          requestRecordId = data.request_id;
         }
       }
-      flushBuffer();
+      if (abortRef.current === controller) flushBuffer();
     } catch (err) {
-      if (mountedRef.current) {
+      if (mountedRef.current && abortRef.current === controller) {
         console.error("Chat error:", err);
         streamBufferRef.current = "";
-        setMessages((prev) => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last && last.role === "assistant") {
-            updated[updated.length - 1] = {
-              ...last,
-              content: controller.signal.aborted ? "Response stopped before completion. Send the question again to retry." : err instanceof Error ? err.message : "Failed to get a complete response. Please try again.",
-              citations: [],
-            };
-          }
-          return updated;
+        if (err instanceof ChatStreamError && err.requestId) requestRecordId = err.requestId;
+        patchAssistant(assistantId, {
+          content: controller.signal.aborted ? "Response stopped before completion. Send the question again to retry." : err instanceof Error ? err.message : "Failed to get a complete response. Please try again.",
+          citations: [],
         });
       }
     } finally {
-      if (mountedRef.current) setStreaming(false);
-      abortRef.current = null;
+      if (mountedRef.current && abortRef.current === controller) {
+        setStreaming(false);
+        if (requestRecordId) {
+          void loadRequestRecord(requestRecordId).then((mapping) => {
+            if (mountedRef.current) setMessages((prev) => attachModelRequest(prev, assistantId, mapping));
+          });
+        }
+      }
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [message, streaming, sessionId, flushBuffer, supabase, activeProjectId, provider, model, apiKey]);
+  }, [message, streaming, sessionId, flushBuffer, patchAssistant, supabase, activeProjectId, selection_, providerAvailability, loadRequestRecord]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();
@@ -221,38 +265,14 @@ export default function ChatPage() {
           projectName={activeProject?.name ?? null}
           onNewSession={sessionId ? () => { void createSession(); } : undefined}
           isStreaming={streaming}
+          selection={selection_.selection}
+          defaultModel={defaultModel}
+          availability={providerAvailability}
+          error={selection_.error}
+          onProviderChange={selection_.setProvider}
+          onModelChange={selection_.setModel}
+          onApiKeyChange={selection_.setApiKey}
         />
-        <fieldset disabled={streaming} className="mb-5 rounded-xl border border-app-border bg-app-card p-4 space-y-3 disabled:opacity-60">
-          <legend className="px-1 text-sm font-medium">Chat model</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-app-muted space-y-1">
-              <span>Provider</span>
-              <select value={provider} onChange={(event) => {
-                setProvider(event.target.value); setModel(""); setApiKey(""); setGenerationError(null);
-              }} className="block w-full rounded-md border border-app-border bg-app-bg px-3 py-2 text-sm text-app-text">
-                <option value="configured">Server configured · {defaultModel}</option>
-                <option value="openai">OpenAI API</option>
-                <option value="groq">Groq</option>
-                <option value="openrouter">OpenRouter</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="chatgpt">ChatGPT (server connection)</option>
-              </select>
-            </label>
-            <label className="text-xs text-app-muted space-y-1">
-              <span>Model ID {provider === "configured" ? "(optional override)" : "(required)"}</span>
-              <input value={model} onChange={(event) => { setModel(event.target.value); setGenerationError(null); }} maxLength={200}
-                placeholder={provider === "configured" ? defaultModel : "Enter your provider’s model ID"}
-                className="block w-full rounded-md border border-app-border bg-app-bg px-3 py-2 text-sm text-app-text" />
-            </label>
-          </div>
-          {!["configured", "chatgpt"].includes(provider) && <label className="block text-xs text-app-muted space-y-1">
-            <span>Provider API key (required)</span>
-            <input type="password" autoComplete="off" value={apiKey} onChange={(event) => { setApiKey(event.target.value); setGenerationError(null); }}
-              className="block w-full rounded-md border border-app-border bg-app-bg px-3 py-2 text-sm text-app-text" />
-          </label>}
-          <p className="text-xs text-app-muted">Applies to your next chat message. Selections reset when you leave this page. API keys are sent to the backend and kept only in page memory. ChatGPT requires an existing server login. Documents and embeddings keep their server settings.</p>
-          {generationError && <p role="alert" className="text-sm text-rust">{generationError}</p>}
-        </fieldset>
         <div className="flex-1 overflow-y-auto mb-4 space-y-4 scrollbar-dark">
           {loading ? (
             <div className="text-center py-20 text-app-muted">
@@ -263,7 +283,7 @@ export default function ChatPage() {
           ) : (
             messages.map((msg, i) => (
               <ChatBubble
-                key={i}
+                key={msg.id ?? i}
                 message={msg}
                 isStreaming={streaming}
                 onFeedback={

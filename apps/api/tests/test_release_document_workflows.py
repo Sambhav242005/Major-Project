@@ -12,7 +12,7 @@ from starlette.responses import Response
 from core.config import settings
 from core.errors import AppError, app_error_handler
 from core.security import User
-from db.models import Document, DocumentChunk, Entity, EntityMention, Project, Relationship
+from db.models import Document, DocumentChunk, DocumentSource, Entity, EntityMention, Project, Relationship
 from db.session import Base
 from services.documents.storage import save_original, load_original, original_path
 
@@ -73,6 +73,10 @@ async def test_delete_removes_vectors_chunks_and_graph_evidence(monkeypatch):
             await db.flush()
             db.add_all([DocumentChunk(id=chunk, document_id=document, chunk_index=0, text="evidence", chroma_id="v0"), Entity(id=entity, project_id=project, name="Item", type="concept", first_seen_document_id=document)])
             await db.flush()
+            db.add(DocumentSource(
+                document_id=document, project_id=project, source_type="github",
+                repo_owner="owner", repo_name="repo", commit_sha="a" * 40, file_path="test.txt",
+            ))
             db.add_all([EntityMention(entity_id=entity, document_id=document, chunk_id=chunk), Relationship(project_id=project, source_entity_id=entity, target_entity_id=entity, relation_type="related", source_document_id=document)])
             await db.commit()
             assert not await delete_document(db, str(document), str(uuid.uuid4()))
@@ -84,6 +88,7 @@ async def test_delete_removes_vectors_chunks_and_graph_evidence(monkeypatch):
             assert not (await db.execute(select(DocumentChunk))).scalars().all()
             assert not (await db.execute(select(EntityMention))).scalars().all()
             assert not (await db.execute(select(Relationship))).scalars().all()
+            assert not (await db.execute(select(DocumentSource))).scalars().all()
     finally:
         await engine.dispose()
 
@@ -100,6 +105,8 @@ def original_routes(tmp_path, monkeypatch):
     ("application/pdf", "inline", "application/pdf"),
     ("text/markdown", "inline", "text/plain"),
     ("image/png", "inline", "image/png"),
+    ("audio/wav", "inline", "audio/wav"),
+    ("video/mp4", "inline", "video/mp4"),
     ("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "attachment", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
 ])
 def test_original_http_preview_keeps_sandbox(original_routes, monkeypatch, file_type, disposition, media_type):

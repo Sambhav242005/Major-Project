@@ -14,6 +14,7 @@ class DocumentChunkOut(BaseModel):
     id: str
     chunk_index: int
     page_number: int | None
+    source_location: dict | None = None
     text: str
     token_count: int | None
 

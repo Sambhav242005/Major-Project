@@ -21,7 +21,13 @@ export type {
   Entity,
 } from "./validators";
 
-export { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from "./validators";
+export { ALLOWED_FILE_TYPES, MAX_FILE_SIZE, IMAGE_MAX_FILE_SIZE } from "./validators";
+export {
+  ACCEPTED_FORMATS_MESSAGE,
+  NOT_YET_SUPPORTED_MESSAGE,
+  sizeLimitMessage,
+  DocumentUploadSchema,
+} from "./validators";
 
 // Re-export Project from store (single source of truth)
 export type { Project } from "@/stores/project";
@@ -47,6 +53,7 @@ export interface Chunk {
   page_number: number | null;
   text: string;
   text_truncated: boolean;
+  source_location?: import("./source-location").SourceLocation | null;
   token_count: number | null;
 }
 

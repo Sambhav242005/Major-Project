@@ -1,6 +1,6 @@
 """Embedding providers.
 
-Two providers are supported, selected by ``settings.EMBEDDING_PROVIDER``:
+Providers are selected by ``settings.EMBEDDING_PROVIDER``:
 
 ``openai`` (default)
     Any OpenAI-compatible ``POST {EMBEDDING_BASE_URL}/embeddings`` endpoint
@@ -211,8 +211,8 @@ def _needs_manual_normalization() -> bool:
 
 
 def _l2_normalize(vector: list[float]) -> list[float]:
-    norm = math.sqrt(sum(value * value for value in vector))
-    if norm == 0.0:
+    norm = math.hypot(*vector)
+    if norm == 0.0 or not math.isfinite(norm):
         raise EmbeddingError("Embedding provider returned an all-zero vector")
     return [value / norm for value in vector]
 
@@ -268,6 +268,38 @@ class OpenAICompatibleEmbeddingFunction(chromadb.EmbeddingFunction):
                 f"Unexpected /embeddings response shape from {self._url()}: "
                 f"{_truncate(str(data))}"
             ) from exc
+
+
+class OllamaEmbeddingFunction(chromadb.EmbeddingFunction):
+    """Native Ollama embeddings, including EmbeddingGemma 2 text retrieval."""
+
+    def __init__(self, task: str = TASK_DOCUMENT) -> None:
+        self.task = task
+
+    def name(self) -> str:
+        return "ollama-native"
+
+    def __call__(self, input: chromadb.Documents) -> chromadb.Embeddings:
+        texts = list(input)
+        _reject_empty(texts, "ollama")
+        vectors = []
+        for start in range(0, len(texts), settings.EMBEDDING_BATCH_SIZE):
+            payload = {"model": settings.EMBEDDING_MODEL,
+                       "input": texts[start:start + settings.EMBEDDING_BATCH_SIZE], "truncate": False}
+            if settings.EMBEDDING_OUTPUT_DIM:
+                payload["dimensions"] = settings.EMBEDDING_OUTPUT_DIM
+            data = _post_json(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/embed", {}, payload, "ollama")
+            batch = data.get("embeddings")
+            if not isinstance(batch, list) or len(batch) != len(payload["input"]):
+                raise EmbeddingError("Ollama returned mismatched embedding counts")
+            for vector in batch:
+                if (not isinstance(vector, list) or not vector
+                        or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in vector)
+                        or (settings.EMBEDDING_OUTPUT_DIM and len(vector) != settings.EMBEDDING_OUTPUT_DIM)
+                        or (vectors and len(vector) != len(vectors[0]))):
+                    raise EmbeddingError("Ollama returned invalid embedding vectors")
+                vectors.append(_l2_normalize(vector))
+        return vectors
 
 
 class GeminiEmbeddingFunction(chromadb.EmbeddingFunction):
@@ -402,6 +434,7 @@ class LocalMiniLMEmbeddingFunction(chromadb.EmbeddingFunction):
 
 
 _PROVIDER_CLASSES = {
+    "ollama": OllamaEmbeddingFunction,
     "local": LocalMiniLMEmbeddingFunction,
     "gemini": GeminiEmbeddingFunction,
     "openai": OpenAICompatibleEmbeddingFunction,

@@ -4,7 +4,7 @@ from pydantic import ConfigDict, model_validator
 # Supported values for EMBEDDING_PROVIDER.
 #   openai -> any OpenAI-compatible /embeddings endpoint (Ollama, Groq, OpenAI)
 #   gemini -> Google Gemini native :batchEmbedContents endpoint
-EMBEDDING_PROVIDERS = frozenset({"openai", "gemini", "local"})
+EMBEDDING_PROVIDERS = frozenset({"openai", "gemini", "local", "ollama"})
 
 
 class Settings(BaseSettings):
@@ -85,6 +85,17 @@ class Settings(BaseSettings):
     # supports it (Gemini: 768/1536/3072 via Matryoshka truncation).
     EMBEDDING_OUTPUT_DIM: int | None = None
     EMBEDDING_BATCH_SIZE: int = 100
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    # Opt-in knowledge-source media processing; services/models are operator-managed.
+    MEDIA_INGESTION_ENABLED: bool = False
+    WHISPER_BASE_URL: str = ""
+    WHISPER_MODEL: str = "whisper-1"
+    WHISPER_API_KEY: str = ""
+    VLM_MODEL: str = ""
+    MEDIA_MAX_DURATION_SECONDS: int = 600
+    MEDIA_MAX_FRAMES: int = 12
+    MEDIA_PROCESS_TIMEOUT_SECONDS: int = 120
 
     # Gemini native provider (used when EMBEDDING_PROVIDER=gemini).
     # GEMINI_API_KEY falls back to EMBEDDING_API_KEY when empty.
@@ -99,6 +110,14 @@ class Settings(BaseSettings):
     MEET_AUDIO_DIR: str = "./meet_recordings"
     MEET_SAMPLE_RATE: int = 44100
     MEET_MAX_AUDIO_BYTES: int = 20 * 1024 * 1024
+
+    # GitHub repository ingestion (Phase 1: public repositories)
+    # Only https://github.com is accepted as the repository web host and only
+    # api.github.com as the API host; redirects to other hosts are blocked.
+    GITHUB_API_BASE_URL: str = "https://api.github.com"
+    GITHUB_IMPORT_MAX_TOTAL_BYTES: int = 50 * 1024 * 1024
+    GITHUB_IMPORT_MAX_FILES: int = 2000
+    GITHUB_IMPORT_MAX_FILE_BYTES: int = 2 * 1024 * 1024
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
@@ -124,6 +143,13 @@ class Settings(BaseSettings):
 
         if self.EMBEDDING_BATCH_SIZE < 1:
             raise ValueError("EMBEDDING_BATCH_SIZE must be >= 1")
+        if not 1 <= self.MEDIA_MAX_DURATION_SECONDS <= 3600:
+            raise ValueError("MEDIA_MAX_DURATION_SECONDS must be between 1 and 3600")
+        if not 1 <= self.MEDIA_MAX_FRAMES <= 60 or not 1 <= self.MEDIA_PROCESS_TIMEOUT_SECONDS <= 600:
+            raise ValueError("Media frame/timeout limits are outside the supported range")
+        if provider == "ollama" and self.EMBEDDING_MODEL.startswith("embeddinggemma-2"):
+            if self.EMBEDDING_OUTPUT_DIM not in (None, 128, 256, 512, 768):
+                raise ValueError("EmbeddingGemma 2 dimensions must be 128, 256, 512 or 768")
 
         if provider == "gemini" and not (self.GEMINI_API_KEY or self.EMBEDDING_API_KEY):
             raise ValueError(

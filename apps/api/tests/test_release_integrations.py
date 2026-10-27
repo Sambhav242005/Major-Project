@@ -23,6 +23,16 @@ async def test_status_reports_actual_provider_without_claiming_connectivity(monk
     assert result["llm"]["configured"] is False
     assert result["llm"]["connectivity"] == "not_checked"
     assert result["capabilities"]["meetings_sync"] is False
+    # The chat model selector derives unavailable-provider reasons from this.
+    assert result["capabilities"]["chatgpt"] is False
+
+
+@pytest.mark.asyncio
+async def test_status_reports_server_connected_chatgpt(monkeypatch):
+    from routers.system import system_status, settings
+    monkeypatch.setattr(settings, "CHATGPT_CREDENTIALS_PATH", "protected/credentials.json")
+    result = await system_status()
+    assert result["capabilities"]["chatgpt"] is True
 
 
 @pytest.mark.asyncio

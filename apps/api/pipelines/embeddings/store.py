@@ -1,6 +1,7 @@
 """ChromaDB collection and upsert/delete helpers."""
 
 import logging
+import json
 
 import chromadb
 
@@ -143,6 +144,8 @@ def upsert_chunks(
             "chunk_index": chunk["chunk_index"],
             "page_number": chunk.get("page_number") or 0,
         })
+        if chunk.get("source_location"):
+            metadatas[-1]["source_location"] = json.dumps(chunk["source_location"])
 
     if not ids:
         return []
