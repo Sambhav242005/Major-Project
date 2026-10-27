@@ -7,7 +7,8 @@ import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { useProjectStore } from "@/stores/project";
 import { ChatBubble, ChatSuggestions, ChatInput, ChatHeader } from "@/components/features/chat";
 import type { ChatMessage } from "@/components/features/chat";
-import { readChatStream } from "@/lib/chat-stream";
+import { readChatStream, ChatStreamError } from "@/lib/chat-stream";
+import type { ModelRequestMapping, ModelRequestSnapshot } from "@/lib/model-request";
 import type { SystemStatus } from "@/lib/system-status";
 
 export default function ChatPage() {
@@ -107,6 +108,39 @@ export default function ChatPage() {
     });
   }, []);
 
+  /**
+   * Load the sanitized "Model request" snapshot for one assistant turn.
+   * Unknown ids, expired 30-minute records and cross-project asks all
+   * resolve to the same "unavailable" mapping — nothing about them leaks.
+   */
+  const loadRequestRecord = useCallback(async (requestId: string): Promise<ModelRequestMapping> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !activeProjectId) {
+        return { requestId, state: "missing", snapshot: null };
+      }
+      const snapshot = await apiFetch<ModelRequestSnapshot>(
+        `/chat/model-requests/${encodeURIComponent(requestId)}`,
+        { token: session.access_token, projectId: activeProjectId },
+      );
+      return { requestId, state: "fetched", snapshot };
+    } catch {
+      return { requestId, state: "missing", snapshot: null };
+    }
+  }, [supabase.auth, activeProjectId]);
+
+  const attachRequestRecord = useCallback((mapping: ModelRequestMapping | null) => {
+    if (!mapping) return;
+    setMessages((prev) => {
+      const updated = [...prev];
+      const last = updated[updated.length - 1];
+      if (last && last.role === "assistant") {
+        updated[updated.length - 1] = { ...last, model_request: mapping };
+      }
+      return updated;
+    });
+  }, []);
+
   const handleSend = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!message.trim() || streaming || !sessionId) return;
@@ -130,6 +164,7 @@ export default function ChatPage() {
     streamBufferRef.current = "";
     const controller = new AbortController();
     abortRef.current = controller;
+    let requestRecordId: string | null = null;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Your session expired. Sign in again.");
@@ -170,6 +205,8 @@ export default function ChatPage() {
             }
             return updated;
           });
+        } else if (data.type === "done" && data.request_id) {
+          requestRecordId = data.request_id;
         }
       }
       flushBuffer();
@@ -177,6 +214,11 @@ export default function ChatPage() {
       if (mountedRef.current) {
         console.error("Chat error:", err);
         streamBufferRef.current = "";
+        // Failed requests keep their captured record for inspection when the
+        // server managed to register one before failing.
+        if (err instanceof ChatStreamError && err.requestId) {
+          requestRecordId = err.requestId;
+        }
         setMessages((prev) => {
           const updated = [...prev];
           const last = updated[updated.length - 1];
@@ -191,10 +233,19 @@ export default function ChatPage() {
         });
       }
     } finally {
-      if (mountedRef.current) setStreaming(false);
+      if (mountedRef.current) {
+        setStreaming(false);
+        if (requestRecordId) {
+          // Resolve outside the try/catch: a missing record is shown as
+          // "unavailable", never silently hidden.
+          void loadRequestRecord(requestRecordId).then((mapping) => {
+            if (mountedRef.current) attachRequestRecord(mapping);
+          });
+        }
+      }
       abortRef.current = null;
     }
-  }, [message, streaming, sessionId, flushBuffer, supabase, activeProjectId, provider, model, apiKey]);
+  }, [message, streaming, sessionId, flushBuffer, supabase, activeProjectId, provider, model, apiKey, loadRequestRecord, attachRequestRecord]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current?.abort();

@@ -1,12 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { ModelRequestInspector } from "@/components/features/chat/ModelRequestInspector";
+import type { ModelRequestMapping } from "@/lib/model-request";
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   citations?: { index: number; filename: string; page_number: number }[];
   feedback?: "up" | "down";
+  model_request?: ModelRequestMapping;
 }
 
 interface ChatBubbleProps {
@@ -16,8 +20,9 @@ interface ChatBubbleProps {
 }
 
 export function ChatBubble({ message, onFeedback, isStreaming }: ChatBubbleProps) {
-  const { role, content, citations, feedback } = message;
+  const { role, content, citations, feedback, model_request: modelRequest } = message;
   const isUser = role === "user";
+  const [showModelRequest, setShowModelRequest] = useState(false);
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -86,6 +91,20 @@ export function ChatBubble({ message, onFeedback, isStreaming }: ChatBubbleProps
             >
               👎
             </button>
+          </div>
+        )}
+
+        {!isUser && content && !isStreaming && modelRequest && (
+          <div className="mt-2 pt-2 border-t border-app-border-strong">
+            <button
+              type="button"
+              aria-expanded={showModelRequest}
+              onClick={() => setShowModelRequest((open) => !open)}
+              className="text-xs text-app-muted underline hover:text-app-text"
+            >
+              {showModelRequest ? "Hide what was sent to the model" : "Model request"}
+            </button>
+            {showModelRequest && <ModelRequestInspector mapping={modelRequest} />}
           </div>
         )}
       </div>
