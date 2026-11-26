@@ -298,6 +298,7 @@ These items define the research contribution and the evidence needed to defend i
 - **Effort:** small.
 
 ### 3.6 Health scanner & RAG verification gate `[MISSING]` `[RESEARCH]`
+- **Controlled QA:** The research verifier can retry once or resolve evidence from selected sentence IDs. KG-first lookup and targeted governance retrieval have a regression comparison. Evaluate them on a fresh, larger multi-document question set before adopting them in chat.
 - **What:** No monitor→verify→repair loop. `docs/RESEARCH_PROBLEM.md:79` diagram `Build→monitor→detect(Conflict|Stale|Invalid)→Evidence Check→Repair/Reject→KG→Agent` has no code.
 - **Fix (3 insertion points, minimal churn):**
   1. **Post-extraction nudge (inline):** after `pipelines/ingestion/pipeline.py` extraction success → `pipelines/kg_health.py:enqueue_check(document_id, project_id)` for `confidence<0.5 && mention_count==1` invalid, `(source,target)` group differing `relation_type` conflict, overlapping entities with newer `uploaded_at` stale.
@@ -336,7 +337,7 @@ These items define the research contribution and the evidence needed to defend i
 - **Why:** Without this, `3.1`/`3.2` cannot be shown to beat conventional RAG. User’s gap analysis explicitly calls for a controlled benchmark: same documents → `Normal RAG vs Our System (+health)`.
 - **Fix:** Build 20–30 fixture docs injecting 5 types: `update` (supersedes), `contradiction` (same `(source,target)` incompatible `relation_type`), `stale` (old date superseded by newer), `duplicate` (same fact multi-doc support), `uncertain/low-evidence` (single mention, OCR-noisy) — reuse `research/` pattern (`research/indian_protests_2026.txt`).
 - Hand-label 15–20 Q/A pairs with `expected_answer + supporting chunk_id/page + relation_ids` (extend `3.2` fixture set). Add `eval/kg_health_eval.py` alongside `eval/retrieval_harness.py`.
-- **Baselines:** plain RAG (no graph), current GraphRAG (no health — `services/chat.py:169` 1-hop), +health (`3.6` gate). Optional Zep citation baseline but not re-implemented.
+- **Baselines:** plain RAG (no graph), current GraphRAG (no health, one-hop chat baseline), +health (`3.6` gate). Optional Zep citation baseline but not re-implemented.
 - **Metrics:** `recall@k`, `citation precision` (sentence-level via `3.3`), `evidence correctness`, `contradiction detection P/R`, `stale detection P/R`, `false-positive retire rate`, `factual accuracy (LLM-as-judge)`, `latency`, `cost`; gate acceptance `held_in_delta>0 && held_out_delta>=0` (`pipelines/agent_refinement.py:280` pattern).
 - **Ablations:** w/o temporal, w/o contradiction, w/o evidence, w/o source reliability, w/o pinned — shows joint value.
 - **Where:** `apps/api/eval/` + `research/fixtures/`; consumes `refinement_eval_sets` (`db/models.py`) or new `kg_eval_runs`.

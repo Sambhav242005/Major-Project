@@ -11,16 +11,19 @@ ANSWER_SCHEMA={'type':'object','properties':{'status':{'type':'string','enum':['
 
 
 class VerificationFailure(ValueError):
-    def __init__(self, message: str, raw_response: str):
+    def __init__(self, message: str, raw_response: str, first_error: str | None = None):
         super().__init__(message)
         self.raw_response=raw_response
+        self.first_error = first_error
 
 
-def response_schema(verification: bool = False) -> dict:
+def response_schema(verification: bool = False, *, sentence_ids: bool = False) -> dict:
     schema=json.loads(json.dumps(ANSWER_SCHEMA))
     if verification:
         schema['properties'].update({'evidence':{'type':'array','items':{'type':'object','properties':{'source':{'type':'integer'},'quote':{'type':'string'}},'required':['source','quote'],'additionalProperties':False}},'reason':{'type':'string'}})
         schema['required']+=['evidence','reason']
+        if sentence_ids:
+            schema['properties']['evidence']['items'] = {'type': 'string'}
     return {'type':'json_schema','json_schema':{'name':'evidence_review' if verification else 'cited_answer','schema':schema,'strict':True}}
 
 
@@ -192,35 +195,86 @@ def validate_verification(result: dict, sources: list[dict], allowed_indices: se
     return output
 
 
-async def verify_answer(question: str, candidate: dict, sources: list[dict], chat, model: str) -> dict:
+async def verify_answer(
+    question: str, candidate: dict, sources: list[dict], chat, model: str,
+    *, sentence_ids: bool = False,
+) -> dict:
     allowed,excluded=eligible_sources(question,sources)
     original_indices=sorted(allowed)
     eligible=[sources[i-1] for i in original_indices]
     blocks='\n\n'.join(f"[Source {i}]\n{s['visible_text']}" for i,s in enumerate(eligible,1))
+    instructions = VERIFY_PROMPT
+    sentences = {}
+    if sentence_ids:
+        numbered_blocks = []
+        for index, source in enumerate(eligible, 1):
+            lines = []
+            parts = re.split(r"\r?\n|(?<=[.!?])(?=\s+[A-Z])", source['visible_text'])
+            for number, part in enumerate(filter(None, map(str.strip, parts)), 1):
+                sentence_id = f"S{index}.{number}"
+                sentences[sentence_id] = {'source': index, 'quote': part}
+                lines.append(f"{sentence_id} {part}")
+            numbered_blocks.append(f"[Source {index}]\n" + "\n".join(lines))
+        blocks = "\n\n".join(numbered_blocks)
+        instructions = instructions.replace(
+            'list of {{source: integer, quote: exact contiguous source quotation}}',
+            'list of sentence ID strings such as "S1.4"',
+        ).replace('Otherwise quote\nthe factual sentences', 'Otherwise select IDs for\nthe factual sentences')
     # Filtering changes the numbering. Remove candidate references so that an
     # obsolete number cannot be mistaken for a newly numbered eligible source.
     proposal={k:v for k,v in candidate.items() if k in ('status','values','answer')}
     proposal['answer']=re.sub(r'\[[\d,\s]+\]', '',proposal.get('answer',''))
     proposal['values']=list(map(normalize_value,proposal.get('values',[])))
     messages=[{'role':'system','content':'You are an evidence reviewer. Output valid JSON only.'},
-              {'role':'user','content':VERIFY_PROMPT.format(question=question,candidate=json.dumps(proposal),sources=blocks)}]
-    response=await chat(messages=messages,model=model,temperature=0,max_tokens=1800,response_format=response_schema(True))
-    proposal=json.loads(response)
+              {'role':'user','content':instructions.format(question=question,candidate=json.dumps(proposal),sources=blocks)}]
     literal=literal_property_decision(question,eligible)
-    if literal is not None:proposal=literal
-    # Abstention is rendered without incidental positive facts. The model's
-    # unedited review remains in the trace and cannot silently become evidence.
-    if proposal.get('status')=='insufficient' and proposal.get('values')==[]:
-        proposal.update({'citations':[],'evidence':[],
-                         'answer':'The retrieved sources provide insufficient evidence to answer this question: '+question})
-    try:
-        result=validate_verification(proposal,eligible)
-    except ValueError as exc:
-        raise VerificationFailure(str(exc),response) from exc
+    first_error = None
+    first_response = None
+    for attempt in range(2):
+        response = await chat(
+            messages=messages, model=model, temperature=0,
+            max_tokens=1800, response_format=response_schema(True, sentence_ids=sentence_ids),
+        )
+        try:
+            review = literal if literal is not None else json.loads(response)
+            if not isinstance(review, dict):
+                raise ValueError("invalid_verifier_object")
+            if review.get('status') == 'insufficient' and review.get('values') == []:
+                review.update(
+                    citations=[], evidence=[],
+                    answer='The retrieved sources provide insufficient evidence to answer this question: ' + question,
+                )
+            if sentence_ids and literal is None:
+                selected = review.get('evidence')
+                if not isinstance(selected, list) or any(
+                    not isinstance(item, str) or item not in sentences for item in selected
+                ):
+                    raise ValueError('invalid_evidence_sentence_id')
+                review['evidence'] = [sentences[item] for item in dict.fromkeys(selected)]
+            result = validate_verification(review, eligible)
+            break
+        except (ValueError, TypeError, AttributeError, ArithmeticError) as exc:
+            if attempt:
+                raise VerificationFailure(str(exc), response, first_error) from exc
+            first_error = str(exc)
+            first_response = response
+            messages = [
+                messages[0],
+                {**messages[1], 'content': messages[1]['content'] + (
+                    '\nYour previous review failed the evidence check. Reassess the question using the sources above. '
+                    + ('Select existing sentence IDs for every link needed to justify the values. '
+                       if sentence_ids else 'Copy exact sentences for every link needed to justify the values. ')
+                    +
+                    'If the excerpts cannot support an answer, return insufficient with no claims. '
+                    'Validation failure: ' + first_error
+                )},
+            ]
     result['answer']=re.sub(r'\[([\d,\s]+)\]',lambda m:'['+', '.join(str(original_indices[int(n)-1]) for n in re.findall(r'\d+',m.group(1)))+']',result['answer'])
     result['citations']=[original_indices[i-1] for i in result['citations']]
     for evidence in result['evidence']:evidence['source']=original_indices[evidence['source']-1]
     result['excluded_sources']=excluded
     result['verifier_raw_response']=response
+    if first_error is not None:
+        result['verification_retry'] = {'error': first_error, 'raw_response': first_response}
     result.setdefault('decision_method','model_review_with_exact_quotation_checks')
     return result

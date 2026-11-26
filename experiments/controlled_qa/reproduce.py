@@ -35,6 +35,12 @@ RUNTIME_SNAPSHOT_FILES = (
     "apps/api/pipelines/embeddings/embedding_function.py",
     "apps/api/services/chat/streaming.py",
     "apps/api/pipelines/parser.py",
+    "apps/api/pipelines/chunking.py",
+    "apps/api/pipelines/embeddings/query.py",
+    "apps/api/pipelines/embeddings/store.py",
+    "apps/api/services/chat/retrieval.py",
+    "apps/api/services/chat/evidence_gate.py",
+    "apps/api/tests/test_evidence_gate.py",
 )
 RUNTIME_SNAPSHOT = HERE / "runtime_snapshot"
 # The manifest also hashes its original tooling/documentation. Retain those

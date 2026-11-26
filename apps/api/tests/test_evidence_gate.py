@@ -1,5 +1,58 @@
+import json
+from unittest.mock import AsyncMock
+
 import pytest
 from services.chat.evidence_gate import normalize_value, validate_verification, eligible_sources, citation_indices, literal_property_decision
+from services.chat.evidence_gate import VerificationFailure, verify_answer
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_evidence, reason", [
+    ([], "positive_answer_without_evidence"),
+    ([{"source": 1, "quote": "The timeout was 60 seconds."}], "quotation_not_in_visible_source"),
+])
+async def test_verifier_retries_invalid_evidence(bad_evidence, reason):
+    answer = {"status": "answerable", "values": ["60"], "citations": [1], "answer": "60 seconds [1]."}
+    source = {"document_id": "doc", "visible_text": "The timeout is 60 seconds."}
+    bad = json.dumps({**answer, "evidence": bad_evidence})
+    good = json.dumps({**answer, "evidence": [{"source": 1, "quote": source["visible_text"]}]})
+    chat = AsyncMock(side_effect=[bad, good])
+
+    result = await verify_answer("How long is the timeout?", answer, [source], chat, "test")
+
+    assert chat.await_count == 2
+    assert reason in chat.await_args.kwargs["messages"][-1]["content"]
+    assert result["verification_retry"] == {"error": reason, "raw_response": bad}
+    assert result["evidence"][0]["quote"] == source["visible_text"]
+
+    chat = AsyncMock(return_value=bad)
+    with pytest.raises(VerificationFailure, match=reason) as error:
+        await verify_answer("How long is the timeout?", answer, [source], chat, "test")
+    assert chat.await_count == 2
+    assert error.value.first_error == reason
+
+@pytest.mark.asyncio
+async def test_sentence_ids_restore_exact_evidence_and_original_source_number():
+    source = {
+        "document_id": "atlas",
+        "visible_text": "Project: Atlas\n\nBefore the review. The timeout is 60 seconds.",
+    }
+    candidate = {"status": "answerable", "values": ["60"], "citations": [2], "answer": "60 seconds [2]."}
+    chat = AsyncMock(side_effect=[
+        json.dumps({**candidate, "citations": [1], "answer": "60 seconds [1].", "evidence": ["S1.99"]}),
+        json.dumps({**candidate, "citations": [1], "answer": "60 seconds [1].", "evidence": ["S1.3"]}),
+    ])
+    sources = [{"document_id": "cedar", "visible_text": "Project: Cedar\n\nOther source."}, source]
+
+    result = await verify_answer("How long is the Atlas timeout?", candidate, sources, chat, "test", sentence_ids=True)
+
+    assert result["verification_retry"]["error"] == "invalid_evidence_sentence_id"
+    assert result["citations"] == [2]
+    evidence = result["evidence"][0]
+    assert evidence["source"] == 2
+    assert evidence["quote"] == source["visible_text"][evidence["char_start"]:evidence["char_end"]]
+    assert evidence["quote"] == "The timeout is 60 seconds."
+
 
 def test_fabricated_quote_and_reference_are_rejected():
     sources=[{'document_id':'doc-a','visible_text':'The timeout is 60 seconds.'}]

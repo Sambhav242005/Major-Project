@@ -347,7 +347,9 @@ Same audit done for MCP (§13), applied to every other major subsystem. **Legend
 |---|---|---|
 | Semantic search (Chroma + Postgres enrichment) | ✅ | `services/knowledge/search.py` |
 | Graph traversal (NetworkX k-hop subgraphs) | ✅ | `services/knowledge/graph.py::get_graph` |
-| RAG chat with 1-hop graph expansion + citations + SSE | ✅ | `services/chat/` |
+| RAG chat with graph expansion + citations + SSE | ✅ | `services/chat/` uses one hop by default. The traversal supports larger depths and is covered by a SQLite integration test. |
+| Controlled QA answer verification | ✅ | The research verifier in `services/chat/evidence_gate.py` retries an invalid review once and requires exact evidence before accepting a positive answer. Its sentence-ID mode resolves exact text and offsets from the visible source. |
+| Controlled QA graph retrieval | Experimental | The research comparison supports KG-first seeding by explicit project entity names and uses matching source headers to recover project references missed during extraction. The hybrid arm preserves on-topic vector passages when adding a governance rule. |
 | **Knowledge health (conflict / stale / invalid) + sentence provenance + pinned** | ❌ missing | nothing in `pipelines/entity_extraction.py:339,368` (constants `0.8/0.7`), `services/knowledge.py:135` `nx.DiGraph` no filter, `services/chat.py:263` no verifier; `grep conflict\|stale → 0` outside `services/dashboard.py:112` pipeline health — see `docs/TODO.md §2.22–§2.28`, `docs/RESEARCH_PROBLEM.md:62,112` — hypothesis untestable until `TODO §3.6` benchmark |
 
 ### 12.6 Migrations & Observability — ⚠️ gaps
